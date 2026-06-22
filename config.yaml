@@ -1,63 +1,40 @@
 # --- Crawler Configuration ---
 
-# Default settings for the crawler.
-# These can be overridden by command-line arguments.
 defaults:
   keyword: "contact"
-  max_depth: 5
-  max_links_per_page: 100
-  num_workers: 20
-  page_timeout: 15
-  url_process_timeout: 25
+  max_depth: 3
+  max_links_per_page: 80       # depth-0 limit; depth-1 = ~27, depth-2+ = 15 (tapered in code)
+  num_workers: 55
+  page_timeout: 30
+  url_process_timeout: 75
+  request_delay: 1.5        # seconds between requests to the same domain
 
-# --- Seed Generation ---
-
-# Domains to target in searches
+# --- Target Domains ---
 target_domains:
   - ".gov.in"
   - ".nic.in"
 
-# --- API Seeders (Preferred Method) ---
-# Add your API keys here to enable these high-quality seed sources.
-# The crawler will use them in the order they appear here.
+# --- Tier 1: Official Search APIs ---
+# Google CSE: https://programmablesearchengine.google.com/
+# Bing API:   https://portal.azure.com (Bing Search v7)
+# When enabled, these find targeted contact pages directly.
 
 google_cse_api:
   enabled: false
-  api_key: "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQC7R6CWvZKNyr6d" # <-- PASTE YOUR GOOGLE API KEY HERE
-  cse_id: "74ebd2fa410034ce5"
+  api_key: "YOUR_GOOGLE_API_KEY"
+  cse_id: "YOUR_CSE_ID"
 
 bing_search_api:
   enabled: false
   api_key: "YOUR_BING_API_KEY"
 
-# DuckDuckGo API (free, no key required, used as a reliable fallback)
-duckduckgo_api:
-  enabled: true
-  region: "in-en"
-  timeout: 10
-
-# --- Fallback Seeders (Used if APIs fail or are disabled) ---
-
-# Browser-based search engines
-browser_seeders:
-  - name: "Yahoo"
-    url: "https://search.yahoo.com/search?p={query}"
-    selector: ".compTitle a"
-  - name: "DuckDuckGo HTML"
-    url: "https://html.duckduckgo.com/html/?q={query}"
-    selector: ".result__url"
-
-# Hardcoded URLs as a last resort
-fallback_urls:
-  - "https://www.india.gov.in/"
-  - "https://www.digitalindia.gov.in/"
-  - "https://mea.gov.in/"
-  - "https://mod.gov.in/"
-  - "https://mohua.gov.in/"
-  - "https://mha.gov.in/en/"
-  - "https://finance.nic.in/"
-  - "https://www.meity.gov.in/"
-  - "https://commerce.gov.in/"
+# --- Tier 2: india.gov.in Directory ---
+# Contact page paths synthesized for each domain found in the directory.
+contact_path_hints:
+  - "/contact-us"
+  - "/contact-us.htm"
+  - "/contact"
+  - "/en/contact-us"
 
 # --- User Agent ---
 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
