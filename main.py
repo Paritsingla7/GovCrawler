@@ -71,12 +71,14 @@ async def main():
 
     storage = None
     try:
-        storage = LocalStorage()
+        db_uri = config.get('database', {}).get('uri', 'sqlite:///crawler_session.db')
+        recrawl_days = config.get('crawler', {}).get('recrawl_days', 30)
+        storage = LocalStorage(db_uri=db_uri, recrawl_days=recrawl_days)
         crawler = Crawler(config, storage)
 
         async with async_playwright() as p:
             # --- Seed Generation ---
-            seed_urls = await get_seed_urls(p, config, config['defaults']['keyword'])
+            seed_urls = await get_seed_urls(config, storage)
             if not seed_urls:
                 log.error("Could not generate any seed URLs. Exiting.")
                 return

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="Session.db" uuid="f7f6d485-4900-4983-b571-2f14ae6a3720">
+    <data-source source="LOCAL" name="central_crawler" uuid="0b87f74d-7b8a-48bd-a1fc-c87bd2771e2e">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:crawler_session.db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/central_crawler.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>
