@@ -56,10 +56,9 @@ class Crawler:
 
     def _load_visited_from_storage(self):
         try:
-            self.visited_urls.update(
-                row[0] for row in self.storage.cursor.execute("SELECT url FROM visited_urls")
-            )
-            log.info(f"Loaded {len(self.visited_urls)} previously visited URLs from database.")
+            recent_urls = self.storage.get_recently_visited_urls()
+            self.visited_urls.update(recent_urls)
+            log.info(f"Loaded {len(recent_urls)} recently visited URLs from database to skip.")
         except Exception as e:
             log.error(f"Could not load visited URLs: {e}")
 

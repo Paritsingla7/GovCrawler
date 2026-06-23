@@ -14,27 +14,15 @@ target_domains:
   - ".gov.in"
   - ".nic.in"
 
-# --- Tier 1: Official Search APIs ---
-# Google CSE: https://programmablesearchengine.google.com/
-# Bing API:   https://portal.azure.com (Bing Search v7)
-# When enabled, these find targeted contact pages directly.
+# --- Database Configuration ---
+database:
+  # Connection string for SQLAlchemy (e.g. postgresql://user:pass@localhost:5432/govcrawler or sqlite:///crawler.db)
+  uri: "sqlite:///central_crawler.db"
 
-google_cse_api:
-  enabled: false
-  api_key: "YOUR_GOOGLE_API_KEY"
-  cse_id: "YOUR_CSE_ID"
-
-bing_search_api:
-  enabled: false
-  api_key: "YOUR_BING_API_KEY"
-
-# --- Tier 2: india.gov.in Directory ---
-# Contact page paths synthesized for each domain found in the directory.
-contact_path_hints:
-  - "/contact-us"
-  - "/contact-us.htm"
-  - "/contact"
-  - "/en/contact-us"
+# --- Crawler Behavior ---
+crawler:
+  # Skip URLs if they were visited within this many days
+  recrawl_days: 30
 
 # --- User Agent ---
 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
