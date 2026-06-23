@@ -1,64 +1,56 @@
-# MishaCrawler Portal v2 — master config
-# NOTHING in any Python file is hardcoded. Every tunable value lives here.
+# MishaCrawler Portal — master config
+# Nothing in any Python file is hardcoded. Every tunable value lives here.
 
+# ── Database ──────────────────────────────────────────────────────────────────
 database:
-  path: portal/data/mishacrawler.db
+  # SQLite for local dev. Switch to PostgreSQL on server — zero code change:
+  #   postgresql://user:password@host:5432/mishacrawler
+  uri: "sqlite:///portal/data/mishacrawler.db"
 
+# ── API server ────────────────────────────────────────────────────────────────
 api:
   host: 0.0.0.0
   port: 8000
 
-# ── india.gov.in directory API ────────────────────────────────────────────────
+# ── india.gov.in directory scraper (GovScraper) ───────────────────────────────
 scraper:
-  base_url: "https://www.india.gov.in"
-  web_dir_endpoint: "/directory/web-directory/api"
-  page_size: 100
-  timeout_seconds: 20
-  headers:
-    User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    Accept: "application/json, text/plain, */*"
-    Content-Type: "application/json"
-    Referer: "https://www.india.gov.in/directory/web-directory"
-    Origin: "https://www.india.gov.in"
-  querytypes:
-    categories: "Webdirectorycategorywithcounts"
-    entries: "WebdirectoryCategorydetalsList"
-  target_suffixes:
-    - ".gov.in"
-    - ".nic.in"
+  # Optional: limit import to a single category code (e.g. "ug", "sg", "dist")
+  # Leave blank to import everything.
+  category_filter: ""
+  # Optional: limit import to a single org_type code (e.g. "E051")
+  # Leave blank to import all org types within the selected category.
+  org_type_filter: ""
 
-# ── Crawler ────────────────────────────────────────────────────────────────────
+# ── Crawler ───────────────────────────────────────────────────────────────────
 crawler:
-  workers: 5
-  max_depth: 3
+  workers: 5          # keep low — gov sites have rate limits; 5 is safe
+  max_depth: 3        # 0=seed only, 3 covers contact→officer→detail pages
 
-  # Try plain httpx before launching a browser page
+  # Skip URLs visited in ANY previous job within this many days.
+  # Gov sites don't change daily — avoids re-crawling the same pages.
+  recrawl_days: 30
+
+  # Try plain HTTP before launching Playwright
   httpx_first: true
-  # If httpx returns a JS-shell page, escalate to Playwright
+  # If httpx gets a JS-shell page, escalate to Playwright
   playwright_fallback: true
 
-  # httpx socket timeouts (seconds)
   httpx_timeout:
-    connect: 10
+    connect: 10   # seconds
     read: 30
 
-  # Playwright page.goto() timeout (seconds)
-  playwright_timeout: 45
+  playwright_timeout: 45      # seconds for page.goto()
+  js_settle_time: 3.0         # seconds to wait after domcontentloaded
 
-  # Hard outer kill switch per URL — prevents stalled workers (seconds)
-  # This was the root of the 1,827 stall problem in v1.
-  # Set higher than playwright_timeout so Playwright always finishes first.
+  # Hard outer kill per URL — prevents stalled workers (must be > playwright_timeout)
   per_url_timeout: 100
 
-  # Seconds to sleep between requests to the SAME domain (per-domain lock)
+  # Seconds between requests to the SAME domain
   request_delay: 1.5
 
-  # Seconds to wait after domcontentloaded for async JS/XHR to settle
-  js_settle_time: 3.0
-
-  # Max outbound links to queue per page, tapered by depth
+  # Max outbound links queued per page, tapered by depth
   max_links_per_page:
-    0: 30     # seed pages (already contact pages — don't fan out aggressively)
+    0: 30     # seed pages (already contact pages)
     1: 15
     2: 8
     default: 5
@@ -67,8 +59,8 @@ crawler:
     - ".gov.in"
     - ".nic.in"
 
-  # Links whose URL path or anchor text contains any of these get queued
-  # from ANY page. Other links are only queued when already on a priority page.
+  # Links whose URL or anchor text contain any keyword are always queued.
+  # From a non-priority page, only these links are followed.
   priority_keywords:
     - contact
     - officer
@@ -91,7 +83,6 @@ crawler:
     - phone-directory
     - email
 
-  # URL suffixes that are never crawled
   skip_extensions:
     - .pdf
     - .doc
@@ -116,8 +107,6 @@ crawler:
     - .avi
     - .mov
 
-  # If ANY of these strings appear in the raw HTML, the page is treated as
-  # a JS-rendered shell and escalated to Playwright.
   js_indicators:
     - '<div id="__next"'
     - '<div id="root"'
@@ -127,7 +116,7 @@ crawler:
 
   user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-# ── Data extraction ────────────────────────────────────────────────────────────
+# ── Data extraction ───────────────────────────────────────────────────────────
 extraction:
   email:
     enabled: true
@@ -137,7 +126,6 @@ extraction:
       - ".nic.in"
       - ".res.in"
       - ".ac.in"
-    # Each pair is [regex_pattern, replacement]
     obfuscation:
       - ['\s*\[at\]\s*',  "@"]
       - ['\s*\(at\)\s*',  "@"]
@@ -145,21 +133,10 @@ extraction:
       - ['\s*\[dot\]\s*', "."]
       - ['\s*\(dot\)\s*', "."]
       - ['\s+dot\s+',     "."]
-    # Characters of surrounding text to keep as context snippet
     context_chars: 200
-
-  phone:
-    enabled: true
-    # Indian phone number patterns
-    patterns:
-      - '\+91[\s\-]?\d{10}'
-      - '0\d{2,4}[\s\-]\d{6,8}'
-      - '\d{5}[\s\-]\d{5}'
-      - '1800[\s\-\d]{7,12}'
 
   person:
     enabled: true
-    # Honorific prefixes that indicate a person's name follows
     title_prefixes:
       - Shri
       - Smt
@@ -171,7 +148,6 @@ extraction:
       - Sh
       - Shrimati
       - Km
-    # Keywords that identify designation/rank text near names
     designation_keywords:
       - Secretary
       - Director
@@ -194,5 +170,4 @@ extraction:
       - IPS
       - IFS
       - IRS
-    # How many chars before/after an email to scan for name/designation
     proximity_chars: 300

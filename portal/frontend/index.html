@@ -17,102 +17,107 @@
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  /* ── Header ── */
+  /* Header */
   header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
   header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
   header h1 span { color: var(--accent); }
-  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .header-right { display: flex; gap: 10px; align-items: center; }
 
-  /* ── Buttons ── */
+  /* Buttons */
   button { cursor: pointer; border: none; border-radius: 6px; font-family: var(--font); font-size: 13px; font-weight: 500; transition: background 0.15s; }
-  .btn-primary { background: var(--accent); color: #fff; padding: 7px 14px; }
+  .btn-primary   { background: var(--accent); color: #fff; padding: 7px 14px; }
   .btn-primary:hover { background: var(--accent-hover); }
   .btn-primary:disabled { background: var(--border); color: var(--small); cursor: not-allowed; }
   .btn-secondary { background: var(--surface2); color: var(--text); padding: 7px 14px; border: 1px solid var(--border); }
   .btn-secondary:hover { background: var(--border); }
-  .btn-danger { background: var(--red); color: #fff; padding: 7px 14px; }
-  .btn-danger:hover { background: #dc2626; }
   .btn-sm { padding: 4px 10px; font-size: 12px; }
 
-  /* ── Layout ── */
+  /* Layout */
   .layout { display: flex; flex: 1; overflow: hidden; }
 
-  /* ── Sidebar ── */
-  aside { width: 260px; min-width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
-  .sidebar-section h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--small); margin-bottom: 10px; }
-  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  /* Sidebar */
+  aside { width: 260px; min-width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--small); margin-bottom: 8px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
   label { font-size: 12px; color: var(--muted); }
-  select, input[type="text"] { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 13px; font-family: var(--font); width: 100%; outline: none; }
+  select, input[type="text"] { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 13px; font-family: var(--font); width: 100%; outline: none; }
   select:focus, input[type="text"]:focus { border-color: var(--accent); }
-  .domain-count { font-size: 13px; color: var(--muted); margin-top: 4px; }
-  .domain-count strong { color: var(--text); }
 
-  .import-section { border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
-  .import-progress { margin-top: 10px; font-size: 12px; color: var(--muted); }
-  .progress-bar-wrap { background: var(--border); border-radius: 99px; height: 6px; margin: 6px 0; overflow: hidden; }
+  /* Import section */
+  .import-box { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .import-box-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .import-box-top span { font-size: 13px; font-weight: 500; }
+  .import-progress { margin-top: 8px; font-size: 12px; color: var(--muted); display: none; }
+  .progress-bar-wrap { background: var(--border); border-radius: 99px; height: 5px; margin: 5px 0; overflow: hidden; }
   .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s; }
-  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-  .dot-green { background: var(--green); }
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+  .dot-green  { background: var(--green); }
   .dot-yellow { background: var(--yellow); animation: pulse 1s infinite; }
-  .dot-red { background: var(--red); }
+  .dot-red    { background: var(--red); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  /* ── Main area ── */
+  /* Recent jobs list */
+  .job-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; cursor: pointer; }
+  .job-item:hover { border-color: var(--accent); }
+  .job-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .job-item-top strong { font-size: 12px; }
+  .job-item-meta { font-size: 11px; color: var(--small); }
+
+  /* Main area */
   main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  .table-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); }
-  .table-header label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .table-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); }
   .table-wrap { flex: 1; overflow-y: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th { background: var(--surface2); color: var(--small); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; padding: 10px 14px; text-align: left; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--border); }
-  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { background: var(--surface2); color: var(--small); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; padding: 9px 14px; text-align: left; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 13px; }
   tr:hover td { background: var(--surface); }
-  td.url-cell { font-size: 12px; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
 
-  /* ── Pagination ── */
-  .pagination { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); font-size: 13px; color: var(--muted); }
-  .pagination button { padding: 5px 12px; }
+  /* Tags */
+  .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .tag-ug   { border-color: #8b5cf6; color: #8b5cf6; }
+  .tag-sg   { border-color: #3b82f6; color: #3b82f6; }
+  .tag-dist { border-color: #22c55e; color: #22c55e; }
+  .tag-jud  { border-color: #f59e0b; color: #f59e0b; }
 
-  /* ── Footer action bar ── */
-  .action-bar { padding: 12px 20px; border-top: 2px solid var(--accent); background: var(--surface); display: flex; align-items: center; gap: 12px; }
-  .action-bar .sel-count { flex: 1; font-size: 13px; color: var(--muted); }
-  .action-bar .sel-count strong { color: var(--text); }
+  /* Domain title with state subtitle */
+  .domain-title { font-weight: 500; line-height: 1.3; }
+  .domain-sub   { font-size: 11px; color: var(--small); margin-top: 2px; }
 
-  /* ── Job panel (slide-up overlay) ── */
-  #job-panel { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 20px 28px; transform: translateY(100%); transition: transform 0.25s ease; z-index: 200; }
+  /* Pagination */
+  .pagination { padding: 10px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface); font-size: 13px; color: var(--muted); }
+
+  /* Action bar */
+  .action-bar { padding: 10px 20px; border-top: 2px solid var(--accent); background: var(--surface); display: flex; align-items: center; gap: 12px; }
+  .sel-count { flex: 1; font-size: 13px; color: var(--muted); }
+  .sel-count strong { color: var(--text); }
+
+  /* Job panel (slide-up) */
+  #job-panel { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 18px 28px; transform: translateY(100%); transition: transform 0.25s ease; z-index: 200; }
   #job-panel.open { transform: translateY(0); }
-  .job-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-  .job-panel-header h2 { font-size: 15px; font-weight: 600; }
-  .job-meta { display: flex; gap: 24px; margin-bottom: 14px; }
-  .job-stat { display: flex; flex-direction: column; gap: 2px; }
-  .job-stat-label { font-size: 11px; color: var(--small); text-transform: uppercase; }
-  .job-stat-value { font-size: 18px; font-weight: 600; }
-  .job-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .jp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .jp-header h2 { font-size: 15px; font-weight: 600; }
+  .jp-stats { display: flex; gap: 28px; margin-bottom: 12px; }
+  .jp-stat-label { font-size: 11px; color: var(--small); text-transform: uppercase; }
+  .jp-stat-value { font-size: 20px; font-weight: 600; }
+  .jp-actions { display: flex; gap: 10px; margin-top: 12px; }
 
-  /* ── Results panel ── */
+  /* Results modal */
   #results-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; }
   #results-panel.open { display: flex; align-items: center; justify-content: center; }
-  .results-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 90vw; max-width: 1100px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
-  .results-modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .results-modal-header h2 { font-size: 15px; font-weight: 600; }
-  .results-modal-body { flex: 1; overflow: auto; }
-  .results-modal-body table { width: 100%; }
-  .results-modal-body td { font-size: 12px; }
-  .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--muted); }
-  .tag.cat-sg { border-color: #3b82f6; color: #3b82f6; }
-  .tag.cat-ug { border-color: #8b5cf6; color: #8b5cf6; }
-  .tag.cat-jud { border-color: #f59e0b; color: #f59e0b; }
-  .tag.cat-dist { border-color: #22c55e; color: #22c55e; }
-
-  .empty-state { text-align: center; padding: 60px 20px; color: var(--small); }
-  .empty-state p { margin-top: 8px; font-size: 13px; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 92vw; max-width: 1100px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-header h2 { font-size: 14px; font-weight: 600; }
+  .modal-body { flex: 1; overflow: auto; }
+  .modal-body td { font-size: 12px; }
+  .empty-state { text-align: center; padding: 50px 20px; color: var(--small); font-size: 13px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Misha<span>Crawler</span> Portal</h1>
-  <div class="header-actions">
+  <h1>Misha<span>Crawler</span></h1>
+  <div class="header-right">
     <span id="db-summary" style="font-size:12px;color:var(--muted)"></span>
     <button class="btn-secondary btn-sm" onclick="openResults()">View All Jobs</button>
   </div>
@@ -123,20 +128,22 @@
   <!-- Sidebar -->
   <aside>
 
-    <!-- Import section -->
-    <div class="sidebar-section">
-      <h3>Data Source</h3>
-      <div class="import-section">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <span style="font-size:13px;font-weight:500">india.gov.in API</span>
-          <button class="btn-primary btn-sm" onclick="triggerImport()" id="import-btn">Import</button>
+    <!-- Import -->
+    <div>
+      <div class="section-label">Data Source</div>
+      <div class="import-box">
+        <div class="import-box-top">
+          <span style="font-size:12px">gov_domains.json</span>
+          <button class="btn-primary btn-sm" id="import-json-btn" onclick="triggerJsonImport()" title="Import from gov_domains.json — no API calls">Import JSON</button>
         </div>
-        <div class="import-progress" id="import-progress" style="display:none">
-          <div>
-            <span class="status-dot dot-yellow" id="import-dot"></span>
-            <span id="import-msg">Starting…</span>
-          </div>
-          <div class="progress-bar-wrap" style="margin-top:8px">
+        <div style="font-size:11px;color:var(--small);margin-bottom:6px">Place gov_domains.json in project root</div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:11px;color:var(--small)">Refresh via API</span>
+          <button class="btn-secondary btn-sm" id="import-btn" onclick="triggerImport()" title="Re-import from india.gov.in API (many requests)">API Refresh</button>
+        </div>
+        <div class="import-progress" id="import-progress">
+          <div><span class="status-dot dot-yellow" id="import-dot"></span><span id="import-msg">Starting…</span></div>
+          <div class="progress-bar-wrap">
             <div class="progress-bar-fill" id="import-bar" style="width:0%"></div>
           </div>
         </div>
@@ -144,35 +151,49 @@
     </div>
 
     <!-- Filters -->
-    <div class="sidebar-section">
-      <h3>Filters</h3>
-      <div class="form-group">
-        <label>Category</label>
-        <select id="cat-select" onchange="onFilterChange()">
-          <option value="">All Categories</option>
-        </select>
+    <div>
+      <div class="section-label">Filters</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="form-group">
+          <label>Category</label>
+          <select id="cat-select" onchange="onFilterChange()">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <select id="state-select" onchange="onFilterChange()">
+            <option value="">All States</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Org Type</label>
+          <select id="orgtype-select" onchange="onFilterChange()">
+            <option value="">All Types</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Search by name</label>
+          <input type="text" id="search-input" placeholder="Ministry, district…" oninput="debounceSearch()">
+        </div>
+        <div style="font-size:12px;color:var(--muted)" id="domain-count-label"></div>
       </div>
-      <div class="form-group" style="margin-top:12px">
-        <label>Search by title</label>
-        <input type="text" id="search-input" placeholder="e.g. Maharashtra, Railways…" oninput="debounceSearch()">
-      </div>
-      <div class="domain-count" id="domain-count-label" style="margin-top:14px"></div>
     </div>
 
     <!-- Recent jobs -->
-    <div class="sidebar-section" id="jobs-sidebar">
-      <h3>Recent Jobs</h3>
-      <div id="jobs-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div>
+      <div class="section-label">Recent Jobs</div>
+      <div id="jobs-list" style="display:flex;flex-direction:column;gap:7px"></div>
     </div>
 
   </aside>
 
-  <!-- Main table area -->
+  <!-- Main table -->
   <main>
     <div class="table-header">
-      <input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)" title="Select all on this page">
-      <label for="select-all" style="margin-right:auto">Select page</label>
-      <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear selection</button>
+      <input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)" title="Select page">
+      <label for="select-all" style="margin-right:auto;font-size:13px;color:var(--muted);cursor:pointer">Select page</label>
+      <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
     </div>
 
     <div class="table-wrap">
@@ -182,79 +203,78 @@
             <th style="width:40px"></th>
             <th>Ministry / Department</th>
             <th>Category</th>
+            <th>Org Type</th>
             <th>Contact URL</th>
           </tr>
         </thead>
         <tbody id="domain-tbody">
-          <tr><td colspan="4" class="empty-state"><p>Import data first, then select domains to crawl.</p></td></tr>
+          <tr><td colspan="5" class="empty-state">Import data first, then select domains to crawl.</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="pagination">
       <button class="btn-secondary btn-sm" onclick="prevPage()" id="btn-prev">← Prev</button>
-      <span id="page-info">Page — of —</span>
+      <span id="page-info">—</span>
       <button class="btn-secondary btn-sm" onclick="nextPage()" id="btn-next">Next →</button>
       <span style="margin-left:auto" id="total-label"></span>
     </div>
 
     <div class="action-bar">
       <div class="sel-count"><strong id="sel-count">0</strong> domains selected</div>
-      <button class="btn-primary" id="crawl-btn" onclick="startCrawl()" disabled>
-        ▶ Crawl Selected Domains
-      </button>
+      <button class="btn-primary" id="crawl-btn" onclick="startCrawl()" disabled>▶ Crawl Selected</button>
     </div>
   </main>
 </div>
 
-<!-- Job progress panel -->
+<!-- Job panel -->
 <div id="job-panel">
-  <div class="job-panel-header">
+  <div class="jp-header">
     <h2 id="job-title">Crawl Job</h2>
-    <button class="btn-secondary btn-sm" onclick="closeJobPanel()">✕ Close</button>
+    <button class="btn-secondary btn-sm" onclick="closeJobPanel()">✕</button>
   </div>
-  <div class="job-meta">
-    <div class="job-stat">
-      <div class="job-stat-label">Status</div>
-      <div class="job-stat-value" id="job-status-val">—</div>
+  <div class="jp-stats">
+    <div>
+      <div class="jp-stat-label">Status</div>
+      <div class="jp-stat-value" id="job-status-val">—</div>
     </div>
-    <div class="job-stat">
-      <div class="job-stat-label">Domains</div>
-      <div class="job-stat-value" id="job-domains-val">0 / 0</div>
+    <div>
+      <div class="jp-stat-label">Domains</div>
+      <div class="jp-stat-value" id="job-domains-val">0 / 0</div>
     </div>
-    <div class="job-stat">
-      <div class="job-stat-label">Leads found</div>
-      <div class="job-stat-value" id="job-leads-val" style="color:var(--green)">0</div>
+    <div>
+      <div class="jp-stat-label">Leads found</div>
+      <div class="jp-stat-value" id="job-leads-val" style="color:var(--green)">0</div>
     </div>
   </div>
-  <div class="progress-bar-wrap" style="height:8px">
+  <div class="progress-bar-wrap" style="height:7px">
     <div class="progress-bar-fill" id="job-bar" style="width:0%;background:var(--green)"></div>
   </div>
-  <div class="job-actions">
-    <button class="btn-primary btn-sm" id="btn-view-leads" style="display:none" onclick="viewLeads()">View Leads</button>
+  <div class="jp-actions">
+    <button class="btn-primary btn-sm"   id="btn-view-leads"   style="display:none" onclick="viewLeads()">View Leads</button>
     <button class="btn-secondary btn-sm" id="btn-export-leads" style="display:none" onclick="exportLeads()">⬇ Export CSV</button>
   </div>
 </div>
 
 <!-- Results modal -->
 <div id="results-panel">
-  <div class="results-modal">
-    <div class="results-modal-header">
+  <div class="modal">
+    <div class="modal-header">
       <h2 id="results-title">Leads</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn-primary btn-sm" id="btn-export-modal" onclick="exportLeads()">⬇ Export CSV</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary btn-sm" onclick="exportLeads()">⬇ Export CSV</button>
         <button class="btn-secondary btn-sm" onclick="closeResults()">✕</button>
       </div>
     </div>
-    <div class="results-modal-body">
+    <div class="modal-body">
       <table>
         <thead>
           <tr>
             <th>Email</th>
-            <th>Phone</th>
             <th>Person</th>
             <th>Designation</th>
             <th>Department</th>
+            <th>State</th>
             <th>Ministry</th>
             <th>Cat</th>
             <th>Source</th>
@@ -263,10 +283,10 @@
         <tbody id="leads-tbody"></tbody>
       </table>
     </div>
-    <div class="pagination" id="leads-pagination" style="border-top:1px solid var(--border)">
-      <button class="btn-secondary btn-sm" onclick="leadsPrevPage()">← Prev</button>
-      <span id="leads-page-info">Page 1 of 1</span>
-      <button class="btn-secondary btn-sm" onclick="leadsNextPage()">Next →</button>
+    <div class="pagination" style="border-top:1px solid var(--border)">
+      <button class="btn-secondary btn-sm" onclick="leadsPrev()">← Prev</button>
+      <span id="leads-page-info">—</span>
+      <button class="btn-secondary btn-sm" onclick="leadsNext()">Next →</button>
       <span style="margin-left:auto;font-size:12px;color:var(--muted)" id="leads-total-label"></span>
     </div>
   </div>
@@ -274,102 +294,131 @@
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
-let selectedIds = new Set();
-let currentPage = 1;
-let totalPages = 1;
-let totalDomains = 0;
-let activeJobId = null;
-let pollTimer = null;
-let importPollTimer = null;
-let leadsPage = 1;
-let leadsTotalPages = 1;
-let searchTimer = null;
+let selectedIds   = new Set();
+let currentPage   = 1;
+let totalPages    = 1;
+let activeJobId   = null;
+let pollTimer     = null;
+let impPollTimer  = null;
+let leadsPage     = 1;
+let leadsTotalPgs = 1;
+let searchTimer   = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  loadCategories();
+  loadFilters();
   loadDomains();
   loadRecentJobs();
   checkImportStatus();
 });
 
-// ── Categories ────────────────────────────────────────────────────────────────
-async function loadCategories() {
+// ── Filters ───────────────────────────────────────────────────────────────────
+async function loadFilters() {
   try {
-    const cats = await apiFetch('/api/categories');
-    const sel = document.getElementById('cat-select');
-    sel.innerHTML = '<option value="">All Categories</option>';
+    const [cats, states, orgTypes] = await Promise.all([
+      apiFetch('/api/categories'),
+      apiFetch('/api/states'),
+      apiFetch('/api/org-types'),
+    ]);
+
+    const catSel = document.getElementById('cat-select');
     cats.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c.code;
-      opt.textContent = `[${c.code.toUpperCase()}] ${c.title} (${c.count.toLocaleString()})`;
-      sel.appendChild(opt);
+      const o = document.createElement('option');
+      o.value = c.code;
+      o.textContent = `[${c.code.toUpperCase()}] ${c.title} (${c.count.toLocaleString()})`;
+      catSel.appendChild(o);
     });
-  } catch (e) { console.error(e); }
+
+    const stateSel = document.getElementById('state-select');
+    states.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s;
+      o.textContent = s;
+      stateSel.appendChild(o);
+    });
+
+    const orgSel = document.getElementById('orgtype-select');
+    orgTypes.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.code;
+      o.textContent = `${t.title} (${t.count.toLocaleString()})`;
+      orgSel.appendChild(o);
+    });
+  } catch (e) { console.error('loadFilters', e); }
 }
 
 // ── Domains ───────────────────────────────────────────────────────────────────
 async function loadDomains() {
-  const cat = document.getElementById('cat-select').value;
-  const search = document.getElementById('search-input').value.trim();
-  const params = new URLSearchParams({ page: currentPage, limit: 50 });
-  if (cat) params.set('category', cat);
-  if (search) params.set('search', search);
+  const cat     = document.getElementById('cat-select').value;
+  const state   = document.getElementById('state-select').value;
+  const orgType = document.getElementById('orgtype-select').value;
+  const search  = document.getElementById('search-input').value.trim();
+  const params  = new URLSearchParams({ page: currentPage, limit: 50 });
+  if (cat)     params.set('category', cat);
+  if (state)   params.set('state', state);
+  if (orgType) params.set('org_type', orgType);
+  if (search)  params.set('search', search);
 
   try {
     const data = await apiFetch(`/api/domains?${params}`);
     totalPages = data.pages;
-    totalDomains = data.total;
     renderDomains(data.domains, data.total);
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error('loadDomains', e); }
 }
 
 function renderDomains(domains, total) {
-  const tbody = document.getElementById('domain-tbody');
-  document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages}`;
-  document.getElementById('total-label').textContent = `${total.toLocaleString()} domains`;
-  document.getElementById('domain-count-label').innerHTML = `<strong>${total.toLocaleString()}</strong> domains match`;
+  document.getElementById('page-info').textContent =
+    `Page ${currentPage} of ${totalPages}`;
+  document.getElementById('total-label').textContent =
+    `${total.toLocaleString()} domains`;
+  document.getElementById('domain-count-label').textContent =
+    `${total.toLocaleString()} domains match`;
   document.getElementById('btn-prev').disabled = currentPage <= 1;
   document.getElementById('btn-next').disabled = currentPage >= totalPages;
 
+  const tbody = document.getElementById('domain-tbody');
   if (!domains.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>No domains found. Try importing or adjusting filters.</p></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No domains. Try importing or changing filters.</td></tr>';
     return;
   }
 
   tbody.innerHTML = '';
   domains.forEach(d => {
-    const checked = selectedIds.has(d.id);
-    const catCode = (d.category_code || '').toLowerCase();
+    const catCode    = (d.category_code || '').toLowerCase();
     const contactUrl = d.contact_url || d.main_url || '';
-    const shortUrl = contactUrl.replace(/^https?:\/\/(www\.)?/, '').substring(0, 45);
-    const tr = document.createElement('tr');
+    const shortUrl   = contactUrl.replace(/^https?:\/\/(www\.)?/, '').substring(0, 40);
+    const orgLabel   = d.org_type_title || d.org_type || '—';
+    const checked    = selectedIds.has(d.id);
+    const tr         = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleDomain(${d.id}, this.checked)"></td>
-      <td>${escHtml(d.title || '—')}</td>
-      <td><span class="tag cat-${catCode}">${(d.category_title || d.category_code || '').toUpperCase()}</span></td>
-      <td class="url-cell" title="${escHtml(contactUrl)}">
-        ${contactUrl ? `<a href="${escHtml(contactUrl)}" target="_blank">↗ ${escHtml(shortUrl)}</a>` : '—'}
+      <td>
+        <div class="domain-title">${esc(d.title || '—')}</div>
+        ${d.state ? `<div class="domain-sub">${esc(d.state)}</div>` : ''}
+      </td>
+      <td><span class="tag tag-${catCode}">${(d.category_code || '').toUpperCase()}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${esc(orgLabel)}</td>
+      <td style="font-size:12px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${contactUrl ? `<a href="${esc(contactUrl)}" target="_blank" title="${esc(contactUrl)}">↗ ${esc(shortUrl)}</a>` : '—'}
       </td>`;
     tbody.appendChild(tr);
   });
 
-  updateSelectAllCheckbox();
+  updateSelectAll();
   updateSelCount();
 }
 
 function toggleDomain(id, checked) {
-  if (checked) selectedIds.add(id);
-  else selectedIds.delete(id);
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
   updateSelCount();
 }
 
 function toggleSelectAll(checked) {
-  const boxes = document.querySelectorAll('#domain-tbody input[type=checkbox]');
-  boxes.forEach(cb => {
-    const id = parseInt(cb.closest('tr').querySelector('input').getAttribute('onchange').match(/\d+/)[0]);
-    if (checked) selectedIds.add(id);
-    else selectedIds.delete(id);
+  document.querySelectorAll('#domain-tbody input[type=checkbox]').forEach(cb => {
+    const match = cb.getAttribute('onchange').match(/\d+/);
+    if (!match) return;
+    const id = parseInt(match[0]);
+    if (checked) selectedIds.add(id); else selectedIds.delete(id);
     cb.checked = checked;
   });
   updateSelCount();
@@ -388,14 +437,13 @@ function updateSelCount() {
   document.getElementById('crawl-btn').disabled = n === 0;
 }
 
-function updateSelectAllCheckbox() {
+function updateSelectAll() {
   const all = document.querySelectorAll('#domain-tbody input[type=checkbox]');
-  const checkedCount = Array.from(all).filter(cb => cb.checked).length;
-  document.getElementById('select-all').checked = all.length > 0 && checkedCount === all.length;
-  document.getElementById('select-all').indeterminate = checkedCount > 0 && checkedCount < all.length;
+  const n   = Array.from(all).filter(cb => cb.checked).length;
+  document.getElementById('select-all').checked       = all.length > 0 && n === all.length;
+  document.getElementById('select-all').indeterminate = n > 0 && n < all.length;
 }
 
-// ── Filters + pagination ──────────────────────────────────────────────────────
 function onFilterChange() { currentPage = 1; loadDomains(); }
 function debounceSearch() {
   clearTimeout(searchTimer);
@@ -405,62 +453,74 @@ function prevPage() { if (currentPage > 1) { currentPage--; loadDomains(); } }
 function nextPage() { if (currentPage < totalPages) { currentPage++; loadDomains(); } }
 
 // ── Import ────────────────────────────────────────────────────────────────────
-async function triggerImport() {
-  if (!confirm('This will clear the existing domain database and re-import from india.gov.in.\n\nThis takes 2–3 minutes. Proceed?')) return;
+async function triggerJsonImport() {
+  if (!confirm('Import from gov_domains.json?\n\nMake sure the file is in the project root.\nThis clears existing domains and replaces them — no API calls.')) return;
   try {
-    await apiFetch('/api/import', { method: 'POST' });
-    startImportPoll();
-  } catch (e) { alert('Import trigger failed: ' + e.message); }
+    await apiFetch('/api/import/json', { method: 'POST' });
+    startImportPoll('json');
+  } catch (e) { alert('JSON import failed to start: ' + e.message); }
 }
 
-function startImportPoll() {
+async function triggerImport() {
+  if (!confirm('Re-import from india.gov.in API?\n\nThis makes many API calls and takes 2–5 minutes.\nUse only to refresh data — prefer JSON import for first-time setup.')) return;
+  try {
+    await apiFetch('/api/import', { method: 'POST' });
+    startImportPoll('api');
+  } catch (e) { alert('Import failed to start: ' + e.message); }
+}
+
+function startImportPoll(source) {
   document.getElementById('import-progress').style.display = 'block';
+  document.getElementById('import-json-btn').disabled = true;
   document.getElementById('import-btn').disabled = true;
-  if (importPollTimer) clearInterval(importPollTimer);
-  importPollTimer = setInterval(checkImportStatus, 1500);
+  if (impPollTimer) clearInterval(impPollTimer);
+  impPollTimer = setInterval(checkImportStatus, 1500);
 }
 
 async function checkImportStatus() {
   try {
-    const s = await apiFetch('/api/import/status');
-    const prog = document.getElementById('import-progress');
+    const s   = await apiFetch('/api/import/status');
     const bar = document.getElementById('import-bar');
     const msg = document.getElementById('import-msg');
     const dot = document.getElementById('import-dot');
-    const btn = document.getElementById('import-btn');
+    const prg = document.getElementById('import-progress');
 
     if (s.running) {
-      prog.style.display = 'block';
+      prg.style.display = 'block';
       dot.className = 'status-dot dot-yellow';
       const pct = s.total_entries > 0 ? Math.round(s.inserted / s.total_entries * 100) : 0;
       bar.style.width = pct + '%';
-      msg.textContent = `${s.done_categories}/${s.total_categories} categories — ${s.inserted.toLocaleString()} domains`;
+      const label = s.source === 'json' ? 'JSON' : 'API';
+      msg.textContent = `[${label}] ${s.done_categories}/${s.total_categories} categories — ${s.inserted.toLocaleString()} domains`;
     } else if (s.inserted > 0) {
-      prog.style.display = 'block';
+      prg.style.display = 'block';
       dot.className = 'status-dot dot-green';
       bar.style.width = '100%';
       msg.textContent = `Done — ${s.inserted.toLocaleString()} domains imported`;
-      btn.disabled = false;
-      clearInterval(importPollTimer);
-      loadCategories();
-      loadDomains();
+      document.getElementById('import-json-btn').disabled = false;
+      document.getElementById('import-btn').disabled = false;
+      clearInterval(impPollTimer);
       document.getElementById('db-summary').textContent = `${s.inserted.toLocaleString()} domains in DB`;
+      loadFilters();
+      loadDomains();
     } else if (s.error) {
       dot.className = 'status-dot dot-red';
       msg.textContent = 'Error: ' + s.error;
-      btn.disabled = false;
-      clearInterval(importPollTimer);
+      document.getElementById('import-json-btn').disabled = false;
+      document.getElementById('import-btn').disabled = false;
+      clearInterval(impPollTimer);
     } else {
-      prog.style.display = 'none';
-      btn.disabled = false;
+      prg.style.display = 'none';
+      document.getElementById('import-json-btn').disabled = false;
+      document.getElementById('import-btn').disabled = false;
     }
-  } catch (e) { /* server not ready yet */ }
+  } catch (e) { /* server not ready */ }
 }
 
 // ── Crawl ─────────────────────────────────────────────────────────────────────
 async function startCrawl() {
   if (selectedIds.size === 0) return;
-  const cat = document.getElementById('cat-select').value || null;
+  const cat    = document.getElementById('cat-select').value || null;
   const search = document.getElementById('search-input').value.trim() || null;
   try {
     const resp = await apiFetch('/api/jobs', {
@@ -470,14 +530,14 @@ async function startCrawl() {
     });
     activeJobId = resp.id;
     openJobPanel(resp.id);
-    startPoll();
+    startJobPoll();
   } catch (e) { alert('Failed to start crawl: ' + e.message); }
 }
 
 function openJobPanel(jobId) {
   document.getElementById('job-panel').classList.add('open');
   document.getElementById('job-title').textContent = `Crawl Job #${jobId}`;
-  document.getElementById('btn-view-leads').style.display = 'none';
+  document.getElementById('btn-view-leads').style.display   = 'none';
   document.getElementById('btn-export-leads').style.display = 'none';
 }
 
@@ -485,7 +545,7 @@ function closeJobPanel() {
   document.getElementById('job-panel').classList.remove('open');
 }
 
-function startPoll() {
+function startJobPoll() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     if (!activeJobId) return;
@@ -501,20 +561,25 @@ function startPoll() {
 }
 
 function updateJobPanel(job) {
-  const statusEl = document.getElementById('job-status-val');
-  statusEl.textContent = job.status.charAt(0).toUpperCase() + job.status.slice(1);
-  statusEl.style.color = job.status === 'done' ? 'var(--green)' : job.status === 'failed' ? 'var(--red)' : 'var(--text)';
-  document.getElementById('job-domains-val').textContent = `${job.crawled_domains} / ${job.total_domains}`;
-  document.getElementById('job-leads-val').textContent = job.leads_found.toLocaleString();
-  const pct = job.total_domains > 0 ? Math.round(job.crawled_domains / job.total_domains * 100) : 0;
+  const sv = document.getElementById('job-status-val');
+  sv.textContent = job.status.charAt(0).toUpperCase() + job.status.slice(1);
+  sv.style.color = job.status === 'done' ? 'var(--green)'
+                 : job.status === 'failed' ? 'var(--red)' : 'var(--text)';
+  document.getElementById('job-domains-val').textContent =
+    `${job.crawled_domains} / ${job.total_domains}`;
+  document.getElementById('job-leads-val').textContent =
+    job.leads_found.toLocaleString();
+  const pct = job.total_domains > 0
+    ? Math.round(job.crawled_domains / job.total_domains * 100) : 0;
   document.getElementById('job-bar').style.width = pct + '%';
   if (job.status === 'done' || job.status === 'failed') {
-    document.getElementById('btn-view-leads').style.display = job.leads_found > 0 ? '' : 'none';
-    document.getElementById('btn-export-leads').style.display = job.leads_found > 0 ? '' : 'none';
+    const show = job.leads_found > 0 ? '' : 'none';
+    document.getElementById('btn-view-leads').style.display   = show;
+    document.getElementById('btn-export-leads').style.display = show;
   }
 }
 
-// ── Results ───────────────────────────────────────────────────────────────────
+// ── Leads modal ───────────────────────────────────────────────────────────────
 async function viewLeads() {
   if (!activeJobId) return;
   leadsPage = 1;
@@ -528,15 +593,14 @@ function closeResults() {
 }
 
 async function openResults() {
-  // Shows all jobs in results panel
   leadsPage = 1;
-  if (activeJobId) await loadLeads();
-  else {
+  if (!activeJobId) {
     try {
       const jobs = await apiFetch('/api/jobs');
-      if (jobs.length) { activeJobId = jobs[0].id; await loadLeads(); }
+      if (jobs.length) activeJobId = jobs[0].id;
     } catch (e) {}
   }
+  if (activeJobId) await loadLeads();
   document.getElementById('results-panel').classList.add('open');
 }
 
@@ -544,38 +608,39 @@ async function loadLeads() {
   if (!activeJobId) return;
   try {
     const data = await apiFetch(`/api/leads?job_id=${activeJobId}&page=${leadsPage}&limit=100`);
-    leadsTotalPages = data.pages;
+    leadsTotalPgs = data.pages;
     renderLeads(data.leads, data.total);
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error('loadLeads', e); }
 }
 
 function renderLeads(leads, total) {
   document.getElementById('leads-total-label').textContent = `${total.toLocaleString()} leads`;
-  document.getElementById('leads-page-info').textContent = `Page ${leadsPage} of ${leadsTotalPages}`;
+  document.getElementById('leads-page-info').textContent   =
+    `Page ${leadsPage} of ${leadsTotalPgs}`;
   const tbody = document.getElementById('leads-tbody');
   tbody.innerHTML = '';
   if (!leads.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>No leads found yet.</p></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No leads found yet.</td></tr>';
     return;
   }
   leads.forEach(l => {
     const catCode = (l.category_code || '').toLowerCase();
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><code style="font-size:11px;color:var(--accent)">${escHtml(l.email || '—')}</code></td>
-      <td style="font-size:12px">${escHtml(l.phone || '—')}</td>
-      <td style="font-size:12px">${escHtml(l.person_name || '—')}</td>
-      <td style="font-size:12px">${escHtml(l.designation || '—')}</td>
-      <td style="font-size:12px">${escHtml(l.department || '—')}</td>
-      <td style="font-size:12px">${escHtml(l.domain_title || '—')}</td>
-      <td><span class="tag cat-${catCode}">${catCode.toUpperCase()}</span></td>
-      <td class="url-cell"><a href="${escHtml(l.source_url||'#')}" target="_blank">↗</a></td>`;
+      <td><code style="font-size:11px;color:var(--accent)">${esc(l.email || '—')}</code></td>
+      <td>${esc(l.person_name || '—')}</td>
+      <td>${esc(l.designation || '—')}</td>
+      <td>${esc(l.department || '—')}</td>
+      <td>${esc(l.domain_state || '—')}</td>
+      <td>${esc(l.domain_title || '—')}</td>
+      <td><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></td>
+      <td><a href="${esc(l.source_url||'#')}" target="_blank" title="${esc(l.source_url||'')}">↗</a></td>`;
     tbody.appendChild(tr);
   });
 }
 
-async function leadsPrevPage() { if (leadsPage > 1) { leadsPage--; await loadLeads(); } }
-async function leadsNextPage() { if (leadsPage < leadsTotalPages) { leadsPage++; await loadLeads(); } }
+async function leadsPrev() { if (leadsPage > 1) { leadsPage--; await loadLeads(); } }
+async function leadsNext() { if (leadsPage < leadsTotalPgs) { leadsPage++; await loadLeads(); } }
 
 function exportLeads() {
   if (!activeJobId) return;
@@ -587,19 +652,27 @@ async function loadRecentJobs() {
   try {
     const jobs = await apiFetch('/api/jobs?limit=5');
     const el = document.getElementById('jobs-list');
-    if (!jobs.length) { el.innerHTML = '<span style="font-size:12px;color:var(--small)">No jobs yet.</span>'; return; }
+    if (!jobs.length) {
+      el.innerHTML = '<span style="font-size:12px;color:var(--small)">No jobs yet.</span>';
+      return;
+    }
     el.innerHTML = '';
     jobs.forEach(j => {
-      const statusColor = j.status === 'done' ? 'var(--green)' : j.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
+      const color = j.status === 'done' ? 'var(--green)'
+                  : j.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
       const div = document.createElement('div');
-      div.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px;cursor:pointer;';
+      div.className = 'job-item';
       div.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:12px;font-weight:500">Job #${j.id}</span>
-          <span style="font-size:11px;color:${statusColor}">${j.status}</span>
+        <div class="job-item-top">
+          <strong>Job #${j.id}</strong>
+          <span style="font-size:11px;color:${color}">${j.status}</span>
         </div>
-        <div style="font-size:11px;color:var(--small)">${j.total_domains} domains · ${j.leads_found} leads</div>`;
-      div.onclick = () => { activeJobId = j.id; updateJobPanel(j); openJobPanel(j.id); };
+        <div class="job-item-meta">${j.total_domains} domains · ${j.leads_found} leads</div>`;
+      div.onclick = () => {
+        activeJobId = j.id;
+        updateJobPanel(j);
+        openJobPanel(j.id);
+      };
       el.appendChild(div);
     });
   } catch (e) {}
@@ -608,16 +681,15 @@ async function loadRecentJobs() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
   const r = await fetch(url, opts);
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error(`${r.status} ${body}`);
-  }
+  if (!r.ok) { const b = await r.text(); throw new Error(`${r.status} ${b}`); }
   return r.json();
 }
 
-function escHtml(str) {
+function esc(str) {
   if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>

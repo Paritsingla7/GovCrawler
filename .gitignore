@@ -248,7 +248,12 @@ fabric.properties
 *.db
 *.db-journal
 *.csv
-crawler*.log
+*.log
 run_notes.md
 calude_given_improvements.md
 classified_leads.csv
+portal/data/
+
+# IDE files not covered by the JetBrains pattern above
+.idea/dataSources.xml
+.idea/sqldialects.xml

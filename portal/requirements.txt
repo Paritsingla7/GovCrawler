@@ -1,5 +1,0 @@
-# MishaCrawler Portal v2 — new dependencies
-# (httpx, playwright, beautifulsoup4, lxml, pyyaml already installed from v1)
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.0.0

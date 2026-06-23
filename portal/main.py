@@ -1,14 +1,16 @@
 """
-MishaCrawler Portal v2 — entry point.
+MishaCrawler Portal — entry point.
 
 Usage:
-    python -m portal                   # starts the portal server (default)
-    python -m portal serve             # same as above
-    python -m portal import            # one-shot: import from india.gov.in API then exit
-    python -m portal crawl <job_id>    # manually trigger a specific job (for debugging)
+    python -m portal                          # start the server (default)
+    python -m portal serve                    # same
+    python -m portal import-json              # seed DB from gov_domains.json (zero API calls)
+    python -m portal import-json path/to.json # seed from a specific file
+    python -m portal import                   # refresh from live india.gov.in API
+    python -m portal crawl <job_id>           # manually run a specific job (debug)
 
-The server exposes http://<host>:<port> where the frontend + API live.
-All configuration is in portal/config.yaml — nothing is hardcoded here.
+Always run import-json first to populate the domain list before starting the server.
+All configuration is in portal/config.yaml.
 """
 
 import asyncio
@@ -19,7 +21,7 @@ from pathlib import Path
 import yaml
 import uvicorn
 
-from .db.database import Database
+from .db.models import Database
 from .api.server import create_app
 
 logging.basicConfig(
@@ -43,42 +45,49 @@ def load_config() -> dict:
 
 
 def cmd_serve(config: dict):
-    """Start the FastAPI + Uvicorn server."""
-    db = Database(config)
+    db  = Database(config)
     app = create_app(config, db)
-
     host = config["api"]["host"]
     port = config["api"]["port"]
     log.info(f"Portal starting at http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
-def cmd_import(config: dict):
-    """Blocking one-shot import from india.gov.in API."""
-    from .scraper.india_gov import import_all
+def cmd_import_json(config: dict, json_path: str = "gov_domains.json"):
+    from .scraper.importer import import_from_json
     db = Database(config)
-    log.info("Starting one-shot import…")
+    log.info(f"Importing from {json_path} — zero API calls…")
+    import_from_json(db, json_path, config)
+    count = db.count_domains()
+    log.info(f"JSON import finished. {count} domains in DB.")
+    db.close()
+
+
+def cmd_import(config: dict):
+    from .scraper.importer import import_all
+    db = Database(config)
+    log.info("Starting live API import…")
     import_all(db, config)
-    log.info(f"Import finished. {db.count_domains()} domains in DB.")
+    log.info(f"API import finished. {db.count_domains()} domains in DB.")
     db.close()
 
 
 async def cmd_crawl(config: dict, job_id: int):
-    """Manually run a specific crawl job (debugging use)."""
     import json
     from playwright.async_api import async_playwright
     from .crawler.engine import CrawlerEngine
 
-    db = Database(config)
+    db  = Database(config)
     job = db.get_job(job_id)
     if not job:
-        log.error(f"Job {job_id} not found in database.")
+        log.error(f"Job {job_id} not found.")
         db.close()
         return
 
-    domain_ids = json.loads(job["domain_ids"])
-    domains = db.get_domains_by_ids(domain_ids)
-    seeds = [(d["contact_url"] or d["main_url"], d["id"]) for d in domains if (d["contact_url"] or d["main_url"])]
+    domain_ids = json.loads(job.get("domain_ids") or "[]")
+    domains    = db.get_domains_by_ids(domain_ids)
+    seeds      = [(d["contact_url"] or d["main_url"], d["id"])
+                  for d in domains if (d["contact_url"] or d["main_url"])]
 
     log.info(f"Running job {job_id} with {len(seeds)} seeds…")
     db.start_job(job_id)
@@ -86,7 +95,8 @@ async def cmd_crawl(config: dict, job_id: int):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         try:
-            engine = CrawlerEngine(config=config, db=db, job_id=job_id, browser=browser)
+            engine = CrawlerEngine(config=config, db=db,
+                                   job_id=job_id, browser=browser)
             await engine.run(seeds)
             db.finish_job(job_id, status="done")
         except Exception as e:
@@ -101,15 +111,17 @@ async def cmd_crawl(config: dict, job_id: int):
 
 
 def main():
-    config = load_config()
-    # Ensure log/data dir exists
     Path("portal/data").mkdir(parents=True, exist_ok=True)
+    config = load_config()
 
     args = sys.argv[1:]
-    cmd = args[0] if args else "serve"
+    cmd  = args[0] if args else "serve"
 
     if cmd in ("serve", ""):
         cmd_serve(config)
+    elif cmd == "import-json":
+        json_path = args[1] if len(args) > 1 else "gov_domains.json"
+        cmd_import_json(config, json_path)
     elif cmd == "import":
         cmd_import(config)
     elif cmd == "crawl":
@@ -119,7 +131,7 @@ def main():
         asyncio.run(cmd_crawl(config, int(args[1])))
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: serve | import | crawl <job_id>")
+        print("Commands: serve | import-json [path] | import | crawl <job_id>")
         sys.exit(1)
 
 
