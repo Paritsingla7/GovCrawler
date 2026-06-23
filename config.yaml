@@ -1,0 +1,33 @@
+# --- Crawler Configuration ---
+
+defaults:
+  keyword: "contact"
+  max_depth: 4
+  max_links_per_page: 80       # depth-0 limit; depth-1 = ~27, depth-2+ = 15 (tapered in code)
+  num_workers: 55
+  page_timeout: 30
+  url_process_timeout: 75
+  request_delay: 1.5        # seconds between requests to the same domain
+
+# --- Target Domains ---
+target_domains:
+  - ".gov.in"
+  - ".nic.in"
+
+# --- Database Configuration ---
+database:
+  # Connection string for SQLAlchemy (e.g. postgresql://user:pass@localhost:5432/govcrawler or sqlite:///crawler.db)
+  uri: "sqlite:///central_crawler.db"
+
+# --- Scraper Filter Configuration ---
+scraper:
+  category_filter: "" # Optional category code to scrape (e.g., "ug" for Union Gov, "sg" for State Gov)
+  org_type_filter: "" # Optional organization type code to scrape (e.g., "E051")
+
+# --- Crawler Behavior ---
+crawler:
+  # Skip URLs if they were visited within this many days
+  recrawl_days: 30
+
+# --- User Agent ---
+user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

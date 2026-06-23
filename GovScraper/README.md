@@ -32,12 +32,19 @@ To fetch domains within another Python script:
 ```python
 from GovScraper.runner import run_all_domains
 
-domains = run_all_domains()
-print(domains)
+# Optional config for filtering
+config = {
+    "scraper": {
+        "category_filter": "ug" # Only fetch Union Government
+    }
+}
+
+domains_metadata = run_all_domains(config)
+print(domains_metadata)
 ```
 
 ## Outputs
 
-The module returns a set of unique root domains (`.gov.in`, `.nic.in`) extracted from all categories.
+The module returns a nested dictionary mapping each unique root domain to its exact classification (Category, State, Organization Type) extracted from the `india.gov.in` Web Directory.
 
-These outputs are perfect for use as seed lists for broader crawling or enumeration tasks.
+These outputs are perfect for seeding the GovCrawler, which saves the metadata for real-time lead classification.
