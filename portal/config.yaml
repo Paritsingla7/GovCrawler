@@ -1,0 +1,198 @@
+# MishaCrawler Portal v2 — master config
+# NOTHING in any Python file is hardcoded. Every tunable value lives here.
+
+database:
+  path: portal/data/mishacrawler.db
+
+api:
+  host: 0.0.0.0
+  port: 8000
+
+# ── india.gov.in directory API ────────────────────────────────────────────────
+scraper:
+  base_url: "https://www.india.gov.in"
+  web_dir_endpoint: "/directory/web-directory/api"
+  page_size: 100
+  timeout_seconds: 20
+  headers:
+    User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    Accept: "application/json, text/plain, */*"
+    Content-Type: "application/json"
+    Referer: "https://www.india.gov.in/directory/web-directory"
+    Origin: "https://www.india.gov.in"
+  querytypes:
+    categories: "Webdirectorycategorywithcounts"
+    entries: "WebdirectoryCategorydetalsList"
+  target_suffixes:
+    - ".gov.in"
+    - ".nic.in"
+
+# ── Crawler ────────────────────────────────────────────────────────────────────
+crawler:
+  workers: 5
+  max_depth: 3
+
+  # Try plain httpx before launching a browser page
+  httpx_first: true
+  # If httpx returns a JS-shell page, escalate to Playwright
+  playwright_fallback: true
+
+  # httpx socket timeouts (seconds)
+  httpx_timeout:
+    connect: 10
+    read: 30
+
+  # Playwright page.goto() timeout (seconds)
+  playwright_timeout: 45
+
+  # Hard outer kill switch per URL — prevents stalled workers (seconds)
+  # This was the root of the 1,827 stall problem in v1.
+  # Set higher than playwright_timeout so Playwright always finishes first.
+  per_url_timeout: 100
+
+  # Seconds to sleep between requests to the SAME domain (per-domain lock)
+  request_delay: 1.5
+
+  # Seconds to wait after domcontentloaded for async JS/XHR to settle
+  js_settle_time: 3.0
+
+  # Max outbound links to queue per page, tapered by depth
+  max_links_per_page:
+    0: 30     # seed pages (already contact pages — don't fan out aggressively)
+    1: 15
+    2: 8
+    default: 5
+
+  target_suffixes:
+    - ".gov.in"
+    - ".nic.in"
+
+  # Links whose URL path or anchor text contains any of these get queued
+  # from ANY page. Other links are only queued when already on a priority page.
+  priority_keywords:
+    - contact
+    - officer
+    - directory
+    - whos-who
+    - who-is-who
+    - staff
+    - personnel
+    - secretariat
+    - about-us
+    - division
+    - minister
+    - committee
+    - administration
+    - team
+    - tender
+    - procurement
+    - telephone
+    - tele-directory
+    - phone-directory
+    - email
+
+  # URL suffixes that are never crawled
+  skip_extensions:
+    - .pdf
+    - .doc
+    - .docx
+    - .xls
+    - .xlsx
+    - .ppt
+    - .pptx
+    - .zip
+    - .rar
+    - .7z
+    - .tar
+    - .gz
+    - .jpg
+    - .jpeg
+    - .png
+    - .gif
+    - .svg
+    - .ico
+    - .mp4
+    - .mp3
+    - .avi
+    - .mov
+
+  # If ANY of these strings appear in the raw HTML, the page is treated as
+  # a JS-rendered shell and escalated to Playwright.
+  js_indicators:
+    - '<div id="__next"'
+    - '<div id="root"'
+    - 'Please enable JavaScript'
+    - 'You need to enable JavaScript'
+    - 'This page requires JavaScript'
+
+  user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+# ── Data extraction ────────────────────────────────────────────────────────────
+extraction:
+  email:
+    enabled: true
+    regex: '[a-zA-Z0-9._%+\-]+@(?:[a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,6}'
+    valid_suffixes:
+      - ".gov.in"
+      - ".nic.in"
+      - ".res.in"
+      - ".ac.in"
+    # Each pair is [regex_pattern, replacement]
+    obfuscation:
+      - ['\s*\[at\]\s*',  "@"]
+      - ['\s*\(at\)\s*',  "@"]
+      - ['\s+at\s+',      "@"]
+      - ['\s*\[dot\]\s*', "."]
+      - ['\s*\(dot\)\s*', "."]
+      - ['\s+dot\s+',     "."]
+    # Characters of surrounding text to keep as context snippet
+    context_chars: 200
+
+  phone:
+    enabled: true
+    # Indian phone number patterns
+    patterns:
+      - '\+91[\s\-]?\d{10}'
+      - '0\d{2,4}[\s\-]\d{6,8}'
+      - '\d{5}[\s\-]\d{5}'
+      - '1800[\s\-\d]{7,12}'
+
+  person:
+    enabled: true
+    # Honorific prefixes that indicate a person's name follows
+    title_prefixes:
+      - Shri
+      - Smt
+      - Dr
+      - Mr
+      - Mrs
+      - Ms
+      - Prof
+      - Sh
+      - Shrimati
+      - Km
+    # Keywords that identify designation/rank text near names
+    designation_keywords:
+      - Secretary
+      - Director
+      - Commissioner
+      - Collector
+      - Superintendent
+      - Inspector
+      - Officer
+      - Manager
+      - Chairman
+      - President
+      - Minister
+      - Deputy
+      - Additional
+      - Principal
+      - Chief
+      - Joint
+      - Under Secretary
+      - IAS
+      - IPS
+      - IFS
+      - IRS
+    # How many chars before/after an email to scan for name/designation
+    proximity_chars: 300
