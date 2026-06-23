@@ -256,10 +256,9 @@ async def _get_root_domains_from_india_gov(p: Playwright, config: dict) -> set:
     Both steps add to the same set; duplicates collapse automatically.
     """
     directory_pages = [
-        "https://www.india.gov.in/my-government/ministries-departments",
-        "https://www.india.gov.in/my-government/state-governments",
-        "https://www.india.gov.in/my-government/independent-bodies",
-        "https://www.india.gov.in/my-government/autonomous-bodies",
+        "https://www.india.gov.in/directory/web-directory",
+        "https://www.india.gov.in/directory/whos-who",
+        "https://www.india.gov.in/directory/contact-directory",
     ]
     target_domains = config.get('target_domains', ['.gov.in', '.nic.in'])
     root_domains = set()
@@ -310,6 +309,28 @@ async def _get_root_domains_from_india_gov(p: Playwright, config: dict) -> set:
         page    = await context.new_page()
         await Stealth().apply_stealth_async(page)
 
+        # Intercept ALL network responses and extract gov.in domains from JSON/text.
+        # This captures XHR API responses directly — bypasses the DOM rendering step
+        # entirely, so we get data even when React hasn't finished painting the links.
+        intercepted: set[str] = set()
+
+        async def _on_response(response):
+            try:
+                if response.status != 200:
+                    return
+                ct = response.headers.get('content-type', '')
+                if not ('json' in ct or 'javascript' in ct or ct.startswith('text')):
+                    return
+                text = await response.text()
+                for m in re.findall(r'https?://[\w.-]+\.(?:gov|nic)\.in', text):
+                    parsed = urlparse(m)
+                    if any(parsed.netloc.endswith(d) for d in target_domains):
+                        intercepted.add(f"{parsed.scheme}://{parsed.netloc}")
+            except Exception:
+                pass
+
+        page.on('response', lambda r: asyncio.create_task(_on_response(r)))
+
         for dir_url in directory_pages:
             try:
                 log.info(f"Stealth scraping: {dir_url}")
@@ -318,23 +339,25 @@ async def _get_root_domains_from_india_gov(p: Playwright, config: dict) -> set:
                     wait_until="domcontentloaded",
                     timeout=config['defaults']['page_timeout'] * 1000,
                 )
-                try:
-                    await page.wait_for_selector(
-                        "a[href*='.gov.in'], a[href*='.nic.in']",
-                        timeout=12000,
-                    )
-                except Exception:
-                    log.warning(f"No gov.in links in DOM for {dir_url} even with stealth")
+                # Wait for XHR calls to complete — the ministry data arrives via
+                # async API calls after page load, not in the initial HTML
+                await page.wait_for_timeout(15000)
 
+                before = len(root_domains)
+                root_domains.update(intercepted)
+                intercepted.clear()
+
+                # Also grab any links that did make it into the DOM
                 all_hrefs = await page.eval_on_selector_all(
                     "a[href]", "els => els.map(e => e.href)"
                 )
-                before = len(root_domains)
                 for href in all_hrefs:
                     parsed = urlparse(href)
                     if any(parsed.netloc.endswith(d) for d in target_domains):
                         root_domains.add(f"{parsed.scheme}://{parsed.netloc}")
-                log.info(f"  Added {len(root_domains) - before} new domains from {dir_url}")
+
+                added = len(root_domains) - before
+                log.info(f"  Added {added} new domains from {dir_url} (interception + DOM)")
 
                 if len(root_domains) > 120:
                     break
