@@ -368,20 +368,8 @@
 <script src="/static/js/base.js"></script>
 {% block extra_scripts %}{% endblock %}
 <script>
-    {%
-        block
-        init_js %
-    }
-    {%
-        endblock %
-    }
-    {%
-        block
-        extra_js %
-    }
-    {%
-        endblock %
-    }
+    {% block init_js %}{% endblock %}
+    {% block extra_js %}{% endblock %}
 </script>
 </body>
 
