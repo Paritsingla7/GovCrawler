@@ -24,12 +24,14 @@ import uvicorn
 from .db.models import Database
 from .api.server import create_app
 
+Path("portal/data").mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("portal/data/portal.log"),
+        logging.FileHandler("portal/data/portal.log", encoding="utf-8"),
     ],
 )
 log = logging.getLogger(__name__)

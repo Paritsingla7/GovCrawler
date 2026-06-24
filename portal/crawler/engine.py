@@ -45,6 +45,8 @@ class CrawlerEngine:
         self._visited: set[str] = set()
         self._domain_locks: dict[str, asyncio.Lock] = {}
         self._counter = 0
+        self._skipped = 0
+        self._session_visited_count = 0
 
         self._netloc_to_domain: dict[str, int] = {}
 
@@ -54,8 +56,19 @@ class CrawlerEngine:
 
     async def _enqueue(self, url: str, depth: int, domain_id: int | None,
                        is_seed: bool = False):
-        if url in self._visited or self._is_skippable(url) or not self._is_gov_domain(url):
-            return
+        if not is_seed:
+            if self._is_skippable(url) or not self._is_gov_domain(url):
+                self._skipped += 1
+                return
+            if url in self._visited:
+                return
+        else:
+            # For seeds, skip if it's not a valid domain/extension, but bypass the `_visited` 
+            # check so a manual job on a seed always crawls it.
+            if self._is_skippable(url) or not self._is_gov_domain(url):
+                self._skipped += 1
+                return
+
         self._visited.add(url)
         priority = self._url_priority(url)
         await self._queue.put(_QueueItem(
@@ -97,17 +110,25 @@ class CrawlerEngine:
     async def run(self, seeds: list[tuple[str, int | None]]):
         """seeds: list of (url, domain_id) tuples."""
 
-        # Resume: load URLs already visited in this job
-        self._visited.update(self._db.get_visited_urls(self._job_id))
-        # Recrawl protection: skip URLs visited in ANY job within recrawl_days
-        self._visited.update(self._db.get_recently_visited_global())
-
         # Build netloc → domain_id map
+        seed_netlocs = set()
         for url, did in seeds:
+            parsed_url = url if "://" in url else "http://" + url
+            netloc = urlparse(parsed_url).netloc
+            seed_netlocs.add(netloc)
+            seed_netlocs.add(netloc.lstrip("www."))
             if did is not None:
-                netloc = urlparse(url).netloc
                 self._netloc_to_domain[netloc] = did
                 self._netloc_to_domain[netloc.lstrip("www.")] = did
+
+        # Resume: load URLs already visited in this job
+        self._visited.update(self._db.get_visited_urls(self._job_id))
+        
+        # Recrawl protection: skip URLs visited in ANY job within recrawl_days,
+        # EXCEPT for the seed domains we are explicitly crawling now.
+        for v in self._db.get_recently_visited_global():
+            if urlparse(v).netloc not in seed_netlocs and urlparse(v).netloc.lstrip("www.") not in seed_netlocs:
+                self._visited.add(v)
 
         for url, did in seeds:
             await self._enqueue(url, depth=0, domain_id=did, is_seed=True)
@@ -130,19 +151,32 @@ class CrawlerEngine:
             asyncio.create_task(self._worker(i, contexts[i]))
             for i in range(self._cfg["workers"])
         ]
+        reporter_task = asyncio.create_task(self._reporter())
 
-        await self._queue.join()
+        try:
+            await self._queue.join()
+        finally:
+            reporter_task.cancel()
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-        for t in tasks:
-            t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+            for ctx in contexts:
+                if ctx:
+                    try:
+                        await ctx.close()
+                    except Exception:
+                        pass
+        # Final metric update
+        self._db.update_job_metrics(self._job_id, self._queue.qsize(), self._session_visited_count, self._skipped)
 
-        for ctx in contexts:
-            if ctx:
-                try:
-                    await ctx.close()
-                except Exception:
-                    pass
+    async def _reporter(self):
+        try:
+            while True:
+                await asyncio.sleep(2)
+                self._db.update_job_metrics(self._job_id, self._queue.qsize(), self._session_visited_count, self._skipped)
+        except asyncio.CancelledError:
+            pass
 
     # ── Worker loop ───────────────────────────────────────────────────────────
 
@@ -174,6 +208,7 @@ class CrawlerEngine:
         depth     = item.depth
         domain_id = item.domain_id
 
+        self._session_visited_count += 1
         self._db.mark_visited(url, self._job_id)
 
         html = await self._fetch(url, browser_context)

@@ -152,31 +152,37 @@
   .sel-all-link { font-size: 12px; color: var(--accent); cursor: pointer; white-space: nowrap; }
   .sel-all-link:hover { text-decoration: underline; }
 
-  /* ── Job panel (slide-up) ── */
-  #job-panel {
+  /* ── Bottom Dock ── */
+  #bottom-dock {
     position: fixed; bottom: 0; left: 0; right: 0;
+    height: 250px; min-height: 40px; max-height: 90vh;
     background: var(--surface); border-top: 1px solid var(--border);
-    padding: 16px 24px; transform: translateY(100%);
-    transition: transform 0.25s ease; z-index: 200;
+    z-index: 200; display: flex; flex-direction: column;
+    box-shadow: 0 -4px 20px rgba(0,0,0,.05);
   }
-  #job-panel.open { transform: translateY(0); }
+  #dock-resizer {
+    height: 5px; cursor: ns-resize; background: transparent;
+    position: absolute; top: -2px; left: 0; right: 0; z-index: 201;
+  }
+  #dock-resizer:hover { background: var(--accent); }
+  .dock-tabs {
+    display: flex; background: var(--surface2); border-bottom: 1px solid var(--border);
+    flex-shrink: 0; height: 35px;
+  }
+  .dock-tab {
+    padding: 0 16px; display: flex; align-items: center; cursor: pointer;
+    font-size: 12px; font-weight: 600; color: var(--muted); border-right: 1px solid var(--border);
+  }
+  .dock-tab:hover { background: var(--surface); color: var(--text); }
+  .dock-tab.active { background: var(--surface); color: var(--text); border-bottom: 2px solid var(--accent); }
+  .dock-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
   .jp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .jp-header h2 { font-size: 14px; font-weight: 600; }
   .jp-stats { display: flex; gap: 32px; margin-bottom: 10px; }
-  .jp-stat { }
   .jp-stat-label { font-size: 10px; color: var(--small); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
   .jp-stat-value { font-size: 22px; font-weight: 600; }
   .jp-actions { display: flex; gap: 8px; margin-top: 10px; }
-
-  /* ── Leads modal ── */
-  #results-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 300; align-items: center; justify-content: center; }
-  #results-panel.open { display: flex; }
-  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 94vw; max-width: 1200px; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.15); }
-  .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .modal-header h2 { font-size: 14px; font-weight: 600; }
-  .modal-body { flex: 1; overflow: auto; }
-  .modal-body th, .modal-body td { font-size: 12px; }
-  .empty-state { text-align: center; padding: 50px 20px; color: var(--small); font-size: 13px; }
 
   /* ── Config panel (right drawer) ── */
   #config-panel {
@@ -239,8 +245,9 @@
   <div class="header-right">
     <div id="live-badge"><div class="pulse"></div> Job running</div>
     <span id="db-count"></span>
-    <button class="btn-icon" onclick="openConfig()" title="Settings">⚙</button>
-    <button class="btn-secondary btn-sm" onclick="openResults()">View Jobs</button>
+    <button class="btn-secondary btn-sm" onclick="openLogs()">View Logs</button>
+    <button class="btn-secondary btn-sm" onclick="openConfig()">⚙ Settings</button>
+    <button class="btn-secondary btn-sm" onclick="openResults()">View Leads</button>
   </div>
 </header>
 
@@ -326,6 +333,10 @@
       </button>
       <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
       <span id="total-label" style="margin-left:auto;font-size:12px;color:var(--muted)"></span>
+      <div style="margin-left:16px; display:flex; align-items:center; gap: 12px;">
+         <span id="sel-count-label" style="font-size:12px; font-weight:bold; display:none;"><span id="sel-count">0</span> selected</span>
+         <button class="btn-primary btn-sm" id="crawl-btn" onclick="startCrawl()" style="display:none;">▶ Crawl Selected</button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -351,81 +362,62 @@
       <button class="btn-secondary btn-sm" onclick="nextPage()" id="btn-next">Next →</button>
     </div>
 
-    <div class="action-bar" id="action-bar" style="display:none">
-      <div class="sel-info">
-        <span><span class="sel-count-n" id="sel-count">0</span> domains selected</span>
-        <span class="sel-all-link" id="sel-all-link" onclick="selectAllResults()" style="display:none">
-          Select all <span id="sel-all-n"></span> matching results
-        </span>
-      </div>
-      <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
-      <button class="btn-primary" id="crawl-btn" onclick="startCrawl()">▶ Crawl Selected</button>
-    </div>
   </main>
 </div>
 
-<!-- Job panel (slide-up) -->
-<div id="job-panel">
-  <div class="jp-header">
-    <h2 id="job-title">Crawl Job</h2>
-    <button class="btn-icon" onclick="closeJobPanel()">✕</button>
+<!-- Bottom Dock -->
+<div id="bottom-dock" style="display:none;">
+  <div id="dock-resizer"></div>
+  <div class="dock-tabs">
+    <div class="dock-tab active" onclick="switchDockTab('job')" id="tab-job">Job Details</div>
+    <div class="dock-tab" onclick="switchDockTab('logs')" id="tab-logs">Server Logs</div>
+    <div style="flex:1"></div>
+    <button class="btn-icon" onclick="closeDock()" style="padding: 0 16px; border-left: 1px solid var(--border); border-radius: 0;">✕</button>
   </div>
-  <div class="jp-stats">
-    <div class="jp-stat">
-      <div class="jp-stat-label">Status</div>
-      <div class="jp-stat-value" id="job-status-val">—</div>
+  
+  <!-- Job details content -->
+  <div class="dock-content" id="dock-job">
+    <div class="jp-header">
+      <h2 id="job-title">Crawl Job</h2>
     </div>
-    <div class="jp-stat">
-      <div class="jp-stat-label">Domains</div>
-      <div class="jp-stat-value" id="job-domains-val">0 / 0</div>
-    </div>
-    <div class="jp-stat">
-      <div class="jp-stat-label">Leads found</div>
-      <div class="jp-stat-value" id="job-leads-val" style="color:var(--green)">0</div>
-    </div>
-  </div>
-  <div class="progress-bar-wrap" style="height:6px">
-    <div class="progress-bar-fill" id="job-bar" style="width:0%;background:var(--green)"></div>
-  </div>
-  <div class="jp-actions">
-    <button class="btn-primary btn-sm"   id="btn-view-leads"   style="display:none" onclick="viewLeads()">View Leads</button>
-    <button class="btn-secondary btn-sm" id="btn-export-leads" style="display:none" onclick="exportLeads()">⬇ Export CSV</button>
-  </div>
-</div>
-
-<!-- Leads modal -->
-<div id="results-panel">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="results-title">Leads</h2>
-      <div style="display:flex;gap:8px">
-        <button class="btn-primary btn-sm" onclick="exportLeads()">⬇ Export CSV</button>
-        <button class="btn-icon" onclick="closeResults()" style="font-size:14px">✕</button>
+    <div class="jp-stats">
+      <div class="jp-stat">
+        <div class="jp-stat-label">Status</div>
+        <div class="jp-stat-value" id="job-status-val">—</div>
+      </div>
+      <div class="jp-stat">
+        <div class="jp-stat-label">Seed</div>
+        <div class="jp-stat-value" id="job-seed-val">0</div>
+      </div>
+      <div class="jp-stat">
+        <div class="jp-stat-label">Queued</div>
+        <div class="jp-stat-value" id="job-queued-val">0</div>
+      </div>
+      <div class="jp-stat">
+        <div class="jp-stat-label">Visited</div>
+        <div class="jp-stat-value" id="job-visited-val">0</div>
+      </div>
+      <div class="jp-stat">
+        <div class="jp-stat-label">Skipped</div>
+        <div class="jp-stat-value" id="job-skipped-val">0</div>
+      </div>
+      <div class="jp-stat">
+        <div class="jp-stat-label">Leads found</div>
+        <div class="jp-stat-value" id="job-leads-val" style="color:var(--green)">0</div>
       </div>
     </div>
-    <div class="modal-body">
-      <table>
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Name</th>
-            <th>Designation</th>
-            <th>Department</th>
-            <th>State</th>
-            <th>Domain</th>
-            <th>Cat</th>
-            <th>Source</th>
-          </tr>
-        </thead>
-        <tbody id="leads-tbody"></tbody>
-      </table>
+    <div class="progress-bar-wrap" style="height:6px">
+      <div class="progress-bar-fill" id="job-progress-bar" style="width:0%"></div>
     </div>
-    <div class="pagination">
-      <button class="btn-secondary btn-sm" onclick="leadsPrev()">← Prev</button>
-      <span id="leads-page-info">—</span>
-      <button class="btn-secondary btn-sm" onclick="leadsNext()">Next →</button>
-      <span style="margin-left:auto;color:var(--muted)" id="leads-total-label"></span>
+    <div class="jp-actions">
+      <button class="btn-secondary btn-sm" onclick="exportLeads()" id="btn-export-leads" disabled>Export Leads (CSV)</button>
+      <button class="btn-danger btn-sm" onclick="cancelJob()" id="btn-cancel-job" style="display:none">Cancel Job</button>
     </div>
+  </div>
+  
+  <!-- Logs content -->
+  <div class="dock-content" id="dock-logs" style="display:none; padding: 0;">
+    <pre id="logs-content" style="margin:0; font-family:monospace; font-size:12px; color:#c9d1d9; background:#0d1117; padding: 12px; white-space:pre-wrap; overflow-y:auto; height:100%;"></pre>
   </div>
 </div>
 
@@ -442,27 +434,27 @@
 
       <div class="cfg-row">
         <label class="cfg-label">Workers</label>
-        <input type="number" class="cfg-input" id="cfg-workers" min="1" max="20">
+        <input type="number" class="cfg-input" id="cfg-workers" min="1">
         <span class="info-icon" data-tip="Parallel workers crawling at once. Keep at 5 for gov sites — higher risks IP blocks.">ⓘ</span>
       </div>
       <div class="cfg-row">
         <label class="cfg-label">Max Depth</label>
-        <input type="number" class="cfg-input" id="cfg-max-depth" min="0" max="8">
+        <input type="number" class="cfg-input" id="cfg-max-depth" min="0">
         <span class="info-icon" data-tip="How deep to follow links from seed pages. 3 = seed → contact → officer → detail. Beyond 4 rarely yields new contacts.">ⓘ</span>
       </div>
       <div class="cfg-row">
         <label class="cfg-label">Recrawl Days</label>
-        <input type="number" class="cfg-input" id="cfg-recrawl-days" min="0" max="365">
+        <input type="number" class="cfg-input" id="cfg-recrawl-days" min="0">
         <span class="info-icon" data-tip="Skip URLs visited in any previous job within this many days. Prevents repeatedly hitting the same gov pages.">ⓘ</span>
       </div>
       <div class="cfg-row">
         <label class="cfg-label">Request Delay (s)</label>
-        <input type="number" class="cfg-input" id="cfg-request-delay" min="0" max="10" step="0.1">
+        <input type="number" class="cfg-input" id="cfg-request-delay" min="0" step="0.1">
         <span class="info-icon" data-tip="Seconds to wait between requests to the same domain. Increase this if sites start blocking or rate-limiting you.">ⓘ</span>
       </div>
       <div class="cfg-row">
         <label class="cfg-label">Per-URL Timeout (s)</label>
-        <input type="number" class="cfg-input" id="cfg-per-url-timeout" min="10" max="300">
+        <input type="number" class="cfg-input" id="cfg-per-url-timeout" min="10">
         <span class="info-icon" data-tip="Hard time limit per page. If a page takes longer, the worker moves on. Must be higher than playwright_timeout.">ⓘ</span>
       </div>
     </div>
@@ -488,12 +480,12 @@
       </div>
       <div class="cfg-row">
         <label class="cfg-label">Playwright timeout (s)</label>
-        <input type="number" class="cfg-input" id="cfg-playwright-timeout" min="5" max="120">
+        <input type="number" class="cfg-input" id="cfg-playwright-timeout" min="5">
         <span class="info-icon" data-tip="Seconds Playwright waits for page.goto() to complete before giving up.">ⓘ</span>
       </div>
       <div class="cfg-row">
         <label class="cfg-label">JS settle time (s)</label>
-        <input type="number" class="cfg-input" id="cfg-js-settle" min="0" max="15" step="0.5">
+        <input type="number" class="cfg-input" id="cfg-js-settle" min="0" step="0.5">
         <span class="info-icon" data-tip="Extra seconds to wait after the page loads for JavaScript-rendered content to appear in the DOM.">ⓘ</span>
       </div>
     </div>
@@ -534,11 +526,20 @@
       </div>
     </div>
 
+    <div class="cfg-section">
+      <div class="cfg-section-title">Maintenance</div>
+      <div class="cfg-row">
+        <label class="cfg-label">Visited URLs Cache</label>
+        <button class="btn-secondary btn-sm" onclick="clearVisitedUrls()">Clear Cache</button>
+      </div>
+    </div>
+
   </div>
   <div class="cfg-footer">
+    <div id="cfg-warn-msg" style="display:none; color:var(--orange); font-size:11px; margin-bottom:8px; line-height:1.4">Warning: Settings exceed advised range and may cause instability or IP bans.</div>
     <button class="btn-primary btn-save-big" onclick="saveConfig()">Save Settings</button>
     <div class="cfg-footer-btns">
-      <div id="cfg-save-msg" style="flex:1">✓ Saved — takes effect on next crawl job</div>
+      <div id="cfg-save-msg" style="flex:1; display:none;">✓ Saved — takes effect on next crawl job</div>
       <button class="btn-secondary btn-sm" onclick="closeConfig()">Close</button>
     </div>
   </div>
@@ -692,10 +693,7 @@ function renderDomains(domains, total) {
   document.getElementById('btn-prev').disabled = currentPage <= 1;
   document.getElementById('btn-next').disabled = currentPage >= totalPages;
 
-  // Update "select all N" in toolbar and action bar
-  const selAllLink = document.getElementById('sel-all-link');
-  const selAllN    = document.getElementById('sel-all-n');
-  selAllN.textContent = total.toLocaleString();
+  // Update "select all N" in toolbar
   const btnSelectAll = document.getElementById('btn-select-all-results');
   document.getElementById('sel-all-toolbar-n').textContent = total.toLocaleString();
   btnSelectAll.style.display = total > 0 ? '' : 'none';
@@ -782,13 +780,10 @@ function clearSelection() {
 
 function updateSelCount() {
   const n = selectedIds.size;
-  const bar = document.getElementById('action-bar');
   document.getElementById('sel-count').textContent = n.toLocaleString();
-  bar.style.display = n > 0 ? 'flex' : 'none';
-
-  // Show "Select all N" in action bar when there are unselected results
-  const selAllLink = document.getElementById('sel-all-link');
-  selAllLink.style.display = (totalMatching > 0 && selectedIds.size < totalMatching) ? '' : 'none';
+  const showBtn = n > 0 ? 'inline-block' : 'none';
+  document.getElementById('sel-count-label').style.display = showBtn;
+  document.getElementById('crawl-btn').style.display = showBtn;
 }
 
 function updateSelectAll() {
@@ -880,19 +875,63 @@ async function startCrawl() {
     });
     activeJobId = resp.id;
     openJobPanel(resp.id);
+    clearSelection();
     startJobPoll();
     document.getElementById('live-badge').style.display = 'flex';
   } catch (e) { alert('Failed to start crawl: ' + e.message); }
 }
 
-function openJobPanel(jobId) {
-  document.getElementById('job-panel').classList.add('open');
-  document.getElementById('job-title').textContent = `Crawl Job #${jobId}`;
-  document.getElementById('btn-view-leads').style.display   = 'none';
-  document.getElementById('btn-export-leads').style.display = 'none';
+async function cancelJob() {
+  if (!activeJobId) return;
+  if (!confirm('Cancel this job?')) return;
+  try {
+    await apiFetch(`/api/jobs/${activeJobId}/cancel`, { method: 'POST' });
+    updateJobPanel({ ...await apiFetch(`/api/jobs/${activeJobId}`) });
+  } catch (e) { alert('Failed to cancel: ' + e.message); }
 }
 
-function closeJobPanel() { document.getElementById('job-panel').classList.remove('open'); }
+// ── Dock Logic ────────────────────────────────────────────────────────────────
+let isDraggingDock = false;
+document.getElementById('dock-resizer').addEventListener('mousedown', (e) => {
+  isDraggingDock = true; document.body.style.cursor = 'ns-resize';
+});
+document.addEventListener('mousemove', (e) => {
+  if (!isDraggingDock) return;
+  const dock = document.getElementById('bottom-dock');
+  const h = Math.max(40, Math.min(window.innerHeight - e.clientY, window.innerHeight * 0.9));
+  dock.style.height = h + 'px';
+  document.querySelector('.layout').style.paddingBottom = h + 'px';
+});
+document.addEventListener('mouseup', () => { isDraggingDock = false; document.body.style.cursor = ''; });
+
+function openDock(tab) {
+  const dock = document.getElementById('bottom-dock');
+  dock.style.display = 'flex';
+  if (!dock.style.height || dock.style.height === '40px') dock.style.height = '250px';
+  document.querySelector('.layout').style.paddingBottom = dock.style.height;
+  if (tab) switchDockTab(tab);
+}
+function closeDock() {
+  document.getElementById('bottom-dock').style.display = 'none';
+  document.querySelector('.layout').style.paddingBottom = '0';
+  if (logsTimer) { clearInterval(logsTimer); logsTimer = null; }
+}
+function switchDockTab(tab) {
+  document.querySelectorAll('.dock-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.dock-content').forEach(el => el.style.display = 'none');
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('dock-' + tab).style.display = 'block';
+  if (tab === 'logs') { if (!logsTimer) logsTimer = setInterval(fetchLogs, 2000); fetchLogs(); }
+  else { if (logsTimer) { clearInterval(logsTimer); logsTimer = null; } }
+}
+
+function openJobPanel(jobId) {
+  openDock('job');
+  document.getElementById('job-title').textContent = `Crawl Job #${jobId}`;
+  document.getElementById('btn-export-leads').disabled = true;
+}
+
+function closeJobPanel() { closeDock(); }
 
 function startJobPoll() {
   if (pollTimer) clearInterval(pollTimer);
@@ -914,79 +953,50 @@ function updateJobPanel(job) {
   const sv = document.getElementById('job-status-val');
   sv.textContent = job.status.charAt(0).toUpperCase() + job.status.slice(1);
   sv.style.color = job.status === 'done' ? 'var(--green)'
-                 : job.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
-  document.getElementById('job-domains-val').textContent = `${job.crawled_domains} / ${job.total_domains}`;
+                 : job.status === 'failed' ? 'var(--red)' : job.status === 'cancelled' ? 'var(--muted)' : 'var(--yellow)';
+  document.getElementById('job-seed-val').textContent = job.seed_domains || job.total_domains;
+  document.getElementById('job-queued-val').textContent = job.queued_urls || 0;
+  document.getElementById('job-visited-val').textContent = job.visited_urls || 0;
+  document.getElementById('job-skipped-val').textContent = job.skipped_urls || 0;
   document.getElementById('job-leads-val').textContent   = job.leads_found.toLocaleString();
-  const pct = job.total_domains > 0 ? Math.round(job.crawled_domains / job.total_domains * 100) : 0;
-  document.getElementById('job-bar').style.width = pct + '%';
-  if (job.status === 'done' || job.status === 'failed') {
-    const show = job.leads_found > 0 ? '' : 'none';
-    document.getElementById('btn-view-leads').style.display   = show;
-    document.getElementById('btn-export-leads').style.display = show;
+
+  const totalUrls = (job.visited_urls || 0) + (job.queued_urls || 0);
+  const pct = totalUrls > 0 ? Math.round((job.visited_urls || 0) / totalUrls * 100) : 0;
+  document.getElementById('job-progress-bar').style.width = pct + '%';
+
+  if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
+    const show = job.leads_found > 0;
+    document.getElementById('btn-export-leads').disabled = !show;
+    document.getElementById('btn-cancel-job').style.display   = 'none';
+  } else {
+    document.getElementById('btn-export-leads').disabled = true;
+    document.getElementById('btn-cancel-job').style.display   = '';
   }
 }
 
-// ── Leads modal ───────────────────────────────────────────────────────────────
-async function viewLeads() {
-  if (!activeJobId) return;
-  leadsPage = 1;
-  await loadLeads();
-  document.getElementById('results-panel').classList.add('open');
-  document.getElementById('results-title').textContent = `Leads — Job #${activeJobId}`;
+// ── Leads & Logs logic ────────────────────────────────────────────────────────
+function viewLeads() { window.location.href = '/leads'; }
+function openResults() { window.location.href = '/leads'; }
+function exportLeads() { 
+  const url = activeJobId ? `/api/leads/export?job_id=${activeJobId}` : `/api/leads/export`;
+  window.open(url, '_blank'); 
 }
 
-function closeResults() { document.getElementById('results-panel').classList.remove('open'); }
+let logsTimer = null;
+function openLogs() { openDock('logs'); }
+function closeLogs() { closeDock(); }
 
-async function openResults() {
-  leadsPage = 1;
-  if (!activeJobId) {
-    try {
-      const jobs = await apiFetch('/api/jobs');
-      if (jobs.length) { activeJobId = jobs[0].id; updateJobPanel(jobs[0]); openJobPanel(jobs[0].id); }
-    } catch (e) {}
-  }
-  if (activeJobId) await loadLeads();
-  document.getElementById('results-panel').classList.add('open');
-  if (activeJobId) document.getElementById('results-title').textContent = `Leads — Job #${activeJobId}`;
-}
-
-async function loadLeads() {
-  if (!activeJobId) return;
+async function fetchLogs() {
   try {
-    const data = await apiFetch(`/api/leads?job_id=${activeJobId}&page=${leadsPage}&limit=100`);
-    leadsTotalPgs = data.pages;
-    renderLeads(data.leads, data.total);
-  } catch (e) { console.error('loadLeads', e); }
-}
-
-function renderLeads(leads, total) {
-  document.getElementById('leads-total-label').textContent = `${total.toLocaleString()} leads`;
-  document.getElementById('leads-page-info').textContent   = `Page ${leadsPage} of ${leadsTotalPgs}`;
-  const tbody = document.getElementById('leads-tbody');
-  tbody.innerHTML = '';
-  if (!leads.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No leads found yet.</td></tr>';
-    return;
+    const data = await apiFetch('/api/logs');
+    const pre = document.getElementById('logs-content');
+    const isAtBottom = pre.scrollHeight - pre.scrollTop <= pre.clientHeight + 20;
+    pre.textContent = data.logs;
+    if (isAtBottom) pre.scrollTop = pre.scrollHeight;
+  } catch (e) {
+    document.getElementById('logs-content').textContent = 'Error fetching logs: ' + e.message;
   }
-  leads.forEach(l => {
-    const catCode = (l.category_code || 'default').toLowerCase();
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><code style="color:var(--accent);font-size:11px">${esc(l.email || '—')}</code></td>
-      <td>${esc(l.person_name || '—')}</td>
-      <td style="font-size:12px;color:var(--muted)">${esc(l.designation || '—')}</td>
-      <td style="font-size:12px;color:var(--muted)">${esc(l.department || '—')}</td>
-      <td style="font-size:12px">${esc(l.domain_state || '—')}</td>
-      <td style="font-size:12px">${esc(l.domain_title || '—')}</td>
-      <td><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></td>
-      <td>${l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" title="${esc(l.source_url)}">↗</a>` : '—'}</td>`;
-    tbody.appendChild(tr);
-  });
 }
-
-async function leadsPrev() { if (leadsPage > 1) { leadsPage--; await loadLeads(); } }
-async function leadsNext() { if (leadsPage < leadsTotalPgs) { leadsPage++; await loadLeads(); } }
-function exportLeads() { if (activeJobId) window.open(`/api/leads/export?job_id=${activeJobId}`, '_blank'); }
 
 // ── Recent jobs sidebar ───────────────────────────────────────────────────────
 async function loadRecentJobs() {
@@ -1041,12 +1051,35 @@ async function loadConfig() {
   document.getElementById('cfg-email-context').value         = c.email_context_chars;
   document.getElementById('cfg-person-enabled').checked      = c.person_enabled;
   document.getElementById('cfg-person-proximity').value      = c.person_proximity_chars;
+  checkConfigWarnings();
 }
 
+function checkConfigWarnings() {
+  const workers = parseInt(document.getElementById('cfg-workers').value) || 0;
+  const depth = parseInt(document.getElementById('cfg-max-depth').value) || 0;
+  let warnings = [];
+  if (workers > 10) warnings.push("• Workers > 10: Advised max is 10. Higher values risk IP bans or memory exhaustion.");
+  if (depth > 4) warnings.push("• Max Depth > 4: Advised max is 4. Beyond 4 rarely yields new contacts and exponentially increases crawl time.");
+  
+  const warnDiv = document.getElementById('cfg-warn-msg');
+  if (warnings.length > 0) {
+    warnDiv.innerHTML = warnings.join("<br>");
+    warnDiv.style.display = 'block';
+  } else {
+    warnDiv.style.display = 'none';
+  }
+}
+
+document.getElementById('cfg-workers').addEventListener('input', checkConfigWarnings);
+document.getElementById('cfg-max-depth').addEventListener('input', checkConfigWarnings);
+
 async function saveConfig() {
+  const workers = parseInt(document.getElementById('cfg-workers').value);
+  const depth = parseInt(document.getElementById('cfg-max-depth').value);
+  
   const body = {
-    workers:               parseInt(document.getElementById('cfg-workers').value),
-    max_depth:             parseInt(document.getElementById('cfg-max-depth').value),
+    workers:               workers,
+    max_depth:             depth,
     recrawl_days:          parseInt(document.getElementById('cfg-recrawl-days').value),
     request_delay:         parseFloat(document.getElementById('cfg-request-delay').value),
     per_url_timeout:       parseInt(document.getElementById('cfg-per-url-timeout').value),
@@ -1083,6 +1116,16 @@ async function apiFetch(url, opts = {}) {
 function esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function clearVisitedUrls() {
+  if (!confirm('Are you sure you want to clear all visited URLs? This will reset the recrawl protection.')) return;
+  try {
+    const res = await apiFetch('/api/visited-urls', { method: 'DELETE' });
+    alert(res.message);
+  } catch(e) {
+    alert('Error clearing visited URLs: ' + e.message);
+  }
 }
 </script>
 </body>

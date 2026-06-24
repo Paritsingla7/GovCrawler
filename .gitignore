@@ -252,6 +252,7 @@ fabric.properties
 run_notes.md
 calude_given_improvements.md
 classified_leads.csv
+gov_domains.json
 portal/data/
 
 # IDE files not covered by the JetBrains pattern above

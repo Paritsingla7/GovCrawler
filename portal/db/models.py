@@ -60,6 +60,10 @@ class CrawlJob(Base):
     status          = Column(String, default="pending")
     total_domains   = Column(Integer, default=0)
     crawled_domains = Column(Integer, default=0)
+    seed_domains    = Column(Integer, default=0)
+    queued_urls     = Column(Integer, default=0)
+    visited_urls    = Column(Integer, default=0)
+    skipped_urls    = Column(Integer, default=0)
     leads_found     = Column(Integer, default=0)
     error_message   = Column(String)
     created_at      = Column(DateTime, default=datetime.datetime.utcnow)
@@ -258,6 +262,7 @@ class Database:
                 category_filter=category_filter,
                 title_filter=title_filter,
                 total_domains=len(domain_ids),
+                seed_domains=len(domain_ids),
                 status="pending",
             )
             s.add(job)
@@ -290,6 +295,15 @@ class Database:
             })
             s.commit()
 
+    def update_job_metrics(self, job_id: int, queued_urls: int, visited_urls: int, skipped_urls: int):
+        with self._Session() as s:
+            s.query(CrawlJob).filter_by(id=job_id).update({
+                "queued_urls": queued_urls,
+                "visited_urls": visited_urls,
+                "skipped_urls": skipped_urls,
+            })
+            s.commit()
+
     def get_job(self, job_id: int) -> dict | None:
         with self._Session() as s:
             j = s.query(CrawlJob).filter_by(id=job_id).first()
@@ -311,6 +325,10 @@ class Database:
             "id": j.id, "status": j.status,
             "total_domains": j.total_domains,
             "crawled_domains": j.crawled_domains,
+            "seed_domains": j.seed_domains,
+            "queued_urls": j.queued_urls,
+            "visited_urls": j.visited_urls,
+            "skipped_urls": j.skipped_urls,
             "leads_found": j.leads_found,
             "error_message": j.error_message,
             "category_filter": j.category_filter,
@@ -328,7 +346,12 @@ class Database:
                   context_snippet: str) -> bool:
         if not email:
             return False
+        email = email.lower()
         with self._Session() as s:
+            existing = s.query(Lead.id).filter(Lead.email == email).first()
+            if existing:
+                return False
+
             domain_state    = None
             domain_org_type = None
             if domain_id:
@@ -349,16 +372,22 @@ class Database:
                 s.rollback()
                 return False
 
-    def get_leads(self, job_id: int, page: int = 1,
+    def get_leads(self, job_id: int | None = None, page: int = 1,
                   limit: int = 100) -> tuple[list[dict], int]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
                         Domain.category_code)
                 .outerjoin(Domain, Lead.domain_id == Domain.id)
-                .filter(Lead.job_id == job_id)
             )
-            total = s.query(Lead).filter(Lead.job_id == job_id).count()
+            if job_id is not None:
+                q = q.filter(Lead.job_id == job_id)
+
+            total_q = s.query(Lead)
+            if job_id is not None:
+                total_q = total_q.filter(Lead.job_id == job_id)
+            total = total_q.count()
+
             offset = (page - 1) * limit
             rows = q.order_by(Lead.captured_at.desc()).offset(offset).limit(limit).all()
             return (
@@ -372,16 +401,16 @@ class Database:
                 total,
             )
 
-    def get_all_leads_for_export(self, job_id: int) -> list[dict]:
+    def get_all_leads_for_export(self, job_id: int | None = None) -> list[dict]:
         with self._Session() as s:
-            rows = (
+            q = (
                 s.query(Lead, Domain.title.label("domain_title"),
                         Domain.category_code, Domain.category_title)
                 .outerjoin(Domain, Lead.domain_id == Domain.id)
-                .filter(Lead.job_id == job_id)
-                .order_by(Lead.domain_id, Lead.captured_at)
-                .all()
             )
+            if job_id is not None:
+                q = q.filter(Lead.job_id == job_id)
+            rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",
                  "designation": l.designation or "", "department": l.department or "",
@@ -420,6 +449,11 @@ class Database:
                 .all()
             )
             return {r[0] for r in rows}
+
+    def clear_visited_urls(self):
+        with self._Session() as s:
+            s.query(VisitedUrl).delete()
+            s.commit()
 
     def close(self):
         self.engine.dispose()

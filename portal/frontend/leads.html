@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Global Leads — GovCrawler</title>
+  <style>
+    /* Same core styles as index.html */
+    :root {
+      --bg: #f5f0ea; --surface: #fdfaf6; --surface2: #ece5db;
+      --border: #d4cbbe; --accent: #7c6f5e; --accent-hover: #5e5448;
+      --green: #4a7a56; --red: #a63830; --yellow: #8a6a00; --orange: #9c5c2a;
+      --text: #2c2620; --muted: #6e6157; --small: #9e9085;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      --radius: 6px;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:0; font-family:var(--font); background:var(--bg); color:var(--text); font-size:14px; }
+    
+    header { display:flex; justify-content:space-between; align-items:center; padding:12px 24px; border-bottom:1px solid var(--border); background:var(--surface); }
+    header h1 { margin:0; font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; cursor: pointer;}
+    .header-right { display:flex; align-items:center; gap:16px; }
+    
+    .btn-primary { background:var(--accent); color:#fff; border:none; padding:6px 12px; border-radius:var(--radius); cursor:pointer; font-size:13px; font-weight:500; }
+    .btn-primary:hover { background:var(--accent-hover); }
+    .btn-secondary { background:transparent; color:var(--text); border:1px solid var(--border); padding:6px 12px; border-radius:var(--radius); cursor:pointer; font-size:13px; }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-sm { padding:4px 8px; font-size:12px; }
+    
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    
+    .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; padding:10px 14px; background:var(--surface); border-bottom:1px solid var(--border); font-size:12px; color:var(--small); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; position:sticky; top:0; }
+    td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13px; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:var(--surface2); }
+    .empty-state { padding:32px; text-align:center; color:var(--muted); font-style:italic; }
+    
+    .pagination { display:flex; align-items:center; gap:16px; padding:12px; border-top:1px solid var(--border); background:var(--surface); }
+    
+    .tag { font-size:10px; padding:2px 6px; border-radius:10px; font-weight:600; text-transform:uppercase; border:1px solid transparent; }
+    .tag-sg { color:#3fb950; border-color:rgba(63,185,80,0.4); background:rgba(63,185,80,0.1); }
+    .tag-ug { color:#2f81f7; border-color:rgba(47,129,247,0.4); background:rgba(47,129,247,0.1); }
+    .tag-jud { color:#d29922; border-color:rgba(210,153,34,0.4); background:rgba(210,153,34,0.1); }
+    .tag-leg { color:#f0883e; border-color:rgba(240,136,62,0.4); background:rgba(240,136,62,0.1); }
+    .tag-ims { color:#a371f7; border-color:rgba(163,113,247,0.4); background:rgba(163,113,247,0.1); }
+    .tag-apex { color:#f778ba; border-color:rgba(247,120,186,0.4); background:rgba(247,120,186,0.1); }
+    .tag-dist { color:#8b949e; border-color:rgba(139,148,158,0.4); background:rgba(139,148,158,0.1); }
+    .tag-default { color:var(--muted); border-color:var(--border); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 onclick="window.location.href='/'">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="var(--accent)"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 0110.53-5.09L1.5 13.43A6.47 6.47 0 011.5 8zm13 0a6.5 6.5 0 01-10.53 5.09l10.53-10.53A6.47 6.47 0 0114.5 8z"/></svg>
+      GovCrawler Leads
+    </h1>
+    <div class="header-right">
+      <button class="btn-primary" onclick="exportLeads()">⬇ Export CSV</button>
+      <button class="btn-secondary" onclick="window.location.href='/'">Back to Dashboard</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Designation</th>
+            <th>Department</th>
+            <th>State</th>
+            <th>Domain</th>
+            <th>Cat</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody"></tbody>
+      </table>
+      <div class="pagination">
+        <button class="btn-secondary btn-sm" onclick="leadsPrev()">← Prev</button>
+        <span id="leads-page-info" style="font-size:12px;color:var(--muted)">—</span>
+        <button class="btn-secondary btn-sm" onclick="leadsNext()">Next →</button>
+        <span style="margin-left:auto;color:var(--muted);font-size:12px" id="leads-total-label"></span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let leadsPage = 1;
+    let leadsTotalPgs = 1;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadLeads();
+    });
+
+    async function apiFetch(url, opts = {}) {
+      const r = await fetch(url, opts);
+      if (!r.ok) { const b = await r.text(); throw new Error(`${r.status}: ${b}`); }
+      return r.json();
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function loadLeads() {
+      try {
+        const url = `/api/leads?page=${leadsPage}&limit=100`;
+        const data = await apiFetch(url);
+        leadsTotalPgs = data.pages;
+        renderLeads(data.leads, data.total);
+      } catch (e) { console.error('loadLeads', e); }
+    }
+
+    function renderLeads(leads, total) {
+      document.getElementById('leads-total-label').textContent = `${total.toLocaleString()} total leads`;
+      document.getElementById('leads-page-info').textContent   = `Page ${leadsPage} of ${leadsTotalPgs}`;
+      const tbody = document.getElementById('leads-tbody');
+      tbody.innerHTML = '';
+      if (!leads.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No leads found yet.</td></tr>';
+        return;
+      }
+      leads.forEach(l => {
+        const catCode = (l.category_code || 'default').toLowerCase();
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code style="color:var(--accent);font-size:11px">${esc(l.email || '—')}</code></td>
+          <td>${esc(l.person_name || '—')}</td>
+          <td style="font-size:12px;color:var(--muted)">${esc(l.designation || '—')}</td>
+          <td style="font-size:12px;color:var(--muted)">${esc(l.department || '—')}</td>
+          <td style="font-size:12px">${esc(l.domain_state || '—')}</td>
+          <td style="font-size:12px">${esc(l.domain_title || '—')}</td>
+          <td><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></td>
+          <td>${l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" title="${esc(l.source_url)}">↗</a>` : '—'}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function leadsPrev() { if (leadsPage > 1) { leadsPage--; await loadLeads(); } }
+    async function leadsNext() { if (leadsPage < leadsTotalPgs) { leadsPage++; await loadLeads(); } }
+    
+    function exportLeads() { 
+      window.open(`/api/leads/export`, '_blank'); 
+    }
+  </script>
+</body>
+</html>

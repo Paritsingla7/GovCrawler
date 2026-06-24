@@ -82,6 +82,30 @@ def create_app(config: dict, db: Database) -> FastAPI:
             return HTMLResponse("<h1>Frontend not found</h1>", status_code=404)
         return HTMLResponse(html_file.read_text(encoding="utf-8"))
 
+    @app.get("/leads", response_class=HTMLResponse)
+    async def leads_page():
+        html_file = frontend_dir / "leads.html"
+        if not html_file.exists():
+            return HTMLResponse("<h1>Frontend not found</h1>", status_code=404)
+        return HTMLResponse(html_file.read_text(encoding="utf-8"))
+
+    @app.get("/api/logs")
+    async def get_logs():
+        log_file = Path("portal/data/portal.log")
+        if not log_file.exists():
+            return {"logs": "Log file not found."}
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()[-1000:]
+            return {"logs": "".join(lines)}
+        except Exception as e:
+            return {"logs": f"Failed to read logs: {e}"}
+
+    @app.delete("/api/visited-urls")
+    async def clear_visited_urls():
+        _db.clear_visited_urls()
+        return {"message": "Visited URLs cleared."}
+
     # ── Metadata endpoints ────────────────────────────────────────────────────
 
     @app.get("/api/categories")
@@ -270,11 +294,20 @@ def create_app(config: dict, db: Database) -> FastAPI:
             job["status"] = "running"
         return job
 
+    @app.post("/api/jobs/{job_id}/cancel")
+    async def cancel_job(job_id: int):
+        task = _active_tasks.get(job_id)
+        if task and not task.done():
+            task.cancel()
+            _db.finish_job(job_id, status="cancelled")
+            return {"message": "Job cancelled"}
+        return {"message": "Job is not currently running"}
+
     # ── Leads ─────────────────────────────────────────────────────────────────
 
     @app.get("/api/leads")
     async def get_leads(
-        job_id: int = Query(...),
+        job_id: int = Query(None),
         page:   int = Query(1, ge=1),
         limit:  int = Query(100, ge=1, le=500),
     ):
@@ -287,7 +320,7 @@ def create_app(config: dict, db: Database) -> FastAPI:
         }
 
     @app.get("/api/leads/export")
-    async def export_leads(job_id: int = Query(...)):
+    async def export_leads(job_id: int = Query(None)):
         rows = _db.get_all_leads_for_export(job_id)
         if not rows:
             raise HTTPException(status_code=404, detail="No leads for this job")
