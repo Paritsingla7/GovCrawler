@@ -194,6 +194,14 @@ async function exportLeads() {
     if (selectedLeadIds.size > 0) {
         body.lead_ids = [...selectedLeadIds];
     }
+    
+    // Find the button to show loading state
+    const btns = document.querySelectorAll('button[onclick="exportLeads()"]');
+    const originalTexts = [];
+    btns.forEach((btn, i) => {
+        originalTexts[i] = btn.textContent;
+        btn.textContent = "Exporting...";
+    });
 
     try {
         const resp = await fetch('/api/leads/export', {
@@ -201,9 +209,28 @@ async function exportLeads() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body)
         });
-        if (!resp.ok) throw new Error(await resp.text());
+        
+        if (!resp.ok) {
+            if (resp.status === 404) {
+                alert("No leads matched your current filters to export.");
+                return;
+            }
+            let errText = "Unknown error";
+            try {
+                const errJson = await resp.json();
+                errText = errJson.detail || errText;
+            } catch (e) {
+                errText = await resp.text();
+            }
+            throw new Error(errText);
+        }
 
         const blob = await resp.blob();
+        if (blob.size === 0) {
+            alert("No leads matched your current filters to export.");
+            return;
+        }
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -214,6 +241,10 @@ async function exportLeads() {
         window.URL.revokeObjectURL(url);
     } catch (e) {
         alert("Export failed: " + e.message);
+    } finally {
+        btns.forEach((btn, i) => {
+            btn.textContent = originalTexts[i];
+        });
     }
 }
 

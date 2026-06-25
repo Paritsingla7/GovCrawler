@@ -433,7 +433,6 @@ function switchDockTab(tab) {
 function openJobPanel(jobId) {
     openDock('job');
     document.getElementById('job-title').textContent = `Crawl Job #${jobId}`;
-    document.getElementById('btn-export-leads').disabled = true;
 }
 
 function closeJobPanel() {
@@ -490,11 +489,8 @@ function updateJobPanel(job) {
     document.getElementById('job-progress-bar').style.width = pct + '%';
 
     if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
-        const show = job.leads_found > 0;
-        document.getElementById('btn-export-leads').disabled = !show;
         document.getElementById('btn-cancel-job').style.display = 'none';
     } else {
-        document.getElementById('btn-export-leads').disabled = true;
         document.getElementById('btn-cancel-job').style.display = '';
     }
 }
@@ -508,9 +504,61 @@ function openResults() {
     window.location.href = '/leads';
 }
 
-function exportLeads() {
-    const url = activeJobId ? `/api/leads/export?job_id=${activeJobId}` : `/api/leads/export`;
-    window.open(url, '_blank');
+async function exportDashboardLeads() {
+    if (!activeJobId) {
+        alert("No active job selected to export leads from.");
+        return;
+    }
+
+    const body = { job_id: activeJobId };
+    
+    // Optional: show loading feedback on the button
+    const btn1 = document.getElementById('btn-export-leads');
+    const btn2 = document.getElementById('btn-export-leads-tab');
+    const originalText1 = btn1 ? btn1.textContent : '';
+    const originalText2 = btn2 ? btn2.textContent : '';
+    
+    if (btn1) btn1.textContent = "Exporting...";
+    if (btn2) btn2.textContent = "Exporting...";
+
+    try {
+        const resp = await fetch('/api/leads/export', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        
+        if (!resp.ok) {
+            if (resp.status === 404) {
+                alert("No leads found for this job.");
+                return;
+            }
+            let errText = "Unknown error";
+            try {
+                const errJson = await resp.json();
+                errText = errJson.detail || errText;
+            } catch (e) {
+                errText = await resp.text();
+            }
+            throw new Error(errText);
+        }
+
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `leads_export_job#${activeJobId}_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error("Export failed:", e);
+        alert("Export failed: " + e.message);
+    } finally {
+        if (btn1) btn1.textContent = originalText1;
+        if (btn2) btn2.textContent = originalText2;
+    }
 }
 
 let logsTimer = null;
