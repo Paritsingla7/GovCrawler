@@ -355,12 +355,19 @@ class CrawlerEngine:
                 absolute = urljoin(base_url, href)
 
                 if self._is_skippable(absolute):
+                    log.debug(f"Skipping skippable url {absolute}")
+                    self._skipped += 1
                     continue
                 if not self._is_gov_domain(absolute):
+                    log.debug(f"Skipping non-gov domain {absolute}")
                     continue
                 if absolute in self._visited:
+                    log.debug(f"Skipping already visited url {absolute}")
+                    self._skipped += 1
                     continue
                 if not is_priority_page and not self._is_priority_url(absolute, text):
+                    log.debug(f"Skipping non-priority url {absolute}")
+                    self._skipped += 1
                     continue
 
                 await self._enqueue(absolute, depth=depth + 1, domain_id=domain_id)

@@ -261,3 +261,4 @@ portal/config.yaml
 # IDE files not covered by the JetBrains pattern above
 .idea/dataSources.xml
 .idea/sqldialects.xml
+portal/config.yaml
