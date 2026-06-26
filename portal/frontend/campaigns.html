@@ -15,9 +15,15 @@
 <div class="layout">
     <aside style="width: 320px;">
         <div class="sidebar-section">
-            <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
-                Campaigns
-                <button class="btn-icon" onclick="loadCampaigns()" title="Refresh" style="font-size:16px;">↻</button>
+            <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <span>Campaigns</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 11px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--text-muted);">
+                        <input type="checkbox" id="toggle-tests" onchange="toggleTestCampaigns()" style="margin:0;">
+                        Show Tests
+                    </label>
+                    <button class="btn-icon" onclick="loadCampaigns()" title="Refresh" style="font-size:16px; padding:0;">↻</button>
+                </div>
             </div>
             <ul class="campaign-list" id="campaign-list">
                 <li class="empty-state">Loading campaigns...</li>

@@ -10,7 +10,10 @@ let currentCampaignIsTest = false;
 
 async function loadCampaigns() {
     try {
-        const res = await fetch(`/api/campaigns?page=${cPage}&limit=20`);
+        const toggleEl = document.getElementById('toggle-tests');
+        const showTests = toggleEl ? toggleEl.checked : false;
+        
+        const res = await fetch(`/api/campaigns?page=${cPage}&limit=20&include_test=${showTests}`);
         const data = await res.json();
         
         const ul = document.getElementById('campaign-list');
@@ -63,6 +66,11 @@ async function loadCampaigns() {
 
 function prevCampaignPage() { if (cPage > 1) { cPage--; loadCampaigns(); } }
 function nextCampaignPage() { cPage++; loadCampaigns(); }
+
+function toggleTestCampaigns() {
+    cPage = 1;
+    loadCampaigns();
+}
 
 function selectCampaign(id, isTest) {
     currentCampaignId = id;

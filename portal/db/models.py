@@ -648,7 +648,7 @@ class Database:
                     "status": c.status.value,
                     "created_at": c.created_at.isoformat() if c.created_at else None}
 
-    def list_campaigns(self, page: int = 1, limit: int = 20) -> tuple[list[dict], int]:
+    def list_campaigns(self, page: int = 1, limit: int = 20, include_test: bool = True) -> tuple[list[dict], int]:
         with self._Session() as s:
             q1 = s.query(
                 Campaign.id.label('id'),
@@ -667,7 +667,11 @@ class Database:
                 literal(True).label('is_test')
             )
             
-            subq = q1.union_all(q2).subquery()
+            if include_test:
+                subq = q1.union_all(q2).subquery()
+            else:
+                subq = q1.subquery()
+                
             total = s.query(subq).count()
             offset = (page - 1) * limit
             rows = s.query(subq).order_by(subq.c.created_at.desc()).offset(offset).limit(limit).all()

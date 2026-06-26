@@ -202,8 +202,9 @@ def register_campaign_routes(app: FastAPI, db: Database):
     async def list_campaigns(
         page: int = Query(1, ge=1),
         limit: int = Query(20, ge=1, le=100),
+        include_test: bool = Query(False)
     ):
-        campaigns, total = db.list_campaigns(page=page, limit=limit)
+        campaigns, total = db.list_campaigns(page=page, limit=limit, include_test=include_test)
 
         # Enrich each campaign with email stats
         for c in campaigns:
