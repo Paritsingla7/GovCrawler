@@ -152,11 +152,8 @@
         <button class="btn-icon" onclick="closeConfig()" style="font-size:14px">✕</button>
     </div>
     <div class="cfg-body">
-        <button class="btn-secondary btn-sm" id="btn-toggle-adv" onclick="toggleAdvancedConfigs()"
-                style="margin: 0 16px 16px; width: calc(100% - 32px);">Show Advanced Settings
-        </button>
         <button class="btn-primary btn-sm" onclick="window.location.href='/settings'"
-                style="margin: 0 16px 16px; width: calc(100% - 32px);">Outreach Settings
+                style="margin: 0 16px 16px; width: calc(100% - 32px);">Advanced Settings
         </button>
 
         <div class="cfg-section">
@@ -191,43 +188,6 @@
                 <input class="cfg-input" id="cfg-per-url-timeout" min="10" type="number">
                 <span class="info-icon"
                       data-tip="Hard time limit per page. If a page takes longer, the worker moves on. Must be higher than playwright_timeout.">ⓘ</span>
-            </div>
-            <div class="cfg-row adv-setting" style="display:none;">
-                <label class="cfg-label">Max Links (Depth 0)</label>
-                <input class="cfg-input" id="cfg-max-links-0" min="1" type="number">
-            </div>
-            <div class="cfg-row adv-setting" style="display:none;">
-                <label class="cfg-label">Max Links (Depth 1)</label>
-                <input class="cfg-input" id="cfg-max-links-1" min="1" type="number">
-            </div>
-            <div class="cfg-row adv-setting" style="display:none;">
-                <label class="cfg-label">Max Links (Depth 2)</label>
-                <input class="cfg-input" id="cfg-max-links-2" min="1" type="number">
-            </div>
-            <div class="cfg-row adv-setting" style="display:none;">
-                <label class="cfg-label">Max Links (Default)</label>
-                <input class="cfg-input" id="cfg-max-links-default" min="1" type="number">
-                <span class="info-icon"
-                      data-tip="Maximum number of links to extract and queue from a single page at a given depth.">ⓘ</span>
-            </div>
-        </div>
-
-        <div class="cfg-section adv-setting" style="display:none;">
-            <div class="cfg-section-title">Advanced & Filtering</div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Target Suffixes (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-target-suffixes" rows="4"
-                          style="resize:vertical"></textarea>
-            </div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Priority Keywords (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-priority-keywords" rows="4"
-                          style="resize:vertical"></textarea>
-            </div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Skip Extensions (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-skip-extensions" rows="4"
-                          style="resize:vertical"></textarea>
             </div>
         </div>
 
@@ -284,11 +244,6 @@
                 <span class="info-icon"
                       data-tip="Characters captured around each found email — used to identify the person's name and designation nearby.">ⓘ</span>
             </div>
-            <div class="cfg-row adv-setting" style="display:none; flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Valid Suffixes (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-email-valid-suffixes" rows="3"
-                          style="resize:vertical"></textarea>
-            </div>
         </div>
 
         <div class="cfg-section">
@@ -309,16 +264,6 @@
                 <span class="info-icon"
                       data-tip="How many characters around an email to search for name/designation. Larger = more context but slower.">ⓘ</span>
             </div>
-            <div class="cfg-row adv-setting" style="display:none; flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Title Prefixes (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-person-title-prefixes" rows="3"
-                          style="resize:vertical"></textarea>
-            </div>
-            <div class="cfg-row adv-setting" style="display:none; flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Designation Keywords (one per line)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-person-designation-keywords" rows="4"
-                          style="resize:vertical"></textarea>
-            </div>
         </div>
 
         <div class="cfg-section">
@@ -329,29 +274,6 @@
             </div>
         </div>
 
-        <div class="cfg-section adv-setting" style="display:none;">
-            <div class="cfg-section-title">Read-Only System Configs</div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">User Agent</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-user-agent" readonly rows="2"
-                          style="background:#0d1117; color:#8b949e"></textarea>
-            </div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Email Regex</label>
-                <input class="cfg-input cfg-input-full" id="cfg-email-regex" readonly style="background:#0d1117; color:#8b949e"
-                       type="text">
-            </div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">JS Indicators</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-js-indicators" readonly rows="4"
-                          style="background:#0d1117; color:#8b949e"></textarea>
-            </div>
-            <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
-                <label class="cfg-label" style="margin-bottom:4px">Email Obfuscation Rules (YAML)</label>
-                <textarea class="cfg-input cfg-input-full" id="cfg-email-obfuscation" readonly rows="6"
-                          style="background:#0d1117; color:#8b949e; font-family:monospace"></textarea>
-            </div>
-        </div>
 
     </div>
     <div class="cfg-footer">

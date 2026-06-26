@@ -100,6 +100,8 @@ def register_credential_routes(app: FastAPI, db: Database):
             return {"success": True, "message": "Connection successful"}
             
         except aiosmtplib.SMTPAuthenticationError as e:
+            db.update_credential(credential_id, is_active=False)
             return {"success": False, "error": f"Authentication failed: {e.message}"}
         except Exception as e:
+            db.update_credential(credential_id, is_active=False)
             return {"success": False, "error": f"Connection failed: {str(e)}"}

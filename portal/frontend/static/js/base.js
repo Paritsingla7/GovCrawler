@@ -737,119 +737,128 @@ function closeConfig() {
     document.getElementById('config-panel').classList.remove('open');
 }
 
-function toggleAdvancedConfigs() {
-    const elements = document.querySelectorAll('.adv-setting');
-    const btn = document.getElementById('btn-toggle-adv');
-    let isHidden = elements[0].style.display === 'none';
-
-    elements.forEach(el => {
-        el.style.display = isHidden ? (el.classList.contains('cfg-row') ? 'flex' : 'block') : 'none';
-    });
-
-    btn.textContent = isHidden ? 'Hide Advanced Settings' : 'Show Advanced Settings';
-}
-
 async function loadConfig() {
     let c = {...CFG_DEFAULTS};
     try {
         Object.assign(c, await apiFetch('/api/config'));
     } catch {
     }
-    document.getElementById('cfg-workers').value = c.workers;
-    document.getElementById('cfg-max-depth').value = c.max_depth;
-    document.getElementById('cfg-recrawl-days').value = c.recrawl_days;
-    document.getElementById('cfg-request-delay').value = c.request_delay;
-    document.getElementById('cfg-per-url-timeout').value = c.per_url_timeout;
-    document.getElementById('cfg-httpx-first').checked = c.httpx_first;
-    document.getElementById('cfg-playwright-fallback').checked = c.playwright_fallback;
-    document.getElementById('cfg-playwright-timeout').value = c.playwright_timeout;
-    document.getElementById('cfg-js-settle').value = c.js_settle_time;
-    document.getElementById('cfg-email-enabled').checked = c.email_enabled;
-    document.getElementById('cfg-email-context').value = c.email_context_chars;
-    document.getElementById('cfg-email-valid-suffixes').value = c.valid_suffixes || '';
-    document.getElementById('cfg-person-enabled').checked = c.person_enabled;
-    document.getElementById('cfg-person-proximity').value = c.person_proximity_chars;
-    document.getElementById('cfg-person-title-prefixes').value = c.title_prefixes || '';
-    document.getElementById('cfg-person-designation-keywords').value = c.designation_keywords || '';
+    
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    const setCheck = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
+    
+    setVal('cfg-workers', c.workers);
+    setVal('cfg-max-depth', c.max_depth);
+    setVal('cfg-recrawl-days', c.recrawl_days);
+    setVal('cfg-request-delay', c.request_delay);
+    setVal('cfg-per-url-timeout', c.per_url_timeout);
+    setCheck('cfg-httpx-first', c.httpx_first);
+    setCheck('cfg-playwright-fallback', c.playwright_fallback);
+    setVal('cfg-playwright-timeout', c.playwright_timeout);
+    setVal('cfg-js-settle', c.js_settle_time);
+    setCheck('cfg-email-enabled', c.email_enabled);
+    setVal('cfg-email-context', c.email_context_chars);
+    setVal('cfg-email-valid-suffixes', c.valid_suffixes || '');
+    setCheck('cfg-person-enabled', c.person_enabled);
+    setVal('cfg-person-proximity', c.person_proximity_chars);
+    setVal('cfg-person-title-prefixes', c.title_prefixes || '');
+    setVal('cfg-person-designation-keywords', c.designation_keywords || '');
 
-    document.getElementById('cfg-max-links-0').value = c.max_links_per_page_0;
-    document.getElementById('cfg-max-links-1').value = c.max_links_per_page_1;
-    document.getElementById('cfg-max-links-2').value = c.max_links_per_page_2;
-    document.getElementById('cfg-max-links-default').value = c.max_links_per_page_default;
+    setVal('cfg-max-links-0', c.max_links_per_page_0);
+    setVal('cfg-max-links-1', c.max_links_per_page_1);
+    setVal('cfg-max-links-2', c.max_links_per_page_2);
+    setVal('cfg-max-links-default', c.max_links_per_page_default);
 
-    document.getElementById('cfg-target-suffixes').value = c.target_suffixes || '';
-    document.getElementById('cfg-priority-keywords').value = c.priority_keywords || '';
-    document.getElementById('cfg-skip-extensions').value = c.skip_extensions || '';
+    setVal('cfg-target-suffixes', c.target_suffixes || '');
+    setVal('cfg-priority-keywords', c.priority_keywords || '');
+    setVal('cfg-skip-extensions', c.skip_extensions || '');
 
-    document.getElementById('cfg-user-agent').value = c.user_agent || '';
-    document.getElementById('cfg-email-regex').value = c.email_regex || '';
-    document.getElementById('cfg-js-indicators').value = c.js_indicators || '';
-    document.getElementById('cfg-email-obfuscation').value = c.email_obfuscation || '';
+    setVal('cfg-user-agent', c.user_agent || '');
+    setVal('cfg-email-regex', c.email_regex || '');
+    setVal('cfg-js-indicators', c.js_indicators || '');
+    setVal('cfg-email-obfuscation', c.email_obfuscation || '');
 
     checkConfigWarnings();
 }
 
 function checkConfigWarnings() {
-    const workers = parseInt(document.getElementById('cfg-workers').value) || 0;
-    const depth = parseInt(document.getElementById('cfg-max-depth').value) || 0;
+    const elWorkers = document.getElementById('cfg-workers');
+    const elDepth = document.getElementById('cfg-max-depth');
+    const workers = elWorkers ? (parseInt(elWorkers.value) || 0) : 0;
+    const depth = elDepth ? (parseInt(elDepth.value) || 0) : 0;
     let warnings = [];
     if (workers > 10) warnings.push("• Workers > 10: Advised max is 10. Higher values risk IP bans or memory exhaustion.");
     if (depth > 4) warnings.push("• Max Depth > 4: Advised max is 4. Beyond 4 rarely yields new contacts and exponentially increases crawl time.");
 
     const warnDiv = document.getElementById('cfg-warn-msg');
-    if (warnings.length > 0) {
-        warnDiv.innerHTML = warnings.join("<br>");
-        warnDiv.style.display = 'block';
-    } else {
-        warnDiv.style.display = 'none';
+    if (warnDiv) {
+        if (warnings.length > 0) {
+            warnDiv.innerHTML = warnings.join("<br>");
+            warnDiv.style.display = 'block';
+        } else {
+            warnDiv.style.display = 'none';
+        }
     }
 }
 
-document.getElementById('cfg-workers').addEventListener('input', checkConfigWarnings);
-document.getElementById('cfg-max-depth').addEventListener('input', checkConfigWarnings);
+document.getElementById('cfg-workers')?.addEventListener('input', checkConfigWarnings);
+document.getElementById('cfg-max-depth')?.addEventListener('input', checkConfigWarnings);
 
 async function saveConfig() {
-    const workers = parseInt(document.getElementById('cfg-workers').value);
-    const depth = parseInt(document.getElementById('cfg-max-depth').value);
+    const body = {};
+    
+    // Explicit manual mappings to match server payload exactly
+    const addIf = (id, key, parser) => { const el = document.getElementById(id); if (el) body[key] = parser(el.value); };
+    const addCheckIf = (id, key) => { const el = document.getElementById(id); if (el) body[key] = el.checked; };
 
-    const body = {
-        workers: workers,
-        max_depth: depth,
-        recrawl_days: parseInt(document.getElementById('cfg-recrawl-days').value),
-        request_delay: parseFloat(document.getElementById('cfg-request-delay').value),
-        per_url_timeout: parseInt(document.getElementById('cfg-per-url-timeout').value),
-        httpx_first: document.getElementById('cfg-httpx-first').checked,
-        playwright_fallback: document.getElementById('cfg-playwright-fallback').checked,
-        playwright_timeout: parseInt(document.getElementById('cfg-playwright-timeout').value),
-        js_settle_time: parseFloat(document.getElementById('cfg-js-settle').value),
-        email_enabled: document.getElementById('cfg-email-enabled').checked,
-        email_context_chars: parseInt(document.getElementById('cfg-email-context').value),
-        valid_suffixes: document.getElementById('cfg-email-valid-suffixes').value,
-        person_enabled: document.getElementById('cfg-person-enabled').checked,
-        person_proximity_chars: parseInt(document.getElementById('cfg-person-proximity').value),
-        title_prefixes: document.getElementById('cfg-person-title-prefixes').value,
-        designation_keywords: document.getElementById('cfg-person-designation-keywords').value,
+    addIf('cfg-workers', 'workers', parseInt);
+    addIf('cfg-max-depth', 'max_depth', parseInt);
+    addIf('cfg-recrawl-days', 'recrawl_days', parseInt);
+    addIf('cfg-request-delay', 'request_delay', parseFloat);
+    addIf('cfg-per-url-timeout', 'per_url_timeout', parseInt);
+    addCheckIf('cfg-httpx-first', 'httpx_first');
+    addCheckIf('cfg-playwright-fallback', 'playwright_fallback');
+    addIf('cfg-playwright-timeout', 'playwright_timeout', parseInt);
+    addIf('cfg-js-settle', 'js_settle_time', parseFloat);
+    addCheckIf('cfg-email-enabled', 'email_enabled');
+    addIf('cfg-email-context', 'email_context_chars', parseInt);
+    addIf('cfg-email-valid-suffixes', 'valid_suffixes', String);
+    addCheckIf('cfg-person-enabled', 'person_enabled');
+    addIf('cfg-person-proximity', 'person_proximity_chars', parseInt);
+    addIf('cfg-person-title-prefixes', 'title_prefixes', String);
+    addIf('cfg-person-designation-keywords', 'designation_keywords', String);
 
-        max_links_per_page_0: parseInt(document.getElementById('cfg-max-links-0').value),
-        max_links_per_page_1: parseInt(document.getElementById('cfg-max-links-1').value),
-        max_links_per_page_2: parseInt(document.getElementById('cfg-max-links-2').value),
-        max_links_per_page_default: parseInt(document.getElementById('cfg-max-links-default').value),
+    addIf('cfg-max-links-0', 'max_links_per_page_0', parseInt);
+    addIf('cfg-max-links-1', 'max_links_per_page_1', parseInt);
+    addIf('cfg-max-links-2', 'max_links_per_page_2', parseInt);
+    addIf('cfg-max-links-default', 'max_links_per_page_default', parseInt);
 
-        target_suffixes: document.getElementById('cfg-target-suffixes').value,
-        priority_keywords: document.getElementById('cfg-priority-keywords').value,
-        skip_extensions: document.getElementById('cfg-skip-extensions').value,
-    };
+    addIf('cfg-target-suffixes', 'target_suffixes', String);
+    addIf('cfg-priority-keywords', 'priority_keywords', String);
+    addIf('cfg-skip-extensions', 'skip_extensions', String);
+
     try {
         await apiFetch('/api/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body),
         });
-        const msg = document.getElementById('cfg-save-msg');
-        msg.style.display = 'flex';
-        setTimeout(() => msg.style.display = 'none', 4000);
+        const msg1 = document.getElementById('cfg-save-msg');
+        if (msg1) {
+            msg1.style.display = 'flex';
+            setTimeout(() => msg1.style.display = 'none', 4000);
+        }
+        const msg2 = document.getElementById('cfg-save-msg-advanced');
+        if (msg2) {
+            msg2.style.display = 'flex';
+            setTimeout(() => msg2.style.display = 'none', 4000);
+        }
+        if (!msg1 && !msg2) {
+            alert("Settings saved!");
+        }
     } catch (e) {
-        alert('Could not save: ' + e.message + '\n\nRestart the server first.');
+        console.error(e);
+        alert("Failed to save settings");
     }
 }
 

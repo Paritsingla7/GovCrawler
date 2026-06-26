@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Outreach Settings — GovCrawler{% endblock %}
+{% block title %}Settings — GovCrawler{% endblock %}
 
 {% block extra_head %}
 <link href="/static/css/settings.css" rel="stylesheet">
@@ -14,9 +14,16 @@
 <div class="layout">
     <aside>
         <div class="sidebar-section">
-            <div class="section-label">Settings</div>
+            <div class="section-label">Crawler Configuration</div>
             <ul class="settings-nav">
-                <li class="active" onclick="switchTab('credentials')" id="nav-credentials">SMTP Credentials</li>
+                <li class="active" onclick="switchTab('crawler-depth')" id="nav-crawler-depth">Depth & Limits</li>
+                <li onclick="switchTab('crawler-filtering')" id="nav-crawler-filtering">Filtering & Domains</li>
+                <li onclick="switchTab('crawler-extraction')" id="nav-crawler-extraction">Extraction Rules</li>
+                <li onclick="switchTab('crawler-system')" id="nav-crawler-system">System Configs</li>
+            </ul>
+            <div class="section-label" style="margin-top: 24px;">Outreach Settings</div>
+            <ul class="settings-nav">
+                <li onclick="switchTab('credentials')" id="nav-credentials">SMTP Credentials</li>
                 <li onclick="switchTab('templates')" id="nav-templates">Email Templates</li>
                 <li onclick="switchTab('blacklist')" id="nav-blacklist">Blacklist</li>
             </ul>
@@ -25,15 +32,20 @@
 
     <main>
         <!-- Credentials Tab -->
-        <div id="tab-credentials" class="settings-tab">
+        <div id="tab-credentials" class="settings-tab" style="display:none;">
             <div class="tab-header">
                 <h2>SMTP Credentials</h2>
-                <button class="btn-primary btn-sm" onclick="openCredentialModal()">+ Add Credential</button>
+                <div style="display:flex; gap:8px; align-items:center">
+                    <button class="btn-secondary btn-sm batch-action-cred" onclick="batchTestCredentials()" style="display:none;">Test Selected</button>
+                    <button class="btn-secondary btn-sm batch-action-cred" onclick="batchDeleteCredentials()" style="display:none; color:var(--danger)">Delete Selected</button>
+                    <button class="btn-primary btn-sm" onclick="openCredentialModal()">+ Add Credential</button>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 40px"><input type="checkbox" onchange="toggleAllCheckboxes(this, 'cred-checkbox', 'batch-action-cred')"></th>
                             <th>Host</th>
                             <th>Port</th>
                             <th>Username</th>
@@ -53,12 +65,16 @@
         <div id="tab-templates" class="settings-tab" style="display:none;">
             <div class="tab-header">
                 <h2>Email Templates</h2>
-                <button class="btn-primary btn-sm" onclick="openTemplateModal()">+ Create Template</button>
+                <div style="display:flex; gap:8px; align-items:center">
+                    <button class="btn-secondary btn-sm batch-action-tpl" onclick="batchDeleteTemplates()" style="display:none; color:var(--danger)">Delete Selected</button>
+                    <button class="btn-primary btn-sm" onclick="openTemplateModal()">+ Create Template</button>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 40px"><input type="checkbox" onchange="toggleAllCheckboxes(this, 'tpl-checkbox', 'batch-action-tpl')"></th>
                             <th>Name</th>
                             <th>Subject</th>
                             <th>Actions</th>
@@ -75,12 +91,16 @@
         <div id="tab-blacklist" class="settings-tab" style="display:none;">
             <div class="tab-header">
                 <h2>Blacklist</h2>
-                <button class="btn-primary btn-sm" onclick="openBlacklistModal()">+ Block Email</button>
+                <div style="display:flex; gap:8px; align-items:center">
+                    <button class="btn-secondary btn-sm batch-action-blk" onclick="batchDeleteBlacklist()" style="display:none; color:var(--danger)">Delete Selected</button>
+                    <button class="btn-primary btn-sm" onclick="openBlacklistModal()">+ Block Email</button>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 40px"><input type="checkbox" onchange="toggleAllCheckboxes(this, 'blk-checkbox', 'batch-action-blk')"></th>
                             <th>Email</th>
                             <th>Domain</th>
                             <th>Reason</th>
@@ -91,6 +111,127 @@
                         <tr><td colspan="4" class="empty-state">Loading blacklist...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Crawler Tab: Depth & Limits -->
+        <div id="tab-crawler-depth" class="settings-tab">
+            <div class="tab-header" style="margin-bottom: 24px;">
+                <h2>Depth & Rate Limiting</h2>
+                <div style="font-size:13px; color:var(--muted)">Control how deep and how fast the crawler navigates.</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:24px; max-width:800px;">
+                <div class="cfg-section" style="border: 1px solid var(--border); padding: 16px; border-radius: 6px;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Links (Depth 0)</label>
+                            <input class="cfg-input" id="cfg-max-links-0" min="1" type="number" style="width:100%">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Links (Depth 1)</label>
+                            <input class="cfg-input" id="cfg-max-links-1" min="1" type="number" style="width:100%">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Links (Depth 2)</label>
+                            <input class="cfg-input" id="cfg-max-links-2" min="1" type="number" style="width:100%">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Links (Default) <span class="info-icon" data-tip="Maximum number of links to extract and queue from a single page at a given depth.">ⓘ</span></label>
+                            <input class="cfg-input" id="cfg-max-links-default" min="1" type="number" style="width:100%">
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn-primary" onclick="saveConfig()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crawler Tab: Filtering & Domains -->
+        <div id="tab-crawler-filtering" class="settings-tab" style="display:none;">
+            <div class="tab-header" style="margin-bottom: 24px;">
+                <h2>Filtering & Domains</h2>
+                <div style="font-size:13px; color:var(--muted)">Target specific domains or skip irrelevent extensions.</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:24px; max-width:800px;">
+                <div class="cfg-section" style="border: 1px solid var(--border); padding: 16px; border-radius: 6px;">
+                    <div style="display:grid; gap: 16px;">
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Target Suffixes (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-target-suffixes" rows="3" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Priority Keywords (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-priority-keywords" rows="3" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Skip Extensions (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-skip-extensions" rows="3" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn-primary" onclick="saveConfig()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crawler Tab: Extraction Rules -->
+        <div id="tab-crawler-extraction" class="settings-tab" style="display:none;">
+            <div class="tab-header" style="margin-bottom: 24px;">
+                <h2>Extraction Rules</h2>
+                <div style="font-size:13px; color:var(--muted)">Configure how emails and contact information are matched.</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:24px; max-width:800px;">
+                <div class="cfg-section" style="border: 1px solid var(--border); padding: 16px; border-radius: 6px;">
+                    <div style="display:grid; gap: 16px;">
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Valid Email Suffixes (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-email-valid-suffixes" rows="2" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Person Title Prefixes (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-person-title-prefixes" rows="2" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Person Designation Keywords (one per line)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-person-designation-keywords" rows="3" style="resize:vertical; width:100%"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn-primary" onclick="saveConfig()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crawler Tab: System Configs -->
+        <div id="tab-crawler-system" class="settings-tab" style="display:none;">
+            <div class="tab-header" style="margin-bottom: 24px;">
+                <h2>System Configs (Read-Only)</h2>
+                <div style="font-size:13px; color:var(--muted)">These internal parameters require manual config file edits to change.</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:24px; max-width:800px;">
+                <div class="cfg-section" style="border: 1px solid var(--border); padding: 16px; border-radius: 6px;">
+                    <div style="display:grid; gap: 16px;">
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">User Agent</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-user-agent" readonly rows="2" style="background:#0d1117; color:#8b949e; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Email Regex</label>
+                            <input class="cfg-input cfg-input-full" id="cfg-email-regex" readonly type="text" style="background:#0d1117; color:#8b949e; width:100%">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">JS Indicators</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-js-indicators" readonly rows="3" style="background:#0d1117; color:#8b949e; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Email Obfuscation Rules (YAML)</label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-email-obfuscation" readonly rows="4" style="background:#0d1117; color:#8b949e; font-family:monospace; width:100%"></textarea>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -134,12 +275,17 @@
         </div>
         <div class="form-group">
             <label>Subject</label>
-            <input type="text" id="tpl-subject" placeholder="Jinja2 supported: Hello {{ name }}">
+            <input type="text" id="tpl-subject" placeholder="Jinja2 supported: Hello {% raw %}{{ name }}{% endraw %}">
         </div>
         <div class="form-group">
             <label>Body (HTML or Text)</label>
             <textarea id="tpl-body" rows="12" placeholder="Hi {{ name }}, ..."></textarea>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Available vars: {{ name }}, {{ designation }}</div>
+            <div style="margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <span style="font-size: 12px; color: var(--muted); margin-right: 4px;">Insert:</span>
+                <button type="button" class="chip" onclick="insertTemplateVar('{% raw %}{{ name }}{% endraw %}')">{% raw %}{{ name }}{% endraw %}</button>
+                <button type="button" class="chip" onclick="insertTemplateVar('{% raw %}{{ designation }}{% endraw %}')">{% raw %}{{ designation }}{% endraw %}</button>
+                <button type="button" class="chip" onclick="insertTemplateVar('{% raw %}{{ email }}{% endraw %}')">{% raw %}{{ email }}{% endraw %}</button>
+            </div>
         </div>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeTemplateModal()">Cancel</button>
@@ -147,7 +293,6 @@
         </div>
     </div>
 </div>
-
 <!-- Blacklist Modal -->
 <div class="modal-overlay" id="modal-blacklist" style="display:none;">
     <div class="modal">
@@ -175,6 +320,7 @@
 
 {% block init_js %}
 document.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
     loadCredentials();
     loadTemplates();
     loadBlacklist();

@@ -21,7 +21,7 @@ async function loadCredentials() {
         tbody.innerHTML = '';
         
         if (creds.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No credentials configured.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No credentials configured.</td></tr>`;
             return;
         }
         
@@ -37,6 +37,7 @@ async function loadCredentials() {
             
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td><input type="checkbox" class="cred-checkbox" value="${c.id}" onchange="updateBatchActionVisibility('cred-checkbox', 'batch-action-cred')"></td>
                 <td>${c.host}</td>
                 <td>${c.port}</td>
                 <td>${c.username}</td>
@@ -82,8 +83,37 @@ async function saveCredential() {
         });
         
         if (res.ok) {
-            closeCredentialModal();
-            loadCredentials();
+            const data = await res.json();
+            const newId = data.id;
+            
+            // Auto-test logic
+            const saveBtn = document.querySelector('#modal-credential .btn-primary');
+            let origText = "Save";
+            if (saveBtn) {
+                origText = saveBtn.textContent;
+                saveBtn.textContent = "Testing...";
+                saveBtn.disabled = true;
+            }
+            
+            try {
+                const testRes = await fetch(`/api/credentials/${newId}/test`, { method: 'POST' });
+                const testData = await testRes.json();
+                
+                if (testData.success) {
+                    alert("✅ Credential saved and connection test successful!");
+                } else {
+                    alert("⚠️ Credential saved, but connection test failed:\n" + testData.error);
+                }
+            } catch (e) {
+                alert("⚠️ Credential saved, but error occurred during testing.");
+            } finally {
+                if (saveBtn) {
+                    saveBtn.textContent = origText;
+                    saveBtn.disabled = false;
+                }
+                closeCredentialModal();
+                loadCredentials();
+            }
         } else {
             alert("Failed to save credential.");
         }
@@ -109,7 +139,6 @@ async function testCredential(id, btn) {
         const data = await res.json();
         if (data.success) {
             alert("✅ Connection successful!");
-            loadCredentials();
         } else {
             alert("❌ Connection failed:\n" + data.error);
         }
@@ -118,10 +147,33 @@ async function testCredential(id, btn) {
     } finally {
         btn.textContent = origText;
         btn.disabled = false;
+        loadCredentials();
     }
 }
 
-// ── Templates ────────────────────────────────────────────────────────────────
+// ── UI Helpers ────────────────────────────────────────────────────────────────
+
+function toggleAllCheckboxes(source, checkboxClass, actionClass) {
+    const checkboxes = document.querySelectorAll(`.${checkboxClass}`);
+    checkboxes.forEach(cb => cb.checked = source.checked);
+    updateBatchActionVisibility(checkboxClass, actionClass);
+}
+
+function updateBatchActionVisibility(checkboxClass, actionClass) {
+    const checkboxes = document.querySelectorAll(`.${checkboxClass}`);
+    const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+    const actions = document.querySelectorAll(`.${actionClass}`);
+    actions.forEach(btn => {
+        btn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+    });
+}
+
+function getSelectedIds(checkboxClass) {
+    const checkboxes = document.querySelectorAll(`.${checkboxClass}:checked`);
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
 
 async function loadTemplates() {
     try {
@@ -132,13 +184,14 @@ async function loadTemplates() {
         tbody.innerHTML = '';
         
         if (templates.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No templates created.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No templates created.</td></tr>`;
             return;
         }
         
         templates.forEach(t => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td><input type="checkbox" class="tpl-checkbox" value="${t.id}" onchange="updateBatchActionVisibility('tpl-checkbox', 'batch-action-tpl')"></td>
                 <td><strong>${t.name}</strong></td>
                 <td>${t.subject}</td>
                 <td>
@@ -153,13 +206,32 @@ async function loadTemplates() {
     }
 }
 
+let lastFocusedInput = null;
+
+function insertTemplateVar(varText) {
+    const input = lastFocusedInput || document.getElementById('tpl-body');
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const text = input.value;
+    input.value = text.slice(0, start) + varText + text.slice(end);
+    input.focus();
+    input.selectionStart = input.selectionEnd = start + varText.length;
+}
+
 function openTemplateModal() {
     editTemplateId = null;
     document.getElementById('tpl-modal-title').textContent = "Create Template";
     document.getElementById('tpl-error').style.display = 'none';
+    const subj = document.getElementById('tpl-subject');
+    const body = document.getElementById('tpl-body');
     document.getElementById('tpl-name').value = '';
-    document.getElementById('tpl-subject').value = '';
-    document.getElementById('tpl-body').value = '';
+    subj.value = '';
+    body.value = '';
+    
+    subj.onfocus = () => lastFocusedInput = subj;
+    body.onfocus = () => lastFocusedInput = body;
+    lastFocusedInput = body;
+    
     document.getElementById('modal-template').style.display = 'flex';
 }
 
@@ -174,9 +246,16 @@ async function editTemplate(id) {
         editTemplateId = id;
         document.getElementById('tpl-modal-title').textContent = "Edit Template";
         document.getElementById('tpl-error').style.display = 'none';
+        const subj = document.getElementById('tpl-subject');
+        const body = document.getElementById('tpl-body');
         document.getElementById('tpl-name').value = tpl.name;
-        document.getElementById('tpl-subject').value = tpl.subject;
-        document.getElementById('tpl-body').value = tpl.raw_body;
+        subj.value = tpl.subject;
+        body.value = tpl.raw_body;
+        
+        subj.onfocus = () => lastFocusedInput = subj;
+        body.onfocus = () => lastFocusedInput = body;
+        lastFocusedInput = body;
+        
         document.getElementById('modal-template').style.display = 'flex';
     } catch (e) {
         console.error(e);
@@ -185,10 +264,17 @@ async function editTemplate(id) {
 
 async function saveTemplate() {
     const payload = {
-        name: document.getElementById('tpl-name').value,
+        name: document.getElementById('tpl-name').value.trim(),
         subject: document.getElementById('tpl-subject').value,
         raw_body: document.getElementById('tpl-body').value
     };
+    
+    if (!payload.name) {
+        const errDiv = document.getElementById('tpl-error');
+        errDiv.textContent = "Template name cannot be empty.";
+        errDiv.style.display = 'block';
+        return;
+    }
     
     const method = editTemplateId ? 'PUT' : 'POST';
     const url = editTemplateId ? `/api/templates/${editTemplateId}` : '/api/templates';
@@ -231,13 +317,14 @@ async function loadBlacklist() {
         tbody.innerHTML = '';
         
         if (data.entries.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Blacklist is empty.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Blacklist is empty.</td></tr>`;
             return;
         }
         
         data.entries.forEach(b => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td><input type="checkbox" class="blk-checkbox" value="${b.id}" onchange="updateBatchActionVisibility('blk-checkbox', 'batch-action-blk')"></td>
                 <td>${b.email}</td>
                 <td>${b.domain}</td>
                 <td>${b.reason || '—'}</td>
@@ -293,5 +380,78 @@ async function saveBlacklist() {
 async function removeBlacklist(id) {
     if (!confirm("Unblock this email?")) return;
     await fetch(`/api/blacklist/${id}`, { method: 'DELETE' });
+    loadBlacklist();
+}
+
+// ── Batch Actions ────────────────────────────────────────────────────────────
+
+async function batchTestCredentials() {
+    const ids = getSelectedIds('cred-checkbox');
+    if (ids.length === 0) return;
+    
+    const btns = document.querySelectorAll('.batch-action-cred');
+    const btn = btns[0];
+    const origText = btn.textContent;
+    btn.textContent = "Testing...";
+    btn.disabled = true;
+    
+    let successes = 0;
+    let fails = 0;
+    for (const id of ids) {
+        try {
+            const res = await fetch(`/api/credentials/${id}/test`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) successes++;
+            else fails++;
+        } catch (e) {
+            fails++;
+        }
+    }
+    
+    btn.textContent = origText;
+    btn.disabled = false;
+    alert(`Batch Test Complete:\n✅ ${successes} Successful\n❌ ${fails} Failed`);
+    loadCredentials();
+}
+
+async function batchDeleteCredentials() {
+    const ids = getSelectedIds('cred-checkbox');
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} credentials?`)) return;
+    
+    for (const id of ids) {
+        await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+    }
+    const selectAll = document.querySelector('input[onchange*="cred-checkbox"]');
+    if(selectAll) selectAll.checked = false;
+    updateBatchActionVisibility('cred-checkbox', 'batch-action-cred');
+    loadCredentials();
+}
+
+async function batchDeleteTemplates() {
+    const ids = getSelectedIds('tpl-checkbox');
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} templates?`)) return;
+    
+    for (const id of ids) {
+        await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+    }
+    const selectAll = document.querySelector('input[onchange*="tpl-checkbox"]');
+    if(selectAll) selectAll.checked = false;
+    updateBatchActionVisibility('tpl-checkbox', 'batch-action-tpl');
+    loadTemplates();
+}
+
+async function batchDeleteBlacklist() {
+    const ids = getSelectedIds('blk-checkbox');
+    if (ids.length === 0) return;
+    if (!confirm(`Unblock ${ids.length} items?`)) return;
+    
+    for (const id of ids) {
+        await fetch(`/api/blacklist/${id}`, { method: 'DELETE' });
+    }
+    const selectAll = document.querySelector('input[onchange*="blk-checkbox"]');
+    if(selectAll) selectAll.checked = false;
+    updateBatchActionVisibility('blk-checkbox', 'batch-action-blk');
     loadBlacklist();
 }
