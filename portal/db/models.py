@@ -65,6 +65,8 @@ class CrawlJob(Base):
     visited_urls = Column(Integer, default=0)
     skipped_urls = Column(Integer, default=0)
     leads_found = Column(Integer, default=0)
+    current_depth = Column(Integer, default=0)
+    active_workers = Column(Integer, default=0)
     error_message = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     started_at = Column(DateTime)
@@ -126,6 +128,10 @@ class Database:
             "test_campaign_emails": [
                 ("is_selected", "BOOLEAN NOT NULL DEFAULT 1"),
                 ("missing_fields", "VARCHAR"),
+            ],
+            "crawl_jobs": [
+                ("current_depth", "INTEGER NOT NULL DEFAULT 0"),
+                ("active_workers", "INTEGER NOT NULL DEFAULT 0"),
             ],
         }
         with self.engine.connect() as conn:
@@ -322,12 +328,16 @@ class Database:
             })
             s.commit()
 
-    def update_job_metrics(self, job_id: int, queued_urls: int, visited_urls: int, skipped_urls: int):
+    def update_job_metrics(self, job_id: int, queued_urls: int, visited_urls: int,
+                           skipped_urls: int, current_depth: int = 0,
+                           active_workers: int = 0):
         with self._Session() as s:
             s.query(CrawlJob).filter_by(id=job_id).update({
                 "queued_urls": queued_urls,
                 "visited_urls": visited_urls,
                 "skipped_urls": skipped_urls,
+                "current_depth": current_depth,
+                "active_workers": active_workers,
             })
             s.commit()
 
@@ -357,6 +367,8 @@ class Database:
             "visited_urls": j.visited_urls,
             "skipped_urls": j.skipped_urls,
             "leads_found": j.leads_found,
+            "current_depth": j.current_depth or 0,
+            "active_workers": j.active_workers or 0,
             "error_message": j.error_message,
             "category_filter": j.category_filter,
             "title_filter": j.title_filter,

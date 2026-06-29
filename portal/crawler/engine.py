@@ -117,6 +117,8 @@ class CrawlerEngine:
         self._counter = 0
         self._skipped = 0
         self._session_visited_count = 0
+        self._max_depth_seen = 0
+        self._active_workers = 0
 
         self._netloc_to_domain: dict[str, int] = {}
 
@@ -333,7 +335,8 @@ class CrawlerEngine:
             try:
                 self._db.update_job_metrics(
                     self._job_id, self._queue.qsize(),
-                    self._session_visited_count, self._skipped)
+                    self._session_visited_count, self._skipped,
+                    self._max_depth_seen, 0)
             except Exception:
                 pass
 
@@ -344,7 +347,8 @@ class CrawlerEngine:
                 await self._loop.run_in_executor(
                     self._db_pool, self._db.update_job_metrics,
                     self._job_id, self._queue.qsize(),
-                    self._session_visited_count, self._skipped)
+                    self._session_visited_count, self._skipped,
+                    self._max_depth_seen, self._active_workers)
         except asyncio.CancelledError:
             pass
 
@@ -356,6 +360,7 @@ class CrawlerEngine:
                 item: _QueueItem = await self._queue.get()
             except asyncio.CancelledError:
                 break  # cancelled while idle — no item taken, nothing to ack
+            self._active_workers += 1
             try:
                 await asyncio.wait_for(
                     self._process(item, browser_context),
@@ -364,10 +369,12 @@ class CrawlerEngine:
             except asyncio.TimeoutError:
                 log.warning(f"[w{worker_id}] stall killed: {item.url}")
             except asyncio.CancelledError:
+                self._active_workers -= 1
                 self._queue.task_done()
                 raise  # propagate so the task actually stops
             except Exception as e:
                 log.error(f"[w{worker_id}] unhandled error on {item.url}: {e}")
+            self._active_workers -= 1
             # Exactly one task_done per dequeued item (the CancelledError branch
             # above already acked-and-raised, so we never double-count).
             self._queue.task_done()
@@ -379,6 +386,8 @@ class CrawlerEngine:
         depth = item.depth
         domain_id = item.domain_id
 
+        if depth > self._max_depth_seen:
+            self._max_depth_seen = depth
         self._session_visited_count += 1
         # Seeds are NOT written to visited_urls in the DB. They are always
         # re-crawlable entry points (is_seed bypass in _enqueue) and writing them

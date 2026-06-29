@@ -686,6 +686,14 @@ input[type="checkbox"] {
     font-weight: 600;
 }
 
+.jp-progress-stats {
+    display: flex;
+    gap: 20px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
 .jp-actions {
     display: flex;
     gap: 8px;

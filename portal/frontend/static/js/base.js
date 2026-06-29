@@ -469,13 +469,14 @@ function updateJobPanel(job) {
     document.getElementById('job-leads-val').textContent = job.leads_found.toLocaleString();
 
     let elapsedStr = '—';
+    let diffSecs = 0;
     if (job.started_at) {
         const start = new Date(job.started_at + 'Z'); // parse UTC
         let end = new Date();
         if (job.finished_at) {
             end = new Date(job.finished_at + 'Z');
         }
-        const diffSecs = Math.floor((end - start) / 1000);
+        diffSecs = Math.floor((end - start) / 1000);
         if (diffSecs >= 0) {
             const m = Math.floor(diffSecs / 60);
             const s = diffSecs % 60;
@@ -487,6 +488,16 @@ function updateJobPanel(job) {
     const totalUrls = (job.visited_urls || 0) + (job.queued_urls || 0);
     const pct = totalUrls > 0 ? Math.round((job.visited_urls || 0) / totalUrls * 100) : 0;
     document.getElementById('job-progress-bar').style.width = pct + '%';
+
+    document.getElementById('job-depth-val').textContent = `Depth ${job.current_depth ?? '—'}`;
+    document.getElementById('job-domains-val').textContent =
+        `${job.crawled_domains ?? '—'} / ${job.total_domains ?? '—'} domains`;
+    const rate = diffSecs > 0
+        ? ((job.visited_urls || 0) / diffSecs).toFixed(1) + ' URLs/s'
+        : '— URLs/s';
+    document.getElementById('job-rate-val').textContent = rate;
+    document.getElementById('job-workers-val').textContent =
+        `${job.active_workers ?? '—'} active`;
 
     if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
         document.getElementById('btn-cancel-job').style.display = 'none';
