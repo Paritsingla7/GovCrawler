@@ -399,11 +399,12 @@ def create_app(config: dict, db: Database) -> FastAPI:
             category: str = Query(None),
             state: str = Query(None),
             search: str = Query(None),
+            complete_only: bool = Query(False),
             page: int = Query(1, ge=1),
             limit: int = Query(100, ge=1, le=500),
     ):
-        leads, total = _db.get_leads(job_id=job_id, category=category, state=state, search=search, page=page,
-                                     limit=limit)
+        leads, total = _db.get_leads(job_id=job_id, category=category, state=state, search=search,
+                                     complete_only=complete_only, page=page, limit=limit)
         return {
             "leads": leads,
             "total": total,
@@ -417,8 +418,10 @@ def create_app(config: dict, db: Database) -> FastAPI:
             category: str = Query(None),
             state: str = Query(None),
             search: str = Query(None),
+            complete_only: bool = Query(False),
     ):
-        ids = _db.get_lead_ids(job_id=job_id, category=category, state=state, search=search)
+        ids = _db.get_lead_ids(job_id=job_id, category=category, state=state, search=search,
+                               complete_only=complete_only)
         return {"ids": ids, "total": len(ids)}
 
     @app.get("/api/leads/categories")
@@ -429,12 +432,20 @@ def create_app(config: dict, db: Database) -> FastAPI:
     async def get_lead_states(job_id: int = Query(None), category: str = Query(None)):
         return _db.get_lead_states(job_id=job_id, category=category)
 
+    _ALL_EXPORT_FIELDS = [
+        "email", "person_name", "designation", "department",
+        "domain_title", "domain_state", "domain_org_type",
+        "category_title", "source_url", "source_title", "context_snippet", "captured_at",
+    ]
+
     class ExportLeadsRequest(BaseModel):
         job_id: int | None = None
         category: str | None = None
         state: str | None = None
         search: str | None = None
+        complete_only: bool = False
         lead_ids: list[int] | None = None
+        fields: list[str] | None = None
 
     @app.post("/api/leads/export")
     async def export_leads(req: ExportLeadsRequest):
@@ -443,17 +454,20 @@ def create_app(config: dict, db: Database) -> FastAPI:
             category=req.category,
             state=req.state,
             search=req.search,
-            lead_ids=req.lead_ids
+            lead_ids=req.lead_ids,
+            complete_only=req.complete_only,
         )
         if not rows:
             raise HTTPException(status_code=404, detail="No leads for this job")
 
+        # Keep only the requested fields (email always included), preserving canonical order
+        if req.fields:
+            allowed = set(req.fields) | {"email"}
+            fieldnames = [f for f in _ALL_EXPORT_FIELDS if f in allowed]
+        else:
+            fieldnames = _ALL_EXPORT_FIELDS
+
         output = io.StringIO()
-        fieldnames = [
-            "email", "person_name", "designation", "department",
-            "domain_title", "domain_state", "domain_org_type",
-            "category_title", "source_url", "source_title", "context_snippet", "captured_at",
-        ]
         writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
