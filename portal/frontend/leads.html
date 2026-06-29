@@ -9,7 +9,7 @@
 
 
 {% block header_actions %}
-<button class="btn-primary" onclick="exportLeads()">⬇ Export CSV</button>
+<button class="btn-primary" onclick="openExportModal()">⬇ Export CSV</button>
 <button class="btn-secondary" onclick="window.location.href='/'">Back to Dashboard</button>
 {% endblock %}
 
@@ -19,6 +19,12 @@
         <!-- Filters -->
         <div class="sidebar-section">
             <div class="section-label">Filters</div>
+            <div class="form-group">
+                <label>Job</label>
+                <select id="leads-job-select" onchange="onLeadsFilterChange()">
+                    <option value="">All Jobs</option>
+                </select>
+            </div>
             <div class="form-group">
                 <label>Category</label>
                 <select id="leads-cat-select" onchange="onLeadsFilterChange()">
@@ -36,7 +42,11 @@
                 <input id="leads-search-input" oninput="debounceLeadsSearch()" placeholder="name, email, designation…"
                        type="text">
             </div>
-            <div id="leads-count-label" style="font-size:12px;color:var(--muted)"></div>
+            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:4px;">
+                <input id="leads-complete-only" type="checkbox" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);">
+                <label for="leads-complete-only" style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Complete data only</label>
+            </div>
+            <div id="leads-count-label" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
         </div>
     </aside>
 
@@ -83,6 +93,35 @@
             <button class="btn-secondary btn-sm" id="btn-leads-next" onclick="leadsNext()">Next →</button>
         </div>
     </main>
+</div>
+
+<!-- Export Confirmation Modal -->
+<div class="modal-overlay" id="modal-export" style="display:none;">
+    <div class="modal modal-lg">
+        <h3>Export Leads to CSV</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+            Select the fields to include in the export.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;">
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="email" checked disabled> Email <span style="font-size:10px;color:var(--muted)">(required)</span></label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="person_name" checked> Name</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="designation" checked> Designation</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="department" checked> Department</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_title" checked> Domain / Org</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_state" checked> State</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_org_type"> Org Type</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="category_title" checked> Category</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="source_url"> Source URL</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="source_title"> Page Title</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="context_snippet"> Context Snippet</label>
+            <label class="export-field-row"><input type="checkbox" name="export-field" value="captured_at"> Captured At</label>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:4px;" id="export-scope-label"></p>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
+            <button class="btn-primary" id="btn-export-confirm" onclick="confirmExport()">⬇ Export CSV</button>
+        </div>
+    </div>
 </div>
 
 <!-- Create Campaign Modal -->

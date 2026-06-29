@@ -32,9 +32,24 @@ function showAddToCampaignBanner() {
 
 async function loadLeadsFilters() {
     try {
-        // If we're viewing a specific job, we could pass it here, but typically we view global leads on this page
         const urlParams = new URLSearchParams(window.location.search);
-        const jobId = urlParams.get('job_id') || '';
+        const urlJobId = urlParams.get('job_id') || '';
+
+        // Populate Job dropdown
+        const jobSel = document.getElementById('leads-job-select');
+        try {
+            const jobs = await apiFetch('/api/jobs?limit=100');
+            jobs.forEach(j => {
+                const o = document.createElement('option');
+                o.value = j.id;
+                const date = j.created_at ? j.created_at.slice(0, 10) : '';
+                o.textContent = `Job #${j.id} — ${j.status}${date ? ' · ' + date : ''}`;
+                if (String(j.id) === urlJobId) o.selected = true;
+                jobSel.appendChild(o);
+            });
+        } catch (e) {}
+
+        const jobId = jobSel.value;
         const jobIdParam = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
 
         const cats = await apiFetch(`/api/leads/categories${jobIdParam}`);
@@ -56,8 +71,7 @@ async function reloadLeadsStateOptions(cat) {
     const prev = stateSel.value;
     stateSel.innerHTML = '<option value="">All States</option>';
     try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const jobId = urlParams.get('job_id') || '';
+        const jobId = document.getElementById('leads-job-select').value;
         const params = new URLSearchParams();
         if (jobId) params.set('job_id', jobId);
         if (cat) params.set('category', cat);
@@ -79,7 +93,7 @@ async function onLeadsFilterChange() {
     leadsPage = 1;
     const cat = document.getElementById('leads-cat-select').value;
     await reloadLeadsStateOptions(cat);
-    loadLeads();
+    await loadLeads();
 }
 
 function debounceLeadsSearch() {
@@ -90,19 +104,28 @@ function debounceLeadsSearch() {
     }, 380);
 }
 
+function getLeadsFilterParams() {
+    const jobId = document.getElementById('leads-job-select').value;
+    const cat = document.getElementById('leads-cat-select').value;
+    const state = document.getElementById('leads-state-select').value;
+    const search = document.getElementById('leads-search-input').value.trim();
+    const completeOnly = document.getElementById('leads-complete-only').checked;
+    const params = new URLSearchParams();
+    if (jobId) params.set('job_id', jobId);
+    if (cat) params.set('category', cat);
+    if (state) params.set('state', state);
+    if (search) params.set('search', search);
+    if (completeOnly) params.set('complete_only', 'true');
+    return params;
+}
+
 async function loadLeads() {
     try {
-        const cat = document.getElementById('leads-cat-select').value;
-        const state = document.getElementById('leads-state-select').value;
-        const search = document.getElementById('leads-search-input').value.trim();
+        const params = getLeadsFilterParams();
+        params.set('page', leadsPage);
+        params.set('limit', 100);
 
-        const params = new URLSearchParams({page: leadsPage, limit: 100});
-        if (cat) params.set('category', cat);
-        if (state) params.set('state', state);
-        if (search) params.set('search', search);
-
-        const url = `/api/leads?${params}`;
-        const data = await apiFetch(url);
+        const data = await apiFetch(`/api/leads?${params}`);
         leadsTotalPgs = data.pages;
         leadsTotalMatching = data.total;
         renderLeads(data.leads, data.total);
@@ -256,13 +279,7 @@ function toggleSelectAllLeads(checked) {
 }
 
 async function selectAllLeads() {
-    const cat = document.getElementById('leads-cat-select').value;
-    const state = document.getElementById('leads-state-select').value;
-    const search = document.getElementById('leads-search-input').value.trim();
-    const params = new URLSearchParams();
-    if (cat) params.set('category', cat);
-    if (state) params.set('state', state);
-    if (search) params.set('search', search);
+    const params = getLeadsFilterParams();
     try {
         const data = await apiFetch(`/api/leads/ids?${params}`);
         data.ids.forEach(id => selectedLeadIds.add(id));
@@ -297,23 +314,41 @@ function updateSelectAllLeads() {
     document.getElementById('leads-select-all').indeterminate = n > 0 && n < all.length;
 }
 
-async function exportLeads() {
-    const cat = document.getElementById('leads-cat-select').value || null;
-    const state = document.getElementById('leads-state-select').value || null;
-    const search = document.getElementById('leads-search-input').value.trim() || null;
+function openExportModal() {
+    const scopeLabel = document.getElementById('export-scope-label');
+    if (selectedLeadIds.size > 0) {
+        scopeLabel.textContent = `Exporting ${selectedLeadIds.size.toLocaleString()} selected lead(s).`;
+    } else {
+        scopeLabel.textContent = `Exporting all ${leadsTotalMatching.toLocaleString()} lead(s) matching current filters.`;
+    }
+    document.getElementById('modal-export').style.display = 'flex';
+}
 
-    const body = {category: cat, state: state, search: search};
+function closeExportModal() {
+    document.getElementById('modal-export').style.display = 'none';
+}
+
+async function confirmExport() {
+    const checkedFields = Array.from(
+        document.querySelectorAll('input[name="export-field"]:checked')
+    ).map(cb => cb.value);
+
+    const params = getLeadsFilterParams();
+    const body = {
+        job_id: params.get('job_id') ? parseInt(params.get('job_id')) : null,
+        category: params.get('category') || null,
+        state: params.get('state') || null,
+        search: params.get('search') || null,
+        complete_only: params.get('complete_only') === 'true',
+        fields: checkedFields,
+    };
     if (selectedLeadIds.size > 0) {
         body.lead_ids = [...selectedLeadIds];
     }
-    
-    // Find the button to show loading state
-    const btns = document.querySelectorAll('button[onclick="exportLeads()"]');
-    const originalTexts = [];
-    btns.forEach((btn, i) => {
-        originalTexts[i] = btn.textContent;
-        btn.textContent = "Exporting...";
-    });
+
+    const btn = document.getElementById('btn-export-confirm');
+    btn.textContent = 'Exporting…';
+    btn.disabled = true;
 
     try {
         const resp = await fetch('/api/leads/export', {
@@ -321,13 +356,13 @@ async function exportLeads() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body)
         });
-        
+
         if (!resp.ok) {
             if (resp.status === 404) {
-                alert("No leads matched your current filters to export.");
+                alert('No leads matched your current filters to export.');
                 return;
             }
-            let errText = "Unknown error";
+            let errText = 'Unknown error';
             try {
                 const errJson = await resp.json();
                 errText = errJson.detail || errText;
@@ -339,7 +374,7 @@ async function exportLeads() {
 
         const blob = await resp.blob();
         if (blob.size === 0) {
-            alert("No leads matched your current filters to export.");
+            alert('No leads matched your current filters to export.');
             return;
         }
 
@@ -351,12 +386,12 @@ async function exportLeads() {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+        closeExportModal();
     } catch (e) {
-        alert("Export failed: " + e.message);
+        alert('Export failed: ' + e.message);
     } finally {
-        btns.forEach((btn, i) => {
-            btn.textContent = originalTexts[i];
-        });
+        btn.textContent = '⬇ Export CSV';
+        btn.disabled = false;
     }
 }
 

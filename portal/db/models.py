@@ -402,7 +402,7 @@ class Database:
 
     def get_leads(self, job_id: int | None = None, category: str = None,
                   state: str = None, search: str = None, page: int = 1,
-                  limit: int = 100) -> tuple[list[dict], int]:
+                  limit: int = 100, complete_only: bool = False) -> tuple[list[dict], int]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
@@ -422,6 +422,12 @@ class Database:
                         Lead.department.ilike(f"%{search}%"),
                         Lead.designation.ilike(f"%{search}%"))
                 )
+            if complete_only:
+                q = q.filter(
+                    Lead.person_name.isnot(None), Lead.person_name != "",
+                    Lead.designation.isnot(None), Lead.designation != "",
+                    Lead.department.isnot(None), Lead.department != "",
+                )
 
             total_q = s.query(Lead).outerjoin(Domain, Lead.domain_id == Domain.id)
             if job_id is not None:
@@ -436,6 +442,12 @@ class Database:
                         Lead.person_name.ilike(f"%{search}%"),
                         Lead.department.ilike(f"%{search}%"),
                         Lead.designation.ilike(f"%{search}%"))
+                )
+            if complete_only:
+                total_q = total_q.filter(
+                    Lead.person_name.isnot(None), Lead.person_name != "",
+                    Lead.designation.isnot(None), Lead.designation != "",
+                    Lead.department.isnot(None), Lead.department != "",
                 )
             total = total_q.count()
 
@@ -454,7 +466,8 @@ class Database:
             )
 
     def get_lead_ids(self, job_id: int | None = None, category: str = None,
-                     state: str = None, search: str = None) -> list[int]:
+                     state: str = None, search: str = None,
+                     complete_only: bool = False) -> list[int]:
         with self._Session() as s:
             q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
             if job_id is not None:
@@ -470,11 +483,18 @@ class Database:
                         Lead.department.ilike(f"%{search}%"),
                         Lead.designation.ilike(f"%{search}%"))
                 )
+            if complete_only:
+                q = q.filter(
+                    Lead.person_name.isnot(None), Lead.person_name != "",
+                    Lead.designation.isnot(None), Lead.designation != "",
+                    Lead.department.isnot(None), Lead.department != "",
+                )
             return [r[0] for r in q.all()]
 
     def get_all_leads_for_export(self, job_id: int | None = None,
                                  category: str = None, state: str = None,
-                                 search: str = None, lead_ids: list[int] = None) -> list[dict]:
+                                 search: str = None, lead_ids: list[int] = None,
+                                 complete_only: bool = False) -> list[dict]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
@@ -497,6 +517,12 @@ class Database:
                             Lead.department.ilike(f"%{search}%"),
                             Lead.designation.ilike(f"%{search}%"))
                     )
+            if complete_only:
+                q = q.filter(
+                    Lead.person_name.isnot(None), Lead.person_name != "",
+                    Lead.designation.isnot(None), Lead.designation != "",
+                    Lead.department.isnot(None), Lead.department != "",
+                )
             rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",

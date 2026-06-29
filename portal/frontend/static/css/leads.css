@@ -65,6 +65,31 @@ input.lead-cell-input::placeholder {
     font-style: italic;
 }
 
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.export-field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.export-field-row input[type=checkbox] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--accent);
+    flex-shrink: 0;
+}
 input.lead-cell-input.saving {
     opacity: 0.45;
     cursor: wait;
