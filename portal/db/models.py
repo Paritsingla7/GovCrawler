@@ -542,6 +542,21 @@ class Database:
             rows = q.distinct().order_by(Domain.state).all()
             return [r[0] for r in rows if r[0]]
 
+    _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "domain_state"})
+
+    def update_lead(self, lead_id: int, updates: dict) -> bool:
+        safe = {
+            k: (v.strip() if isinstance(v, str) and v.strip() else None)
+            for k, v in updates.items()
+            if k in self._LEAD_EDITABLE
+        }
+        if not safe:
+            return False
+        with self._Session() as s:
+            updated = s.query(Lead).filter_by(id=lead_id).update(safe)
+            s.commit()
+            return updated > 0
+
     # ── Visited URLs ──────────────────────────────────────────────────────────
 
     def mark_visited(self, url: str, job_id: int):

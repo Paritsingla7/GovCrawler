@@ -436,6 +436,12 @@ def create_app(config: dict, db: Database) -> FastAPI:
         search: str | None = None
         lead_ids: list[int] | None = None
 
+    class LeadUpdate(BaseModel):
+        person_name: str | None = None
+        designation: str | None = None
+        department: str | None = None
+        domain_state: str | None = None
+
     @app.post("/api/leads/export")
     async def export_leads(req: ExportLeadsRequest):
         rows = _db.get_all_leads_for_export(
@@ -465,6 +471,16 @@ def create_app(config: dict, db: Database) -> FastAPI:
             headers={"Content-Disposition":
                          f'attachment; filename="leads_export.csv"'},
         )
+
+    @app.put("/api/leads/{lead_id}")
+    async def update_lead(lead_id: int, req: LeadUpdate):
+        updates = req.model_dump(exclude_none=True)
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        ok = _db.update_lead(lead_id, updates)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        return {"ok": True}
 
     # ── Outreach & Campaign routes (Phase 2) ──────────────────────────────────
     from .templates import register_template_routes
