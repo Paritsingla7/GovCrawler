@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showAddToCampaignBanner();
     }
 
+    setupLeadCellListeners();
     loadLeadsFilters();
     loadLeads();
 });
@@ -110,6 +111,23 @@ async function loadLeads() {
     }
 }
 
+function editableCell(leadId, field, val, tdStyle) {
+    const safeVal = esc(val || '');
+    const styleStr = tdStyle
+        ? Object.entries(tdStyle).map(([k, v]) => `${k}:${v}`).join(';')
+        : '';
+    return `<td style="${styleStr}"><input type="text"
+        class="lead-cell-input"
+        data-lead-id="${leadId}"
+        data-field="${field}"
+        data-orig="${safeVal}"
+        value="${safeVal}"
+        placeholder="—"
+        autocomplete="off"
+        spellcheck="false"
+    ></td>`;
+}
+
 function renderLeads(leads, total) {
     document.getElementById('leads-total-label').textContent = `${total.toLocaleString()} total leads`;
     document.getElementById('leads-page-info').textContent = total > 0 ? `Page ${leadsPage} of ${leadsTotalPgs}` : '—';
@@ -125,28 +143,100 @@ function renderLeads(leads, total) {
     const tbody = document.getElementById('leads-tbody');
     tbody.innerHTML = '';
     if (!leads.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No leads found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No leads found.</td></tr>';
         return;
     }
+    const WARN_FIELDS = ['person_name', 'designation', 'department', 'domain_state'];
     leads.forEach(l => {
         const catCode = (l.category_code || 'default').toLowerCase();
         const checked = selectedLeadIds.has(l.id);
+        const missing = WARN_FIELDS.filter(f => !l[f] || !String(l[f]).trim());
+        let domainUrl = null;
+        try { if (l.source_url) domainUrl = new URL(l.source_url).origin; } catch(_) {}
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-      <td style="width:40px"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleLead(${l.id}, this.checked)"></td>
-      <td><a href="mailto:${esc(l.email)}" style="font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email || '—')}</a></td>
-      <td>${esc(l.person_name || '—')}</td>
-      <td style="font-size:12px;color:var(--muted)">${esc(l.designation || '—')}</td>
-      <td style="font-size:12px;color:var(--muted)">${esc(l.department || '—')}</td>
-      <td style="font-size:12px">${esc(l.domain_state || '—')}</td>
-      <td style="font-size:12px">${esc(l.domain_title || '—')}</td>
-      <td><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></td>
-      <td style="font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(l.source_title || '')}">${esc(l.source_title || '—')}</td>
-      <td>${l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" title="${esc(l.source_url)}">↗</a>` : '—'}</td>`;
+        if (missing.length) tr.classList.add('row-warn');
+        tr.innerHTML = [
+            `<td style="width:40px"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleLead(${l.id}, this.checked)"></td>`,
+            missing.length
+                ? `<td class="warn-cell"><span class="warn-flag" title="Missing: ${esc(missing.map(f => f.replace(/_/g, ' ')).join(', '))}">⚠</span></td>`
+                : `<td></td>`,
+            `<td><a href="mailto:${esc(l.email)}" style="font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a></td>`,
+            `<td class="lead-person-cell">
+                <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name||'')}" value="${esc(l.person_name||'')}" placeholder="Name" autocomplete="off" spellcheck="false">
+                <input type="text" class="lead-cell-input lead-sub-input" data-lead-id="${l.id}" data-field="designation" data-orig="${esc(l.designation||'')}" value="${esc(l.designation||'')}" placeholder="Designation" autocomplete="off" spellcheck="false">
+            </td>`,
+            editableCell(l.id, 'department', l.department, {'font-size':'12px','color':'var(--muted)'}),
+            `<td style="text-align:center">
+                <input type="text" class="lead-cell-input lead-primary-input" style="font-size:12px;color:var(--muted);text-align:center" data-lead-id="${l.id}" data-field="domain_state" data-orig="${esc(l.domain_state||'')}" value="${esc(l.domain_state||'')}" placeholder="State" autocomplete="off" spellcheck="false">
+                <div style="margin-top:3px"><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></div>
+            </td>`,
+            `<td>${domainUrl
+                ? `<p class="d-name" style="display:block;color:var(--text);text-decoration:none">${esc(l.domain_title)}</p>`
+                : `<div class="d-name">${esc(l.domain_title || '—')}</div>`
+            }</td>`,
+            `<td style="max-width:200px">${l.source_url
+                ? `<a href="${esc(l.source_url)}" target="_blank" style="font-size:11px;color:var(--muted)" title="${esc(l.source_url)}">${esc(l.source_title || '')}${l.source_title ? '' : '—'}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>`
+                : `<span style="color:var(--small)">${esc(l.source_title || '—')}</span>`
+            }</td>`,
+        ].join('');
         tbody.appendChild(tr);
     });
     updateSelectAllLeads();
     updateSelLeadsCount();
+}
+
+async function saveLead(input) {
+    const newVal = input.value.trim();
+    if (newVal === input.getAttribute('data-orig')) return;
+
+    const leadId = input.getAttribute('data-lead-id');
+    const field  = input.getAttribute('data-field');
+
+    input.classList.add('saving');
+    input.disabled = true;
+
+    try {
+        const res = await fetch(`/api/leads/${leadId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({[field]: newVal || null})
+        });
+        if (!res.ok) {
+            let detail = 'Save failed';
+            try { detail = (await res.json()).detail || detail; } catch(_) {}
+            throw new Error(detail);
+        }
+        input.setAttribute('data-orig', newVal);
+        input.classList.remove('saving');
+        input.classList.add('saved');
+        setTimeout(() => input.classList.remove('saved'), 1500);
+    } catch(err) {
+        console.error('saveLead:', err);
+        input.value = input.getAttribute('data-orig');
+        input.classList.remove('saving');
+        input.classList.add('error');
+        setTimeout(() => input.classList.remove('error'), 2000);
+    } finally {
+        input.disabled = false;
+    }
+}
+
+function setupLeadCellListeners() {
+    const tbody = document.getElementById('leads-tbody');
+    if (!tbody) return;
+
+    tbody.addEventListener('blur', function(e) {
+        if (e.target.classList.contains('lead-cell-input')) saveLead(e.target);
+    }, true);
+
+    tbody.addEventListener('keydown', function(e) {
+        if (!e.target.classList.contains('lead-cell-input')) return;
+        if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        if (e.key === 'Escape') {
+            e.target.value = e.target.getAttribute('data-orig');
+            e.target.blur();
+        }
+    });
 }
 
 function toggleLead(id, checked) {

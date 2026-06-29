@@ -96,7 +96,8 @@ def load_config() -> dict:
     
     if not target_config.exists():
         log.error(f"Config not found at: {target_config}")
-        sys.exit(1)
+        os.makedirs(target_config.parent, exist_ok=True)
+        shutil.copy(DEFAULT_CONFIG_PATH, target_config)
     with open(target_config) as f:
         return yaml.safe_load(f)
 
