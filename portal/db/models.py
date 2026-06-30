@@ -491,6 +491,7 @@ class Database:
                   "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
                   "confidence_band": l.confidence_band,
                   "field_provenance": l.field_provenance,
+                  "phone": l.phone,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
                  for l, dt, cc in rows],
                 total,
@@ -566,6 +567,7 @@ class Database:
                  "context_snippet": l.context_snippet or "",
                  "confidence_band": l.confidence_band or "",
                  "field_provenance": l.field_provenance or "",
+                 "phone": l.phone or "",
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
                 for l, dt, cc, ct in rows
             ]

@@ -7,8 +7,8 @@ Fully config-driven — no regexes or keyword lists hardcoded here.
   2. bind_channels       — group candidates into entities; resolve role/external tags
   3. enrich_fields       — name/designation/dept (gated by person.enabled); page-vs-domain flag
   4. normalise_spans     — guarded local de-obfuscation on bracketed forms only
-  5. score               — assign confidence band from rung; build field_provenance JSON
-  6. flatten_emit        — one flat Lead per email; drop LOW; phone-only entities dropped
+  5. score               — assign confidence band (HIGH/LOW) from rung; build field_provenance JSON
+  6. flatten_emit        — one flat Lead per email; band never drops a lead; only email-less entities skipped
 """
 
 import json
@@ -67,7 +67,7 @@ def extract_leads(soup: BeautifulSoup, source_url: str, config: dict) -> list[Le
         role_local_parts = set(config.get("role_local_parts", [
             "webmaster", "info", "admin", "contact", "support", "helpdesk", "grievance"
         ]))
-        max_input_chars = config.get("max_input_chars", 50000)
+        max_input_chars = config.get("max_input_chars", 0)  # 0 = no cap
         high_rungs = set(conf_cfg.get("high_rungs", ["mailto_tel", "microdata"]))
         mid_rungs = set(conf_cfg.get("mid_rungs", ["table_block", "proximity_text"]))
 
@@ -178,8 +178,12 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
     candidates.extend(_extract_table_candidates(soup, email_re, valid_suffixes))
 
     # 1d. Proximity text scan (bounded by max_input_chars)
-    raw_text = soup.get_text(separator=" ")[:max_input_chars]
-    candidates.extend(_extract_proximity_candidates(raw_text, email_re, ecfg))
+    # Apply obfuscation first so "webmaster at nic dot in" becomes "webmaster@nic.in"
+    # before the email regex scans — same as the old parser did globally.
+    page_text = soup.get_text(separator=" ")
+    raw_text = page_text[:max_input_chars] if max_input_chars else page_text
+    normalised_text = _apply_obfuscation(raw_text, ecfg)
+    candidates.extend(_extract_proximity_candidates(normalised_text, email_re, ecfg))
 
     return candidates
 
@@ -533,16 +537,13 @@ def _score(entities: list[dict], high_rungs: set[str], mid_rungs: set[str]) -> l
     """Assigns confidence_band and builds field_provenance JSON."""
     for entity in entities:
         rung = entity.get("rung", "proximity_text")
-        if rung in high_rungs:
-            band = "HIGH"
-        elif rung in mid_rungs:
-            band = "MID"
-        else:
-            band = "LOW"
+        # Band is informational only — shows where the email was found.
+        # HIGH = from a mailto link or microdata. LOW = from a table or text scan.
+        band = "HIGH" if rung in high_rungs else "LOW"
 
-        # Degrade to MID on dept mismatch
+        # Degrade to LOW on dept mismatch
         if entity.get("_dept_mismatch") and band == "HIGH":
-            band = "MID"
+            band = "LOW"
 
         entity["confidence_band"] = band
 
@@ -569,12 +570,13 @@ def _score(entities: list[dict], high_rungs: set[str], mid_rungs: set[str]) -> l
 # ── Stage 6: flatten_emit ───────────────────────────────────────────────────
 
 def _flatten_emit(entities: list[dict], source_url: str, page_title: str) -> list[Lead]:
-    """One flat Lead per email; drop LOW and email-less entities."""
+    """One flat Lead per email; only email-less entities are skipped.
+
+    Band never drops a lead — an email with no name is still a lead.
+    """
     leads = []
     seen_emails: set[str] = set()
     for entity in entities:
-        if entity.get("confidence_band") == "LOW":
-            continue
         email = entity.get("email")
         if not email or email in seen_emails:
             continue
@@ -597,6 +599,12 @@ def _flatten_emit(entities: list[dict], source_url: str, page_title: str) -> lis
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _apply_obfuscation(text: str, ecfg: dict) -> str:
+    for pattern, replacement in ecfg.get("obfuscation", []):
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
 
 def _find_col(headers: list[str], keywords: list[str]) -> int | None:
     for kw in keywords:

@@ -137,8 +137,6 @@ def register_campaign_routes(app: FastAPI, db: Database):
                 missing.append("name")
             if not lead.get("designation"):
                 missing.append("designation")
-            if lead.get("confidence_band") == "MID":
-                missing.append("review")
 
             # Subject uses clean fallbacks (no placeholder markers)
             subject_vars = {
@@ -384,8 +382,6 @@ def register_campaign_routes(app: FastAPI, db: Database):
                 missing.append("name")
             if not lead.get("designation"):
                 missing.append("designation")
-            if lead.get("confidence_band") == "MID":
-                missing.append("review")
 
             subject_vars = {
                 "name": lead.get("person_name") or "Official",

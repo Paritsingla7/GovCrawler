@@ -177,14 +177,19 @@ function renderLeads(leads, total) {
         let domainUrl = null;
         try { if (l.source_url) domainUrl = new URL(l.source_url).origin; } catch(_) {}
         const tr = document.createElement('tr');
-        if (missing.length || l.confidence_band === 'MID') tr.classList.add('row-warn');
+        if (missing.length) tr.classList.add('row-warn');
         tr.innerHTML = [
             `<td style="width:40px"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleLead(${l.id}, this.checked)"></td>`,
             missing.length
                 ? `<td class="warn-cell"><span class="warn-flag" title="Missing: ${esc(missing.map(f => f.replace(/_/g, ' ')).join(', '))}">⚠</span></td>`
                 : `<td></td>`,
-            `<td style="text-align:center">${l.confidence_band ? `<span class="badge badge-${l.confidence_band === 'HIGH' ? 'success' : 'warning'}">${esc(l.confidence_band)}</span>` : ''}</td>`,
-            `<td><a href="mailto:${esc(l.email)}" style="font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a></td>`,
+            `<td style="text-align:center">${l.confidence_band ? `<span class="badge badge-${l.confidence_band === 'HIGH' ? 'success' : 'secondary'}">${esc(l.confidence_band)}</span>` : ''}</td>`,
+            `<td>
+                <a href="mailto:${esc(l.email)}" style="display:block;font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>
+                ${l.phone
+                    ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">📞 ${esc(l.phone)}</a>`
+                    : ''}
+            </td>`,
             `<td class="lead-person-cell">
                 <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name||'')}" value="${esc(l.person_name||'')}" placeholder="Name" autocomplete="off" spellcheck="false">
                 <input type="text" class="lead-cell-input lead-sub-input" data-lead-id="${l.id}" data-field="designation" data-orig="${esc(l.designation||'')}" value="${esc(l.designation||'')}" placeholder="Designation" autocomplete="off" spellcheck="false">
