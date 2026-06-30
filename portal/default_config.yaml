@@ -2,7 +2,7 @@ database:
   uri: sqlite:///portal/data/govcrawler.db
 api:
   host: 0.0.0.0
-  port: 8000
+  port: 8001
 scraper:
   category_filter: ''
   org_type_filter: ''
@@ -93,15 +93,27 @@ extraction:
         - '@'
       - - \s*\(at\)\s*
         - '@'
-      - - \s+at\s+
-        - '@'
       - - \s*\[dot\]\s*
         - .
       - - \s*\(dot\)\s*
         - .
-      - - \s+dot\s+
-        - .
     context_chars: 200
+  max_input_chars: 50000
+  role_local_parts:
+    - webmaster
+    - info
+    - admin
+    - contact
+    - support
+    - helpdesk
+    - grievance
+  confidence:
+    high_rungs:
+      - mailto_tel
+      - microdata
+    mid_rungs:
+      - table_block
+      - proximity_text
   person:
     enabled: true
     title_prefixes:

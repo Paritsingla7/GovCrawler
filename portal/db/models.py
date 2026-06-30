@@ -87,6 +87,11 @@ class Lead(Base):
     context_snippet = Column(Text)
     domain_state = Column(String)
     domain_org_type = Column(String)
+    entity_kind = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    channel_tag = Column(String, nullable=True)
+    confidence_band = Column(String, nullable=True)
+    field_provenance = Column(Text, nullable=True)
     depth = Column(Integer, nullable=False, default=0)
     captured_at = Column(DateTime, default=datetime.datetime.utcnow)
     __table_args__ = (
@@ -133,6 +138,13 @@ class Database:
             "crawl_jobs": [
                 ("current_depth", "INTEGER NOT NULL DEFAULT 0"),
                 ("active_workers", "INTEGER NOT NULL DEFAULT 0"),
+            ],
+            "leads": [
+                ("entity_kind", "VARCHAR"),
+                ("phone", "VARCHAR"),
+                ("channel_tag", "VARCHAR"),
+                ("confidence_band", "VARCHAR"),
+                ("field_provenance", "TEXT"),
             ],
         }
         with self.engine.connect() as conn:
@@ -383,6 +395,10 @@ class Database:
     def save_lead(self, job_id: int, domain_id: int | None, email: str | None,
                   person_name: str | None, designation: str | None,
                   department: str | None, source_url: str, source_title: str | None,
+                  context_snippet: str, entity_kind: str | None = None,
+                  phone: str | None = None, channel_tag: str | None = None,
+                  confidence_band: str | None = None,
+                  field_provenance: str | None = None) -> bool:
                   context_snippet: str, depth: int = 0) -> bool:
         if not email:
             return False
@@ -406,6 +422,8 @@ class Database:
                     source_title=source_title,
                     context_snippet=context_snippet,
                     domain_state=domain_state, domain_org_type=domain_org_type,
+                    entity_kind=entity_kind, phone=phone, channel_tag=channel_tag,
+                    confidence_band=confidence_band, field_provenance=field_provenance,
                     depth=depth,
                 ))
                 s.commit()
@@ -474,6 +492,9 @@ class Database:
                   "context_snippet": l.context_snippet,
                   "domain_title": dt, "category_code": cc,
                   "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
+                  "confidence_band": l.confidence_band,
+                  "field_provenance": l.field_provenance,
+                  "phone": l.phone,
                   "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
                  for l, dt, cc in rows],
@@ -548,6 +569,9 @@ class Database:
                  "source_url": l.source_url or "",
                  "source_title": l.source_title or "",
                  "context_snippet": l.context_snippet or "",
+                 "confidence_band": l.confidence_band or "",
+                 "field_provenance": l.field_provenance or "",
+                 "phone": l.phone or "",
                  "depth": l.depth or 0,
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
                 for l, dt, cc, ct in rows
