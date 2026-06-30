@@ -87,6 +87,7 @@ class Lead(Base):
     context_snippet = Column(Text)
     domain_state = Column(String)
     domain_org_type = Column(String)
+    depth = Column(Integer, nullable=False, default=0)
     captured_at = Column(DateTime, default=datetime.datetime.utcnow)
     __table_args__ = (
         UniqueConstraint("job_id", "email", name="uq_lead_job_email"),
@@ -382,7 +383,7 @@ class Database:
     def save_lead(self, job_id: int, domain_id: int | None, email: str | None,
                   person_name: str | None, designation: str | None,
                   department: str | None, source_url: str, source_title: str | None,
-                  context_snippet: str) -> bool:
+                  context_snippet: str, depth: int = 0) -> bool:
         if not email:
             return False
         email = email.lower()
@@ -405,6 +406,7 @@ class Database:
                     source_title=source_title,
                     context_snippet=context_snippet,
                     domain_state=domain_state, domain_org_type=domain_org_type,
+                    depth=depth,
                 ))
                 s.commit()
                 return True
@@ -472,6 +474,7 @@ class Database:
                   "context_snippet": l.context_snippet,
                   "domain_title": dt, "category_code": cc,
                   "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
+                  "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
                  for l, dt, cc in rows],
                 total,
@@ -545,6 +548,7 @@ class Database:
                  "source_url": l.source_url or "",
                  "source_title": l.source_title or "",
                  "context_snippet": l.context_snippet or "",
+                 "depth": l.depth or 0,
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
                 for l, dt, cc, ct in rows
             ]

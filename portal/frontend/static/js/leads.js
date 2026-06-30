@@ -246,7 +246,7 @@ function renderLeads(leads, total) {
             `<td>${domainUrl
                 ? `<p class="d-name" style="display:block;color:var(--text);text-decoration:none">${esc(l.domain_title)}</p>`
                 : `<div class="d-name">${esc(l.domain_title || '—')}</div>`
-            }</td>`,
+            }<div style="font-size:10px;color:var(--small);margin-top:2px">Depth: ${l.depth ?? 0}</div></td>`,
             `<td style="max-width:200px">${l.source_url
                 ? `<a href="${esc(l.source_url)}" target="_blank" style="font-size:11px;color:var(--muted)" title="${esc(l.source_url)}">${esc(l.source_title || '')}${l.source_title ? '' : '—'}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>`
                 : `<span style="color:var(--small)">${esc(l.source_title || '—')}</span>`
