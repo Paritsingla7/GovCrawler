@@ -8,6 +8,9 @@ import sys
 import os
 import uvicorn
 
+from portal.main import load_config
+config = load_config()
+
 # ==========================================
 # NO-CONSOLE CRASH FIX
 # ==========================================
@@ -115,11 +118,9 @@ class CrawlerLauncher:
 
     def _run_server_task(self):
         # Local imports ensure we don't trigger backend logic until the button is clicked
-        from portal.main import load_config
         from portal.db.models import Database
         from portal.api.server import create_app
         
-        config = load_config()
         db = Database(config)
         app = create_app(config, db)
         
@@ -157,8 +158,11 @@ class CrawlerLauncher:
 
     # --- ACTION: Open Browser ---
     def open_browser(self):
-        # Hardcoding 127.0.0.1 bypasses Windows local routing issues with 0.0.0.0
-        webbrowser.open("http://127.0.0.1:8000")
+        if config["api"]["host"] == "0.0.0.0":
+            uri = f"http://127.0.0.1:{config['api']['port']}"
+        else:
+            uri = f"http://{config['api']['host']}:{config['api']['port']}"
+        webbrowser.open(uri)
 
     # --- ACTION: Window Close Intercept ---
     def on_closing(self):

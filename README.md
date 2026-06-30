@@ -1,35 +1,57 @@
 # GovCrawler
 
 ## Overview
-GovCrawler is a comprehensive application for discovering, scraping, and crawling Indian Government domains (`.gov.in`, `.nic.in`). It integrates a direct API scraper (`GovScraper`) for initial discovery and a powerful Playwright & HTTPX-based crawler engine for deep extraction (e.g., finding contact details, personnel, emails). It features a FastAPI portal for managing jobs and data via SQLite/PostgreSQL.
+GovCrawler is a full-stack platform for discovering, crawling, and extracting contact data from Indian Government domains (`.gov.in`, `.nic.in`). It combines a direct API scraper (`GovScraper`) for domain discovery with an async Playwright + HTTPX crawler for deep extraction (emails, personnel, designations). A FastAPI portal manages all jobs, leads, and an email outreach system backed by SQLite or PostgreSQL.
 
 ## Key Features
-- **Centralized Portal:** A FastAPI web application (`portal/`) managing the database, APIs, and UI.
-- **Domain Discovery:** The `GovScraper` module extracts domains directly from the `india.gov.in` Web Directory API without the need for CAPTCHA solving.
-- **Deep Crawler Engine:** Asynchronous crawling using Playwright and HTTPX for executing JavaScript and robust scraping.
-- **Data Extraction:** Configurable regex and rule-based extraction for emails, phone numbers, and key personnel designations.
-- **Scalable Database:** Uses SQLAlchemy for ORM data management (SQLite by default, easily configurable to PostgreSQL).
+- **Centralized Portal:** FastAPI web application (`portal/`) with a browser-based UI for all workflows.
+- **Domain Discovery:** `GovScraper` extracts domains from the `india.gov.in` Web Directory API — no CAPTCHA needed.
+- **Deep Crawler Engine:** Async crawling via HTTPX (fast path) with Playwright fallback for JavaScript-heavy sites.
+- **Data Extraction:** Configurable regex/keyword extraction for emails and key personnel (name, designation, department). Phone number extraction is planned but not yet implemented.
+- **Email Outreach System:** Full campaign lifecycle — Jinja2 email templates, lead-to-draft generation, SMTP dispatch with rate-limit handling, blacklist, and test campaigns.
+- **Scalable Database:** SQLAlchemy ORM with SQLite (default) or PostgreSQL. Schema managed via Alembic migrations.
 
 ## Project Structure
-- `/portal/`: Core application (FastAPI server, DB models, API routers, frontend).
-  - `/api/`: REST endpoints.
-  - `/crawler/`: The heavy-duty async crawling engine.
-  - `/db/`: Database configuration and SQLAlchemy models.
-  - `/scraper/`: Handlers for integrating `GovScraper`.
-  - `/data/`: Default path for local SQLite database and logs.
-- `/GovScraper/`: Standalone scraper module for seeding the database with domains.
-- `run.py`: Main entry point to start the server or trigger manual commands.
-- `requirements.txt`: Python dependencies.
+```
+GovCrawler/
+├── run.py                   # Tkinter GUI Control Panel entry point
+├── requirements.txt
+├── GovCrawler.spec          # PyInstaller build configuration
+├── alembic.ini              # Alembic database migration config
+├── alembic/versions/        # Incremental schema migration scripts
+├── GovScraper/              # Standalone domain-discovery module (india.gov.in API)
+└── portal/                  # Core FastAPI application package
+    ├── main.py              # CLI dispatcher and server factory
+    ├── default_config.yaml  # Shipped default configuration
+    ├── config.yaml          # Live user configuration (gitignored)
+    ├── api/                 # REST API routers
+    │   ├── server.py        # App factory, core routes (domains, jobs, leads, config)
+    │   ├── campaigns.py     # Campaign generation + dispatch routes
+    │   ├── dispatcher.py    # Async SMTP background worker
+    │   ├── credentials.py   # SMTP credential CRUD
+    │   ├── templates.py     # Email template CRUD (Jinja2 validated)
+    │   └── blacklist.py     # Email/domain blacklist CRUD
+    ├── crawler/
+    │   ├── engine.py        # CrawlerEngine: priority queue, httpx-first, Playwright fallback
+    │   └── parser.py        # Email + personnel extraction (regex + table scanning)
+    ├── db/
+    │   └── models.py        # SQLAlchemy ORM models + Database wrapper
+    ├── scraper/
+    │   └── importer.py      # JSON and live-API domain import handlers
+    ├── frontend/            # Jinja2 HTML templates + vanilla JS/CSS
+    └── data/                # Runtime data (SQLite DB, log file)
+```
+
+See [`.docs/directory-structure.md`](.docs/directory-structure.md) for a full annotated file tree.
 
 ## Quick Start (Pre-compiled Release)
-The easiest way to get started is to use the standalone Windows executable:
 1. Download the latest `GovCrawler-vX.Y.Z-windows.zip` from the Releases page.
-2. Extract the `.zip` file to your computer.
-3. Double-click **`GovCrawler.exe`** to launch the Control Panel GUI.
+2. Extract the `.zip` file.
+3. Double-click **`GovCrawler.exe`** to open the Control Panel GUI.
 
-## Prerequisites (for source installation)
+## Prerequisites (Source Installation)
 - Python 3.10+
-- Playwright browsers (installed via `playwright install`)
+- Playwright Chromium browser (`playwright install chromium`)
 
 ## Installation from Source
 
@@ -39,7 +61,7 @@ The easiest way to get started is to use the standalone Windows executable:
    cd GovCrawler
    ```
 
-2. **Create a virtual environment (recommended):**
+2. **Create a virtual environment:**
    ```bash
    python -m venv venv
    # Windows
@@ -60,94 +82,120 @@ The easiest way to get started is to use the standalone Windows executable:
 
 ## Usage
 
-The application can be run via the new Graphical User Interface (GUI) or through the CLI directly.
-
 ### Graphical User Interface (GUI)
-Run the launcher:
 ```bash
 python run.py
 ```
-This opens the **GovCrawler Control Panel** (`CrawlerLauncher`), which provides an easy way to:
-1. Download Playwright Browsers (for the first time)
-2. Start the Server
-3. Open the Web Interface in your default browser
-4. Stop the Server safely
+Opens the **GovCrawler Control Panel** (`CrawlerLauncher`) with four buttons:
+1. **Download Browsers** — First-time setup; downloads ~600 MB Chromium.
+2. **Start Server** — Launches the FastAPI server on `http://127.0.0.1:8000`.
+3. **Open Web Interface** — Opens the browser UI.
+4. **Stop Server** — Gracefully shuts down Uvicorn.
 
 ### CLI Usage
-- **Start the Server directly (bypassing GUI):**
-  ```bash
-  python -m portal
-  ```
-  The server starts at `http://127.0.0.1:8000` by default.
+| Command | Description |
+|---|---|
+| `python -m portal` | Start the server (default, same as `serve`) |
+| `python -m portal serve` | Start the server explicitly |
+| `python -m portal import-json [path]` | Seed DB from `gov_domains.json` (zero API calls) |
+| `python -m portal import` | Refresh domains from the live `india.gov.in` API |
+| `python -m portal crawl <job_id>` | Manually trigger a specific crawl job |
 
-- **Import Domains (API Extraction):**
-  Seeds the database with root domains via `GovScraper`.
+## Workflow Overview
+
+### 1. Seed the Database
+Import Indian government domains in one of two ways:
+
+- **JSON import (recommended):** Upload `gov_domains.json` via the Settings page or CLI. Zero API calls, instant.
+  ```bash
+  python -m portal import-json gov_domains.json
+  ```
+- **Live API import:** Fetches fresh data directly from `india.gov.in`. Use only when refreshing.
   ```bash
   python -m portal import
   ```
-  *Alternatively, import from JSON: `python -m portal import-json gov_domains.json`*
 
-- **Run a Crawl Job:**
-  ```bash
-  python -m portal crawl <job_id>
-  ```
+### 2. Create a Crawl Job
+From the web UI: filter domains by category/state/org-type, select them, and click **Start Crawl Job**. The engine crawls all selected domains up to `max_depth`, extracting emails and personnel.
+
+### 3. Review Leads
+Navigate to `/leads`. Filter by category, state, job, or search term. Edit person names, designations, or departments inline. Export to CSV.
+
+### 4. Email Outreach
+1. Create an **Email Template** with Jinja2 variables (e.g., `{{ name }}`, `{{ designation }}`).
+2. Create a **Campaign** by selecting leads and a template. Drafts are auto-rendered.
+3. Review, edit, or deselect individual draft emails.
+4. Add **SMTP Credentials** (host, port, username, password).
+5. **Dispatch** the campaign. The background worker sends emails with per-credential rate-limit handling.
 
 ## Building an Executable
-
-You can build a standalone executable for GovCrawler using PyInstaller and the provided `GovCrawler.spec` file. 
-
-1. Install PyInstaller:
-   ```bash
-   pip install pyinstaller
-   ```
-2. Build the project:
-   ```bash
-   pyinstaller GovCrawler.spec
-   ```
-The compiled executable will be located in the `dist/GovCrawler` directory.
+```bash
+pip install pyinstaller
+pyinstaller GovCrawler.spec
+```
+Output: `dist/GovCrawler/GovCrawler.exe`
 
 ## Configuration
-The project uses `portal/default_config.yaml` out of the box. 
-To override default settings (database URI, crawler workers, extraction rules), the application will look for `portal/config.yaml`. Copy the default config and make your changes there.
+Settings live in `portal/config.yaml`. The application ships with `portal/default_config.yaml` as a template. Key sections:
+
+| Section | Key Settings |
+|---|---|
+| `database.uri` | SQLite (default) or `postgresql://user:pass@host/db` |
+| `api.host` / `api.port` | Server bind address (default `0.0.0.0:8000`) |
+| `crawler.workers` | Concurrent async workers (default 50) |
+| `crawler.max_depth` | Max crawl depth per seed (default 3) |
+| `crawler.recrawl_days` | Skip URLs visited within N days (default 30) |
+| `extraction.email.valid_suffixes` | Only keep emails matching these domains |
+| `extraction.person.designation_keywords` | Keywords that trigger designation detection |
+
+See [`.docs/configuration.md`](.docs/configuration.md) for the full reference.
 
 ---
 
-## 🤝 Team Workflow & Collaboration Guidelines
-
-As this is a highly collaborative project, all team members are expected to strictly follow these guidelines to ensure code quality, readability, and stability.
+## Team Workflow & Collaboration Guidelines
 
 ### 1. Branching Strategy
-We use a feature-branch workflow.
-- `main`: Stable branch. Always production-ready.
-- `develop`: Integration branch for features before they go to `main`.
-- **Feature branches:** Created from `develop` using the naming convention `feature/<issue-number>-<brief-desc>` (e.g., `feature/42-fix-playwright-timeout`).
-- **Bugfix branches:** `bugfix/<issue-number>-<brief-desc>`.
+- `main` — Stable, production-ready.
+- `develop` — Integration branch.
+- Feature branches: `feature/<issue-number>-<brief-desc>`
+- Bugfix branches: `bugfix/<issue-number>-<brief-desc>`
 
 ### 2. Development Workflow
-1. **Pull the latest `develop` branch** before starting new work.
-2. **Create a feature branch.**
-3. **Commit often** using clear, descriptive commit messages.
-   - *Good:* `feat(crawler): add regex for phone number extraction`
-   - *Bad:* `fixed stuff` or `update`
-4. **Push your branch** and open a Pull Request (PR) against `develop`.
+1. Pull the latest `develop` before starting work.
+2. Create your feature branch from `develop`.
+3. Commit often with clear messages (e.g., `feat(crawler): add depth tracking to job metrics`).
+4. Open a PR against `develop`.
 
 ### 3. Code Review & Pull Requests
-- All PRs must be reviewed by at least **one other team member** before merging.
-- Ensure all tests pass and code is locally tested before requesting a review.
-- Provide a clear PR description: What does it fix? How was it tested? Any side effects?
+- All PRs require at least **one reviewer** before merging.
+- Ensure code is locally tested and all relevant tests pass.
+- Provide a clear description: what it fixes, how it was tested, any side effects.
 - Do not merge your own PRs without approval.
 
 ### 4. Coding Standards
-- **Python Style:** Follow [PEP 8](https://peps.python.org/pep-0008/). We recommend using `black` for formatting and `flake8` or `ruff` for linting.
-- **Type Hinting:** Use standard Python type hints across all functions, arguments, and classes. This makes the codebase significantly easier to understand.
-- **Docstrings:** Write descriptive docstrings for all modules, classes, and complex functions. Explain *why* something is done, not just *what*.
-- **Logging:** **Do not use `print()`.** Always use the configured `logging` module (e.g., `log.info()`, `log.error()`, `log.debug()`). This is critical for debugging server environments.
+- **Style:** Follow [PEP 8](https://peps.python.org/pep-0008/). Use `black` for formatting and `ruff` for linting.
+- **Type Hints:** Required on all functions and class members.
+- **Docstrings:** Write module/class/function docstrings explaining *why*, not just *what*.
+- **Logging:** Use the `logging` module exclusively (`log.info()`, `log.error()`). Never use `print()`.
 
 ### 5. Database Migrations
-Changes to the database schema (in `portal/db/models.py`) must be communicated to the team. Ensure that backwards compatibility is considered or provide appropriate migration scripts, especially if moving from SQLite to PostgreSQL.
+Changes to `portal/db/models.py` must be accompanied by an Alembic migration script in `alembic/versions/`. For backward-compatible column additions, `_ensure_columns()` in `Database.__init__` can be used as a lightweight alternative during development. Communicate schema changes to the team before merging.
 
 ### 6. Async Patterns
-The crawler engine heavily utilizes `asyncio` and `playwright`. 
-- Be highly mindful of blocking operations inside `async` functions. 
-- Use `asyncio.to_thread()` or thread pools for heavy CPU-bound tasks or synchronous I/O to avoid freezing the event loop.
-- Gracefully handle network timeouts and exceptions so that a single page crash doesn't halt the entire crawler.
+- Never call blocking I/O directly inside `async` functions that share the Uvicorn event loop.
+- Use `asyncio.to_thread()` or a `ThreadPoolExecutor` for synchronous DB calls and CPU-bound parsing.
+- Each worker has a dedicated Playwright browser context to prevent `TargetClosedError` across workers.
+- Handle timeouts and network errors so one page failure never halts the entire crawl.
+
+---
+
+## Further Documentation
+| Doc | Description |
+|---|---|
+| [`.docs/architecture.md`](.docs/architecture.md) | System architecture and data flow |
+| [`.docs/directory-structure.md`](.docs/directory-structure.md) | Annotated file tree |
+| [`.docs/api-reference.md`](.docs/api-reference.md) | All REST endpoints |
+| [`.docs/database-schema.md`](.docs/database-schema.md) | ORM models and column reference |
+| [`.docs/crawler.md`](.docs/crawler.md) | Crawler engine internals |
+| [`.docs/outreach.md`](.docs/outreach.md) | Email outreach system |
+| [`.docs/configuration.md`](.docs/configuration.md) | Full config reference |
