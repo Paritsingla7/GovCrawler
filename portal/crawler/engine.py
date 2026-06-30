@@ -414,7 +414,7 @@ class CrawlerEngine:
                          self._netloc_to_domain.get(self._strip_www(netloc)))
 
         new_leads = await self._loop.run_in_executor(
-            self._db_pool, self._save_leads, leads, domain_id, item.is_seed)
+            self._db_pool, self._save_leads, leads, domain_id, item.is_seed, depth)
 
         if new_leads:
             log.info(f"  +{new_leads} leads at {url}")
@@ -430,7 +430,7 @@ class CrawlerEngine:
         self._db.increment_job_progress(self._job_id, new_leads=new_leads,
                                         domain_done=domain_done)
 
-    def _save_leads(self, leads, domain_id, is_seed) -> int:
+    def _save_leads(self, leads, domain_id, is_seed, depth: int = 0) -> int:
         new_leads = 0
         for lead in leads:
             saved = self._db.save_lead(
@@ -448,6 +448,7 @@ class CrawlerEngine:
                 channel_tag=lead.channel_tag,
                 confidence_band=lead.confidence_band,
                 field_provenance=lead.field_provenance,
+                depth=depth,
             )
             if saved:
                 new_leads += 1

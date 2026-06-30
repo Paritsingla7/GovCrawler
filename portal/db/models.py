@@ -92,6 +92,7 @@ class Lead(Base):
     channel_tag = Column(String, nullable=True)
     confidence_band = Column(String, nullable=True)
     field_provenance = Column(Text, nullable=True)
+    depth = Column(Integer, nullable=False, default=0)
     captured_at = Column(DateTime, default=datetime.datetime.utcnow)
     __table_args__ = (
         UniqueConstraint("job_id", "email", name="uq_lead_job_email"),
@@ -398,6 +399,7 @@ class Database:
                   phone: str | None = None, channel_tag: str | None = None,
                   confidence_band: str | None = None,
                   field_provenance: str | None = None) -> bool:
+                  context_snippet: str, depth: int = 0) -> bool:
         if not email:
             return False
         email = email.lower()
@@ -422,6 +424,7 @@ class Database:
                     domain_state=domain_state, domain_org_type=domain_org_type,
                     entity_kind=entity_kind, phone=phone, channel_tag=channel_tag,
                     confidence_band=confidence_band, field_provenance=field_provenance,
+                    depth=depth,
                 ))
                 s.commit()
                 return True
@@ -492,6 +495,7 @@ class Database:
                   "confidence_band": l.confidence_band,
                   "field_provenance": l.field_provenance,
                   "phone": l.phone,
+                  "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
                  for l, dt, cc in rows],
                 total,
@@ -568,6 +572,7 @@ class Database:
                  "confidence_band": l.confidence_band or "",
                  "field_provenance": l.field_provenance or "",
                  "phone": l.phone or "",
+                 "depth": l.depth or 0,
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
                 for l, dt, cc, ct in rows
             ]

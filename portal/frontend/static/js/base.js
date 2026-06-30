@@ -42,9 +42,51 @@ function domainShortUrl(d) {
     }
 }
 
+// ── Selection Persistence ─────────────────────────────────────────────────────
+function saveSelection() {
+    sessionStorage.setItem('dashboard_selection', JSON.stringify([...selectedIds]));
+}
+
+function restoreSelection() {
+    try {
+        const saved = JSON.parse(sessionStorage.getItem('dashboard_selection') || '[]');
+        selectedIds = new Set(saved);
+    } catch { selectedIds = new Set(); }
+}
+
+// ── Filter Persistence ────────────────────────────────────────────────────────
+function getDashboardFilters() {
+    try { return JSON.parse(sessionStorage.getItem('dashboard_filters') || '{}'); } catch { return {}; }
+}
+
+function saveDashboardFilters() {
+    sessionStorage.setItem('dashboard_filters', JSON.stringify({
+        cat:     document.getElementById('cat-select')?.value || '',
+        state:   document.getElementById('state-select')?.value || '',
+        orgType: document.getElementById('orgtype-select')?.value || '',
+        search:  document.getElementById('search-input')?.value || '',
+    }));
+}
+
+function clearDashboardFilters() {
+    sessionStorage.removeItem('dashboard_filters');
+    const catSel   = document.getElementById('cat-select');
+    const stateSel = document.getElementById('state-select');
+    const orgSel   = document.getElementById('orgtype-select');
+    const searchEl = document.getElementById('search-input');
+    if (catSel)   catSel.value   = '';
+    if (stateSel) stateSel.value = '';
+    if (orgSel)   orgSel.value   = '';
+    if (searchEl) searchEl.value = '';
+    currentPage = 1;
+    reloadStateOptions('').then(() => reloadOrgTypeOptions('', '')).then(() => loadDomains());
+}
+
 // ── Filters ───────────────────────────────────────────────────────────────────
 async function loadFilters() {
     try {
+        const saved = getDashboardFilters();
+
         const cats = await apiFetch('/api/categories');
         const catSel = document.getElementById('cat-select');
         cats.forEach(c => {
@@ -53,8 +95,14 @@ async function loadFilters() {
             o.textContent = `${c.title} (${c.count.toLocaleString()})`;
             catSel.appendChild(o);
         });
-        await reloadStateOptions('');
-        await reloadOrgTypeOptions('', '');
+        if (saved.cat) catSel.value = saved.cat;
+        if (saved.search) document.getElementById('search-input').value = saved.search;
+
+        await reloadStateOptions(catSel.value);
+        if (saved.state) document.getElementById('state-select').value = saved.state;
+
+        await reloadOrgTypeOptions(catSel.value, document.getElementById('state-select').value);
+        if (saved.orgType) document.getElementById('orgtype-select').value = saved.orgType;
     } catch (e) {
         console.error('loadFilters', e);
     }
@@ -103,6 +151,7 @@ async function onCategoryChange() {
     const cat = document.getElementById('cat-select').value;
     await reloadStateOptions(cat);
     await reloadOrgTypeOptions(cat, '');
+    saveDashboardFilters();
     loadDomains();
 }
 
@@ -111,11 +160,13 @@ async function onStateChange() {
     const cat = document.getElementById('cat-select').value;
     const state = document.getElementById('state-select').value;
     await reloadOrgTypeOptions(cat, state);
+    saveDashboardFilters();
     loadDomains();
 }
 
 function onFilterChange() {
     currentPage = 1;
+    saveDashboardFilters();
     loadDomains();
 }
 
@@ -123,6 +174,7 @@ function debounceSearch() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
         currentPage = 1;
+        saveDashboardFilters();
         loadDomains();
     }, 380);
 }
@@ -199,6 +251,7 @@ function renderDomains(domains, total) {
 
 function toggleDomain(id, checked) {
     if (checked) selectedIds.add(id); else selectedIds.delete(id);
+    saveSelection();
     updateSelCount();
 }
 
@@ -210,6 +263,7 @@ function toggleSelectAll(checked) {
         if (checked) selectedIds.add(id); else selectedIds.delete(id);
         cb.checked = checked;
     });
+    saveSelection();
     updateSelCount();
 }
 
@@ -227,6 +281,7 @@ async function selectAllResults() {
         const data = await apiFetch(`/api/domains/ids?${params}`);
         data.ids.forEach(id => selectedIds.add(id));
         document.querySelectorAll('#domain-tbody input[type=checkbox]').forEach(cb => cb.checked = true);
+        saveSelection();
         updateSelectAll();
         updateSelCount();
     } catch (e) {
@@ -240,6 +295,7 @@ function clearSelection() {
     document.querySelectorAll('#domain-tbody input[type=checkbox]').forEach(cb => cb.checked = false);
     document.getElementById('select-all').checked = false;
     document.getElementById('select-all').indeterminate = false;
+    saveSelection();
     updateSelCount();
 }
 

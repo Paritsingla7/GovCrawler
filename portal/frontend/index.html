@@ -77,6 +77,7 @@
                        type="text">
             </div>
             <div id="domain-count-label" style="font-size:12px;color:var(--muted)"></div>
+            <button onclick="clearDashboardFilters()" style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:4px;">Clear Filters</button>
         </div>
 
         <!-- Recent Jobs -->
@@ -141,8 +142,9 @@
 {% endblock %}
 
 {% block init_js %}
-document.addEventListener('DOMContentLoaded', () => {
-loadFilters();
+document.addEventListener('DOMContentLoaded', async () => {
+restoreSelection();
+await loadFilters();
 loadDomains();
 loadRecentJobs();
 checkImportStatus();

@@ -440,7 +440,8 @@ def create_app(config: dict, db: Database) -> FastAPI:
     _ALL_EXPORT_FIELDS = [
         "email", "person_name", "designation", "department",
         "domain_title", "domain_state", "domain_org_type",
-        "category_title", "source_url", "source_title", "context_snippet", "captured_at",
+        "category_title", "source_url", "source_title", "context_snippet",
+        "depth", "captured_at",
     ]
 
     class ExportLeadsRequest(BaseModel):

@@ -5,7 +5,7 @@ let leadsSearchTimer = null;
 let leadsTotalMatching = 0;
 let pendingAddToCampaignId = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const addToCamp = urlParams.get('add_to_campaign');
     if (addToCamp) {
@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     setupLeadCellListeners();
-    loadLeadsFilters();
+    restoreLeadsSelection();
+    await loadLeadsFilters();
     loadLeads();
 });
 
@@ -30,8 +31,47 @@ function showAddToCampaignBanner() {
     if (toolbar) toolbar.insertAdjacentElement('beforebegin', banner);
 }
 
+// ── Selection Persistence ─────────────────────────────────────────────────────
+function saveLeadsSelection() {
+    sessionStorage.setItem('leads_selection', JSON.stringify([...selectedLeadIds]));
+}
+
+function restoreLeadsSelection() {
+    try {
+        const saved = JSON.parse(sessionStorage.getItem('leads_selection') || '[]');
+        selectedLeadIds = new Set(saved);
+    } catch { selectedLeadIds = new Set(); }
+}
+
+// ── Filter Persistence ────────────────────────────────────────────────────────
+function getLeadsFilters() {
+    try { return JSON.parse(sessionStorage.getItem('leads_filters') || '{}'); } catch { return {}; }
+}
+
+function saveLeadsFilters() {
+    sessionStorage.setItem('leads_filters', JSON.stringify({
+        job:          document.getElementById('leads-job-select')?.value || '',
+        cat:          document.getElementById('leads-cat-select')?.value || '',
+        state:        document.getElementById('leads-state-select')?.value || '',
+        search:       document.getElementById('leads-search-input')?.value || '',
+        completeOnly: document.getElementById('leads-complete-only')?.checked || false,
+    }));
+}
+
+function clearLeadsFilters() {
+    sessionStorage.removeItem('leads_filters');
+    document.getElementById('leads-job-select').value = '';
+    document.getElementById('leads-cat-select').value = '';
+    document.getElementById('leads-state-select').value = '';
+    document.getElementById('leads-search-input').value = '';
+    document.getElementById('leads-complete-only').checked = false;
+    leadsPage = 1;
+    reloadLeadsStateOptions('').then(() => loadLeads());
+}
+
 async function loadLeadsFilters() {
     try {
+        const saved = getLeadsFilters();
         const urlParams = new URLSearchParams(window.location.search);
         const urlJobId = urlParams.get('job_id') || '';
 
@@ -49,6 +89,11 @@ async function loadLeadsFilters() {
             });
         } catch (e) {}
 
+        // URL param takes priority over session-saved filter
+        if (!urlJobId && saved.job) jobSel.value = saved.job;
+        if (saved.search) document.getElementById('leads-search-input').value = saved.search;
+        if (saved.completeOnly) document.getElementById('leads-complete-only').checked = true;
+
         const jobId = jobSel.value;
         const jobIdParam = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
 
@@ -60,7 +105,10 @@ async function loadLeadsFilters() {
             o.textContent = `${c.title} (${c.count.toLocaleString()})`;
             catSel.appendChild(o);
         });
-        await reloadLeadsStateOptions('');
+        if (saved.cat) catSel.value = saved.cat;
+
+        await reloadLeadsStateOptions(catSel.value);
+        if (saved.state) document.getElementById('leads-state-select').value = saved.state;
     } catch (e) {
     }
 }
@@ -93,6 +141,7 @@ async function onLeadsFilterChange() {
     leadsPage = 1;
     const cat = document.getElementById('leads-cat-select').value;
     await reloadLeadsStateOptions(cat);
+    saveLeadsFilters();
     await loadLeads();
 }
 
@@ -100,6 +149,7 @@ function debounceLeadsSearch() {
     clearTimeout(leadsSearchTimer);
     leadsSearchTimer = setTimeout(() => {
         leadsPage = 1;
+        saveLeadsFilters();
         loadLeads();
     }, 380);
 }
@@ -202,7 +252,7 @@ function renderLeads(leads, total) {
             `<td>${domainUrl
                 ? `<p class="d-name" style="display:block;color:var(--text);text-decoration:none">${esc(l.domain_title)}</p>`
                 : `<div class="d-name">${esc(l.domain_title || '—')}</div>`
-            }</td>`,
+            }<div style="font-size:10px;color:var(--small);margin-top:2px">Depth: ${l.depth ?? 0}</div></td>`,
             `<td style="max-width:200px">${l.source_url
                 ? `<a href="${esc(l.source_url)}" target="_blank" style="font-size:11px;color:var(--muted)" title="${esc(l.source_url)}">${esc(l.source_title || '')}${l.source_title ? '' : '—'}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>`
                 : `<span style="color:var(--small)">${esc(l.source_title || '—')}</span>`
@@ -270,6 +320,7 @@ function setupLeadCellListeners() {
 
 function toggleLead(id, checked) {
     if (checked) selectedLeadIds.add(id); else selectedLeadIds.delete(id);
+    saveLeadsSelection();
     updateSelLeadsCount();
 }
 
@@ -281,6 +332,7 @@ function toggleSelectAllLeads(checked) {
         if (checked) selectedLeadIds.add(id); else selectedLeadIds.delete(id);
         cb.checked = checked;
     });
+    saveLeadsSelection();
     updateSelLeadsCount();
 }
 
@@ -290,6 +342,7 @@ async function selectAllLeads() {
         const data = await apiFetch(`/api/leads/ids?${params}`);
         data.ids.forEach(id => selectedLeadIds.add(id));
         document.querySelectorAll('#leads-tbody input[type=checkbox]').forEach(cb => cb.checked = true);
+        saveLeadsSelection();
         updateSelectAllLeads();
         updateSelLeadsCount();
     } catch (e) {
@@ -301,6 +354,7 @@ function clearLeadsSelection() {
     document.querySelectorAll('#leads-tbody input[type=checkbox]').forEach(cb => cb.checked = false);
     document.getElementById('leads-select-all').checked = false;
     document.getElementById('leads-select-all').indeterminate = false;
+    saveLeadsSelection();
     updateSelLeadsCount();
 }
 
