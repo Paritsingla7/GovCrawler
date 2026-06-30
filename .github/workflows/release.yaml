@@ -40,7 +40,7 @@ jobs:
         pip install -r requirements.txt 
 
     - name: Build executable from .spec
-      run: pyinstaller main.spec --clean
+      run: pyinstaller GovCrawler.spec --clean
 
     - name: Zip Build Outputs (Windows)
       if: matrix.os == 'windows-latest'

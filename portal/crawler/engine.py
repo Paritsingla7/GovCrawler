@@ -443,6 +443,11 @@ class CrawlerEngine:
                 source_url=lead.source_url,
                 source_title=lead.source_title,
                 context_snippet=lead.context_snippet,
+                entity_kind=lead.entity_kind,
+                phone=lead.phone,
+                channel_tag=lead.channel_tag,
+                confidence_band=lead.confidence_band,
+                field_provenance=lead.field_provenance,
                 depth=depth,
             )
             if saved:

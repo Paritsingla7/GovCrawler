@@ -216,7 +216,7 @@ function renderLeads(leads, total) {
     const tbody = document.getElementById('leads-tbody');
     tbody.innerHTML = '';
     if (!leads.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No leads found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No leads found.</td></tr>';
         return;
     }
     const WARN_FIELDS = ['person_name', 'designation', 'department', 'domain_state'];
@@ -233,7 +233,13 @@ function renderLeads(leads, total) {
             missing.length
                 ? `<td class="warn-cell"><span class="warn-flag" title="Missing: ${esc(missing.map(f => f.replace(/_/g, ' ')).join(', '))}">⚠</span></td>`
                 : `<td></td>`,
-            `<td><a href="mailto:${esc(l.email)}" style="font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a></td>`,
+            `<td style="text-align:center">${l.confidence_band ? `<span class="badge badge-${l.confidence_band === 'HIGH' ? 'success' : 'secondary'}">${esc(l.confidence_band)}</span>` : ''}</td>`,
+            `<td>
+                <a href="mailto:${esc(l.email)}" style="display:block;font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>
+                ${l.phone
+                    ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">📞 ${esc(l.phone)}</a>`
+                    : ''}
+            </td>`,
             `<td class="lead-person-cell">
                 <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name||'')}" value="${esc(l.person_name||'')}" placeholder="Name" autocomplete="off" spellcheck="false">
                 <input type="text" class="lead-cell-input lead-sub-input" data-lead-id="${l.id}" data-field="designation" data-orig="${esc(l.designation||'')}" value="${esc(l.designation||'')}" placeholder="Designation" autocomplete="off" spellcheck="false">
