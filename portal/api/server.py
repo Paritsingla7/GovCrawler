@@ -112,6 +112,11 @@ def create_app(config: dict, db: Database) -> FastAPI:
         template = templates.get_template("campaigns.html")
         return HTMLResponse(template.render({"request": request}))
 
+    @app.get("/user-guide", response_class=HTMLResponse)
+    async def user_guide_page(request: Request):
+        template = templates.get_template("user-guide.html")
+        return HTMLResponse(template.render({"request": request}))
+
     @app.get("/api/logs")
     async def get_logs():
         log_file = Path("portal/data/portal.log")
