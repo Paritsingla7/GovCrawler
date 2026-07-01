@@ -30,7 +30,7 @@
                     <button class="btn-primary btn-sm" id="import-json-btn" onclick="triggerJsonImport()">Import
                     </button>
                 </div>
-                <input type="file" id="json-file-input" accept=".json" style="display:none">
+                <input accept=".json" id="json-file-input" style="display:none" type="file">
                 <div class="import-row">
                     <div>
                         <div class="import-row-label" style="color:var(--muted)">Live API refresh</div>
@@ -77,7 +77,10 @@
                        type="text">
             </div>
             <div id="domain-count-label" style="font-size:12px;color:var(--muted)"></div>
-            <button onclick="clearDashboardFilters()" style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:4px;">Clear Filters</button>
+            <button onclick="clearDashboardFilters()"
+                    style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:4px;">
+                Clear Filters
+            </button>
         </div>
 
         <!-- Recent Jobs -->

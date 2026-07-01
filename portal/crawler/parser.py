@@ -189,7 +189,7 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
 
 
 def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern,
-                               valid_suffixes: tuple) -> list[dict]:
+                              valid_suffixes: tuple) -> list[dict]:
     results = []
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
@@ -231,7 +231,7 @@ _BRACKETED_EMAIL_RE = re.compile(
 
 
 def _extract_proximity_candidates(text: str, email_re: re.Pattern,
-                                   ecfg: dict) -> list[dict]:
+                                  ecfg: dict) -> list[dict]:
     results = []
     seen: set[str] = set()
 

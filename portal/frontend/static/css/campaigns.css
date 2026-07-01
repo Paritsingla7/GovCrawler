@@ -75,10 +75,29 @@
     letter-spacing: 0.4px;
 }
 
-.status-RUNNING   { background: #e8e3dc; color: var(--accent); border: 1px solid var(--border); }
-.status-PAUSED    { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-.status-COMPLETED { background: #ddeee2; color: var(--green); border: 1px solid #a8cdb4; }
-.status-CANCELLED { background: #f5e5e3; color: var(--red); border: 1px solid #e0b8b4; }
+.status-RUNNING {
+    background: #e8e3dc;
+    color: var(--accent);
+    border: 1px solid var(--border);
+}
+
+.status-PAUSED {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+}
+
+.status-COMPLETED {
+    background: #ddeee2;
+    color: var(--green);
+    border: 1px solid #a8cdb4;
+}
+
+.status-CANCELLED {
+    background: #f5e5e3;
+    color: var(--red);
+    border: 1px solid #e0b8b4;
+}
 
 /* ── Email-level status badges ── */
 .email-status-badge {
@@ -91,10 +110,29 @@
     letter-spacing: 0.3px;
 }
 
-.status-email-DRAFT   { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-.status-email-QUEUED  { background: #fef9e7; color: var(--yellow); border: 1px solid #d4be8c; }
-.status-email-SENT    { background: #ddeee2; color: var(--green); border: 1px solid #a8cdb4; }
-.status-email-FAILED  { background: #f5e5e3; color: var(--red); border: 1px solid #e0b8b4; }
+.status-email-DRAFT {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+}
+
+.status-email-QUEUED {
+    background: #fef9e7;
+    color: var(--yellow);
+    border: 1px solid #d4be8c;
+}
+
+.status-email-SENT {
+    background: #ddeee2;
+    color: var(--green);
+    border: 1px solid #a8cdb4;
+}
+
+.status-email-FAILED {
+    background: #f5e5e3;
+    color: var(--red);
+    border: 1px solid #e0b8b4;
+}
 
 /* ── Stats row ── */
 .campaign-stats {

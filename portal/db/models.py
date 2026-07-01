@@ -679,7 +679,7 @@ class Database:
         with self._Session() as s:
             rows = s.query(EmailTemplate).order_by(EmailTemplate.id.desc()).all()
             return [{"id": t.id, "name": t.name, "subject": t.subject,
-                      "raw_body": t.raw_body} for t in rows]
+                     "raw_body": t.raw_body} for t in rows]
 
     def update_template(self, template_id: int, **kwargs) -> bool:
         with self._Session() as s:
@@ -772,20 +772,21 @@ class Database:
                 TestCampaign.created_at.label('created_at'),
                 literal(True).label('is_test')
             )
-            
+
             if include_test:
                 subq = q1.union_all(q2).subquery()
             else:
                 subq = q1.subquery()
-                
+
             total = s.query(subq).count()
             offset = (page - 1) * limit
             rows = s.query(subq).order_by(subq.c.created_at.desc()).offset(offset).limit(limit).all()
-            
+
             return (
                 [{"id": r.id, "name": r.name, "template_id": r.template_id,
                   "status": r.status.value if hasattr(r.status, 'value') else r.status, "is_test": r.is_test,
-                  "created_at": r.created_at.isoformat() if r.created_at and hasattr(r.created_at, 'isoformat') else (r.created_at if isinstance(r.created_at, str) else None)}
+                  "created_at": r.created_at.isoformat() if r.created_at and hasattr(r.created_at, 'isoformat') else (
+                      r.created_at if isinstance(r.created_at, str) else None)}
                  for r in rows],
                 total,
             )
@@ -807,7 +808,7 @@ class Database:
             return {r.recipient_email for r in rows}
 
     def bulk_create_campaign_emails(self, campaign_id: int,
-                                     emails: list[dict]) -> int:
+                                    emails: list[dict]) -> int:
         """Bulk insert rendered draft emails. Each dict must have:
         lead_id, recipient_email, subject, body. Optional: is_selected, missing_fields."""
         with self._Session() as s:
@@ -961,7 +962,8 @@ class Database:
 
     # ── TestCampaign ──────────────────────────────────────────────────────────
 
-    def create_test_campaign(self, name: str, template_id: int, test_credential_id: int | None = None, status: "CampaignStatus" = None) -> int:
+    def create_test_campaign(self, name: str, template_id: int, test_credential_id: int | None = None,
+                             status: "CampaignStatus" = None) -> int:
         if status is None:
             status = CampaignStatus.RUNNING
         with self._Session() as s:
@@ -972,7 +974,8 @@ class Database:
 
     def create_test_campaign_email(self, test_campaign_id: int, recipient_email: str, subject: str, body: str) -> int:
         with self._Session() as s:
-            e = TestCampaignEmail(test_campaign_id=test_campaign_id, recipient_email=recipient_email, subject=subject, body=body)
+            e = TestCampaignEmail(test_campaign_id=test_campaign_id, recipient_email=recipient_email, subject=subject,
+                                  body=body)
             s.add(e)
             s.commit()
             return e.id
@@ -981,7 +984,9 @@ class Database:
         with self._Session() as s:
             c = s.query(TestCampaign).filter_by(id=campaign_id).first()
             if not c: return None
-            return {"id": c.id, "name": c.name, "template_id": c.template_id, "test_credential_id": c.test_credential_id, "status": c.status.value, "is_test": True, "created_at": c.created_at.isoformat() if c.created_at else None}
+            return {"id": c.id, "name": c.name, "template_id": c.template_id,
+                    "test_credential_id": c.test_credential_id, "status": c.status.value, "is_test": True,
+                    "created_at": c.created_at.isoformat() if c.created_at else None}
 
     def update_test_campaign_status(self, campaign_id: int, new_status: "CampaignStatus") -> bool:
         with self._Session() as s:
@@ -991,14 +996,16 @@ class Database:
 
     def get_test_campaign_stats(self, campaign_id: int) -> dict:
         with self._Session() as s:
-            rows = s.query(TestCampaignEmail.status, func.count(TestCampaignEmail.id)).filter_by(test_campaign_id=campaign_id).group_by(TestCampaignEmail.status).all()
+            rows = s.query(TestCampaignEmail.status, func.count(TestCampaignEmail.id)).filter_by(
+                test_campaign_id=campaign_id).group_by(TestCampaignEmail.status).all()
             stats = {"draft": 0, "queued": 0, "sent": 0, "failed": 0, "total": 0}
             for status_val, count in rows:
                 stats[status_val.value.lower()] = count
                 stats["total"] += count
             return stats
 
-    def get_test_campaign_emails(self, campaign_id: int, status: str = None, page: int = 1, limit: int = 50) -> tuple[list[dict], int]:
+    def get_test_campaign_emails(self, campaign_id: int, status: str = None, page: int = 1, limit: int = 50) -> tuple[
+        list[dict], int]:
         with self._Session() as s:
             q = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id)
             if status: q = q.filter(TestCampaignEmail.status == EmailStatus(status))
@@ -1006,23 +1013,27 @@ class Database:
             offset = (page - 1) * limit
             rows = q.order_by(TestCampaignEmail.id).offset(offset).limit(limit).all()
             return ([{"id": e.id, "campaign_id": e.test_campaign_id, "lead_id": None,
-                       "recipient_email": e.recipient_email, "subject": e.subject, "body": e.body,
-                       "status": e.status.value, "is_selected": e.is_selected,
-                       "missing_fields": e.missing_fields,
-                       "error_message": e.error_message,
-                       "sent_at": e.sent_at.isoformat() if e.sent_at else None} for e in rows], total)
+                      "recipient_email": e.recipient_email, "subject": e.subject, "body": e.body,
+                      "status": e.status.value, "is_selected": e.is_selected,
+                      "missing_fields": e.missing_fields,
+                      "error_message": e.error_message,
+                      "sent_at": e.sent_at.isoformat() if e.sent_at else None} for e in rows], total)
 
     def queue_test_campaign_emails(self, campaign_id: int) -> int:
         with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id, status=EmailStatus.DRAFT).update({"status": EmailStatus.QUEUED})
+            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id,
+                                                           status=EmailStatus.DRAFT).update(
+                {"status": EmailStatus.QUEUED})
             s.commit()
             return updated
 
     def get_next_queued_test_email(self, campaign_id: int) -> dict | None:
         with self._Session() as s:
-            e = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id, status=EmailStatus.QUEUED).order_by(TestCampaignEmail.id).first()
+            e = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id, status=EmailStatus.QUEUED).order_by(
+                TestCampaignEmail.id).first()
             if not e: return None
-            return {"id": e.id, "campaign_id": e.test_campaign_id, "recipient_email": e.recipient_email, "subject": e.subject, "body": e.body}
+            return {"id": e.id, "campaign_id": e.test_campaign_id, "recipient_email": e.recipient_email,
+                    "subject": e.subject, "body": e.body}
 
     def update_test_email(self, email_id: int, new_subject: str, new_body: str) -> bool:
         with self._Session() as s:
@@ -1053,17 +1064,21 @@ class Database:
 
     def mark_test_email_sent(self, email_id: int) -> None:
         with self._Session() as s:
-            s.query(TestCampaignEmail).filter_by(id=email_id).update({"status": EmailStatus.SENT, "sent_at": datetime.datetime.utcnow()})
+            s.query(TestCampaignEmail).filter_by(id=email_id).update(
+                {"status": EmailStatus.SENT, "sent_at": datetime.datetime.utcnow()})
             s.commit()
 
     def mark_test_email_failed(self, email_id: int, error_message: str) -> None:
         with self._Session() as s:
-            s.query(TestCampaignEmail).filter_by(id=email_id).update({"status": EmailStatus.FAILED, "error_message": error_message})
+            s.query(TestCampaignEmail).filter_by(id=email_id).update(
+                {"status": EmailStatus.FAILED, "error_message": error_message})
             s.commit()
 
     def cancel_remaining_queued_test(self, campaign_id: int) -> int:
         with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id, status=EmailStatus.QUEUED).update({"status": EmailStatus.FAILED, "error_message": "Campaign cancelled"})
+            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id,
+                                                           status=EmailStatus.QUEUED).update(
+                {"status": EmailStatus.FAILED, "error_message": "Campaign cancelled"})
             s.commit()
             return updated
 
@@ -1131,9 +1146,11 @@ class Database:
             s.query(SMTPCredential).filter_by(id=credential_id).update({"cooldown_until": until})
             s.commit()
 
+
 # ---- Outreach & Campaign Management Models ----
 import enum
 from sqlalchemy import Boolean, Enum as SqlEnum
+
 
 class CampaignStatus(enum.Enum):
     RUNNING = "RUNNING"
@@ -1141,11 +1158,13 @@ class CampaignStatus(enum.Enum):
     CANCELLED = "CANCELLED"
     COMPLETED = "COMPLETED"
 
+
 class EmailStatus(enum.Enum):
     DRAFT = "DRAFT"
     QUEUED = "QUEUED"
     SENT = "SENT"
     FAILED = "FAILED"
+
 
 class Campaign(Base):
     __tablename__ = "campaigns"
@@ -1155,12 +1174,14 @@ class Campaign(Base):
     status = Column(SqlEnum(CampaignStatus), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+
 class EmailTemplate(Base):
     __tablename__ = "email_templates"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     subject = Column(String, nullable=False)
     raw_body = Column(Text, nullable=False)
+
 
 class SMTPCredential(Base):
     __tablename__ = "smtp_credentials"
@@ -1171,6 +1192,7 @@ class SMTPCredential(Base):
     password = Column(String, nullable=False)  # plain‑text password
     is_active = Column(Boolean, default=True, nullable=False)
     cooldown_until = Column(DateTime, nullable=True)
+
 
 class CampaignEmail(Base):
     __tablename__ = "campaign_emails"
@@ -1186,12 +1208,14 @@ class CampaignEmail(Base):
     error_message = Column(String, nullable=True)
     sent_at = Column(DateTime, nullable=True)
 
+
 class Blacklist(Base):
     __tablename__ = "blacklist"
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String, nullable=False, unique=True, index=True)
     domain = Column(String, nullable=False, index=True)
     reason = Column(String, nullable=True)
+
 
 class TestCampaign(Base):
     __tablename__ = "test_campaigns"
@@ -1201,6 +1225,7 @@ class TestCampaign(Base):
     test_credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=True)
     status = Column(SqlEnum(CampaignStatus), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 
 class TestCampaignEmail(Base):
     __tablename__ = "test_campaign_emails"

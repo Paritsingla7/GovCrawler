@@ -40,20 +40,26 @@ function restoreLeadsSelection() {
     try {
         const saved = JSON.parse(sessionStorage.getItem('leads_selection') || '[]');
         selectedLeadIds = new Set(saved);
-    } catch { selectedLeadIds = new Set(); }
+    } catch {
+        selectedLeadIds = new Set();
+    }
 }
 
 // ── Filter Persistence ────────────────────────────────────────────────────────
 function getLeadsFilters() {
-    try { return JSON.parse(sessionStorage.getItem('leads_filters') || '{}'); } catch { return {}; }
+    try {
+        return JSON.parse(sessionStorage.getItem('leads_filters') || '{}');
+    } catch {
+        return {};
+    }
 }
 
 function saveLeadsFilters() {
     sessionStorage.setItem('leads_filters', JSON.stringify({
-        job:          document.getElementById('leads-job-select')?.value || '',
-        cat:          document.getElementById('leads-cat-select')?.value || '',
-        state:        document.getElementById('leads-state-select')?.value || '',
-        search:       document.getElementById('leads-search-input')?.value || '',
+        job: document.getElementById('leads-job-select')?.value || '',
+        cat: document.getElementById('leads-cat-select')?.value || '',
+        state: document.getElementById('leads-state-select')?.value || '',
+        search: document.getElementById('leads-search-input')?.value || '',
         completeOnly: document.getElementById('leads-complete-only')?.checked || false,
     }));
 }
@@ -87,7 +93,8 @@ async function loadLeadsFilters() {
                 if (String(j.id) === urlJobId) o.selected = true;
                 jobSel.appendChild(o);
             });
-        } catch (e) {}
+        } catch (e) {
+        }
 
         // URL param takes priority over session-saved filter
         if (!urlJobId && saved.job) jobSel.value = saved.job;
@@ -225,7 +232,10 @@ function renderLeads(leads, total) {
         const checked = selectedLeadIds.has(l.id);
         const missing = WARN_FIELDS.filter(f => !l[f] || !String(l[f]).trim());
         let domainUrl = null;
-        try { if (l.source_url) domainUrl = new URL(l.source_url).origin; } catch(_) {}
+        try {
+            if (l.source_url) domainUrl = new URL(l.source_url).origin;
+        } catch (_) {
+        }
         const tr = document.createElement('tr');
         if (missing.length) tr.classList.add('row-warn');
         tr.innerHTML = [
@@ -237,16 +247,16 @@ function renderLeads(leads, total) {
             `<td>
                 <a href="mailto:${esc(l.email)}" style="display:block;font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>
                 ${l.phone
-                    ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">📞 ${esc(l.phone)}</a>`
-                    : ''}
+                ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">📞 ${esc(l.phone)}</a>`
+                : ''}
             </td>`,
             `<td class="lead-person-cell">
-                <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name||'')}" value="${esc(l.person_name||'')}" placeholder="Name" autocomplete="off" spellcheck="false">
-                <input type="text" class="lead-cell-input lead-sub-input" data-lead-id="${l.id}" data-field="designation" data-orig="${esc(l.designation||'')}" value="${esc(l.designation||'')}" placeholder="Designation" autocomplete="off" spellcheck="false">
+                <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name || '')}" value="${esc(l.person_name || '')}" placeholder="Name" autocomplete="off" spellcheck="false">
+                <input type="text" class="lead-cell-input lead-sub-input" data-lead-id="${l.id}" data-field="designation" data-orig="${esc(l.designation || '')}" value="${esc(l.designation || '')}" placeholder="Designation" autocomplete="off" spellcheck="false">
             </td>`,
-            editableCell(l.id, 'department', l.department, {'font-size':'12px','color':'var(--muted)'}),
+            editableCell(l.id, 'department', l.department, {'font-size': '12px', 'color': 'var(--muted)'}),
             `<td style="text-align:center">
-                <input type="text" class="lead-cell-input lead-primary-input" style="font-size:12px;color:var(--muted);text-align:center" data-lead-id="${l.id}" data-field="domain_state" data-orig="${esc(l.domain_state||'')}" value="${esc(l.domain_state||'')}" placeholder="State" autocomplete="off" spellcheck="false">
+                <input type="text" class="lead-cell-input lead-primary-input" style="font-size:12px;color:var(--muted);text-align:center" data-lead-id="${l.id}" data-field="domain_state" data-orig="${esc(l.domain_state || '')}" value="${esc(l.domain_state || '')}" placeholder="State" autocomplete="off" spellcheck="false">
                 <div style="margin-top:3px"><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></div>
             </td>`,
             `<td>${domainUrl
@@ -269,7 +279,7 @@ async function saveLead(input) {
     if (newVal === input.getAttribute('data-orig')) return;
 
     const leadId = input.getAttribute('data-lead-id');
-    const field  = input.getAttribute('data-field');
+    const field = input.getAttribute('data-field');
 
     input.classList.add('saving');
     input.disabled = true;
@@ -282,14 +292,17 @@ async function saveLead(input) {
         });
         if (!res.ok) {
             let detail = 'Save failed';
-            try { detail = (await res.json()).detail || detail; } catch(_) {}
+            try {
+                detail = (await res.json()).detail || detail;
+            } catch (_) {
+            }
             throw new Error(detail);
         }
         input.setAttribute('data-orig', newVal);
         input.classList.remove('saving');
         input.classList.add('saved');
         setTimeout(() => input.classList.remove('saved'), 1500);
-    } catch(err) {
+    } catch (err) {
         console.error('saveLead:', err);
         input.value = input.getAttribute('data-orig');
         input.classList.remove('saving');
@@ -304,13 +317,16 @@ function setupLeadCellListeners() {
     const tbody = document.getElementById('leads-tbody');
     if (!tbody) return;
 
-    tbody.addEventListener('blur', function(e) {
+    tbody.addEventListener('blur', function (e) {
         if (e.target.classList.contains('lead-cell-input')) saveLead(e.target);
     }, true);
 
-    tbody.addEventListener('keydown', function(e) {
+    tbody.addEventListener('keydown', function (e) {
         if (!e.target.classList.contains('lead-cell-input')) return;
-        if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+        }
         if (e.key === 'Escape') {
             e.target.value = e.target.getAttribute('data-orig');
             e.target.blur();
@@ -460,12 +476,12 @@ async function confirmExport() {
 async function openCampaignModal() {
     document.getElementById('camp-leads-count').textContent = selectedLeadIds.size;
     document.getElementById('camp-name').value = '';
-    
+
     // Load templates
     try {
         const res = await fetch('/api/templates');
         const templates = await res.json();
-        
+
         const select = document.getElementById('camp-template');
         select.innerHTML = '<option value="">-- Choose Template --</option>';
         templates.forEach(t => {
@@ -477,7 +493,7 @@ async function openCampaignModal() {
     } catch (e) {
         console.error("Failed to load templates", e);
     }
-    
+
     document.getElementById('modal-create-campaign').style.display = 'flex';
 }
 
@@ -488,34 +504,34 @@ function closeCampaignModal() {
 async function submitCampaign() {
     const name = document.getElementById('camp-name').value.trim();
     const templateId = parseInt(document.getElementById('camp-template').value);
-    
+
     if (!name || !templateId) {
         alert("Please provide a name and select a template.");
         return;
     }
-    
+
     if (selectedLeadIds.size === 0) {
         alert("No leads selected.");
         return;
     }
-    
+
     const btn = document.getElementById('btn-camp-submit');
     btn.disabled = true;
     btn.textContent = "Creating...";
-    
+
     try {
         const payload = {
             name: name,
             template_id: templateId,
             lead_ids: Array.from(selectedLeadIds)
         };
-        
+
         const res = await fetch('/api/campaigns', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
+
         if (res.ok) {
             const data = await res.json();
             // Redirect to campaigns page

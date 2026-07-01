@@ -1,6 +1,7 @@
 # Directory Structure
 
-Annotated file tree for the GovCrawler project. Runtime artefacts (`__pycache__`, `playwright_browsers/`, `portal/data/`) and IDE folders are omitted.
+Annotated file tree for the GovCrawler project. Runtime artefacts (`__pycache__`, `playwright_browsers/`,
+`portal/data/`) and IDE folders are omitted.
 
 ```
 GovCrawler/
@@ -166,27 +167,27 @@ GovCrawler/
 
 ## Notable Files
 
-| File | Size | Notes |
-|---|---|---|
-| `portal/db/models.py` | ~1200 lines | All ORM models + full Database wrapper class |
-| `portal/crawler/engine.py` | ~570 lines | Core async crawler implementation |
-| `portal/api/server.py` | ~553 lines | App factory + all core API routes inline |
-| `portal/api/campaigns.py` | ~570 lines | Campaign creation, staging, dispatch routes |
-| `portal/api/dispatcher.py` | ~297 lines | SMTP dispatch loop for both real + test campaigns |
-| `portal/scraper/importer.py` | ~277 lines | JSON and live-API import |
-| `portal/crawler/parser.py` | ~241 lines | Two-pass email + person extraction |
-| `GovScraper/api/api.py` | ~111 lines | Three HTTP functions for india.gov.in API |
-| `run.py` | ~197 lines | Tkinter GUI + INSTALL_BROWSERS sentinel |
+| File                         | Size        | Notes                                             |
+|------------------------------|-------------|---------------------------------------------------|
+| `portal/db/models.py`        | ~1200 lines | All ORM models + full Database wrapper class      |
+| `portal/crawler/engine.py`   | ~570 lines  | Core async crawler implementation                 |
+| `portal/api/server.py`       | ~553 lines  | App factory + all core API routes inline          |
+| `portal/api/campaigns.py`    | ~570 lines  | Campaign creation, staging, dispatch routes       |
+| `portal/api/dispatcher.py`   | ~297 lines  | SMTP dispatch loop for both real + test campaigns |
+| `portal/scraper/importer.py` | ~277 lines  | JSON and live-API import                          |
+| `portal/crawler/parser.py`   | ~241 lines  | Two-pass email + person extraction                |
+| `GovScraper/api/api.py`      | ~111 lines  | Three HTTP functions for india.gov.in API         |
+| `run.py`                     | ~197 lines  | Tkinter GUI + INSTALL_BROWSERS sentinel           |
 
 ## Generated / Ignored Paths
 
-| Path | Why excluded from git |
-|---|---|
+| Path                        | Why excluded from git           |
+|-----------------------------|---------------------------------|
 | `portal/data/govcrawler.db` | Runtime database, user-specific |
-| `portal/data/portal.log` | Runtime log output |
-| `portal/config.yaml` | User-edited live config |
-| `playwright_browsers/` | ~600 MB Chromium binary |
-| `dist/` | PyInstaller build output |
-| `build/` | PyInstaller build temp |
-| `**/__pycache__/` | Python bytecode |
-| `venv/` | Virtual environment |
+| `portal/data/portal.log`    | Runtime log output              |
+| `portal/config.yaml`        | User-edited live config         |
+| `playwright_browsers/`      | ~600 MB Chromium binary         |
+| `dist/`                     | PyInstaller build output        |
+| `build/`                    | PyInstaller build temp          |
+| `**/__pycache__/`           | Python bytecode                 |
+| `venv/`                     | Virtual environment             |

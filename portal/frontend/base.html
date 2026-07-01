@@ -19,7 +19,8 @@
     </div>
     <div class="header-right">
         {% block header_actions %}{% endblock %}
-        <a class="btn-icon" href="/user-guide" title="User Guide" style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);">?</a>
+        <a class="btn-icon" href="/user-guide" style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"
+           title="User Guide">?</a>
     </div>
 </header>
 
@@ -300,8 +301,20 @@
 <script src="/static/js/base.js"></script>
 {% block extra_scripts %}{% endblock %}
 <script>
-    {% block init_js %}{% endblock %}
-    {% block extra_js %}{% endblock %}
+    {%
+        block
+        init_js %
+    }
+    {%
+        endblock %
+    }
+    {%
+        block
+        extra_js %
+    }
+    {%
+        endblock %
+    }
 </script>
 </body>
 

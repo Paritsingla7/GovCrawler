@@ -8,22 +8,24 @@ All API responses are JSON unless noted. Pagination parameters use `page` (1-ind
 
 ## Frontend Pages
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/` | Domains browser + crawl job creation |
-| GET | `/leads` | Lead table with edit and export |
-| GET | `/campaigns` | Campaign management |
-| GET | `/settings` | Crawler and extraction configuration |
-| GET | `/test-campaign` | Test campaign creation |
+| Method | Path             | Description                          |
+|--------|------------------|--------------------------------------|
+| GET    | `/`              | Domains browser + crawl job creation |
+| GET    | `/leads`         | Lead table with edit and export      |
+| GET    | `/campaigns`     | Campaign management                  |
+| GET    | `/settings`      | Crawler and extraction configuration |
+| GET    | `/test-campaign` | Test campaign creation               |
 
 ---
 
 ## Metadata
 
 ### `GET /api/categories`
+
 Returns all domain categories with domain counts.
 
 **Response:**
+
 ```json
 [
   { "code": "ug", "title": "Union Government", "count": 1247 },
@@ -34,6 +36,7 @@ Returns all domain categories with domain counts.
 ---
 
 ### `GET /api/states`
+
 Returns distinct states. Optionally filtered by category.
 
 **Query params:** `category` (optional)
@@ -43,11 +46,13 @@ Returns distinct states. Optionally filtered by category.
 ---
 
 ### `GET /api/org-types`
+
 Returns organization types with counts. Optionally filtered.
 
 **Query params:** `category` (optional), `state` (optional)
 
 **Response:**
+
 ```json
 [
   { "code": "dept", "title": "Departments", "count": 320 }
@@ -59,6 +64,7 @@ Returns organization types with counts. Optionally filtered.
 ## Domains
 
 ### `GET /api/domains`
+
 Paginated domain list with filters.
 
 **Query params:**
@@ -72,6 +78,7 @@ Paginated domain list with filters.
 | `limit` | int | 50 | Max 200 |
 
 **Response:**
+
 ```json
 {
   "domains": [...],
@@ -87,6 +94,7 @@ Each domain object: `id, category_code, category_title, state, org_type, org_typ
 ---
 
 ### `GET /api/domains/ids`
+
 Returns all matching domain IDs (used by "Select All" in the UI).
 
 **Query params:** same filters as `GET /api/domains` (no pagination)
@@ -98,11 +106,13 @@ Returns all matching domain IDs (used by "Select All" in the UI).
 ## Configuration
 
 ### `GET /api/config`
+
 Returns the current crawler and extraction settings as a flat object suitable for the settings form.
 
 ---
 
 ### `POST /api/config`
+
 Saves updated settings to `portal/config.yaml`. New crawler settings take effect on the next job.
 
 **Body:** flat JSON object with any subset of config fields (see [configuration.md](configuration.md) for keys).
@@ -114,6 +124,7 @@ Saves updated settings to `portal/config.yaml`. New crawler settings take effect
 ## Domain Import
 
 ### `POST /api/import/json`
+
 Upload a `gov_domains.json` file. Zero API calls to india.gov.in. Runs in background.
 
 **Body:** `multipart/form-data` with field `file` (JSON file).
@@ -123,6 +134,7 @@ Upload a `gov_domains.json` file. Zero API calls to india.gov.in. Runs in backgr
 ---
 
 ### `POST /api/import`
+
 Trigger a live refresh from the india.gov.in Web Directory API. Use only to update existing data.
 
 **Response:** `{ "message": "API import started" }`
@@ -130,9 +142,11 @@ Trigger a live refresh from the india.gov.in Web Directory API. Use only to upda
 ---
 
 ### `GET /api/import/status`
+
 Poll import progress.
 
 **Response:**
+
 ```json
 {
   "running": true,
@@ -150,9 +164,11 @@ Poll import progress.
 ## Crawl Jobs
 
 ### `POST /api/jobs`
+
 Create and immediately start a crawl job.
 
 **Body:**
+
 ```json
 {
   "domain_ids": [1, 2, 3],
@@ -166,6 +182,7 @@ Create and immediately start a crawl job.
 ---
 
 ### `GET /api/jobs`
+
 List recent crawl jobs.
 
 **Query params:** `limit` (default 20, max 100)
@@ -175,9 +192,11 @@ List recent crawl jobs.
 ---
 
 ### `GET /api/jobs/{job_id}`
+
 Get a single job's status and metrics.
 
 **Response:**
+
 ```json
 {
   "id": 42,
@@ -201,6 +220,7 @@ Get a single job's status and metrics.
 ---
 
 ### `GET /api/jobs/{job_id}/seeds`
+
 Returns the list of seed domain records for a job.
 
 **Response:** Array of domain objects.
@@ -208,6 +228,7 @@ Returns the list of seed domain records for a job.
 ---
 
 ### `POST /api/jobs/{job_id}/cancel`
+
 Cancel a running job. Marks status as `cancelled`.
 
 **Response:** `{ "message": "Job cancelled" }`
@@ -217,6 +238,7 @@ Cancel a running job. Marks status as `cancelled`.
 ## Leads
 
 ### `GET /api/leads`
+
 Paginated leads with filters.
 
 **Query params:**
@@ -231,6 +253,7 @@ Paginated leads with filters.
 | `limit` | int | 100 | Max 500 |
 
 **Response:**
+
 ```json
 {
   "leads": [...],
@@ -240,11 +263,13 @@ Paginated leads with filters.
 }
 ```
 
-Each lead: `id, email, person_name, designation, department, source_url, source_title, context_snippet, domain_title, category_code, domain_state, domain_org_type, captured_at`
+Each lead:
+`id, email, person_name, designation, department, source_url, source_title, context_snippet, domain_title, category_code, domain_state, domain_org_type, captured_at`
 
 ---
 
 ### `GET /api/leads/ids`
+
 All matching lead IDs (for bulk operations). Same filters as `GET /api/leads`.
 
 **Response:** `{ "ids": [...], "total": 500 }`
@@ -252,6 +277,7 @@ All matching lead IDs (for bulk operations). Same filters as `GET /api/leads`.
 ---
 
 ### `GET /api/leads/categories`
+
 Lead counts grouped by category.
 
 **Query params:** `job_id` (optional)
@@ -259,6 +285,7 @@ Lead counts grouped by category.
 ---
 
 ### `GET /api/leads/states`
+
 Distinct states with leads.
 
 **Query params:** `job_id` (optional), `category` (optional)
@@ -266,9 +293,11 @@ Distinct states with leads.
 ---
 
 ### `POST /api/leads/export`
+
 Download a CSV file of selected leads.
 
 **Body:**
+
 ```json
 {
   "job_id": 42,
@@ -280,18 +309,22 @@ Download a CSV file of selected leads.
   "fields": ["email", "person_name", "designation", "source_url"]
 }
 ```
+
 `lead_ids` and `fields` are optional. `email` is always included. If `fields` is omitted, all fields are exported.
 
-**Available fields:** `email, person_name, designation, department, domain_title, domain_state, domain_org_type, category_title, source_url, source_title, context_snippet, captured_at`
+**Available fields:**
+`email, person_name, designation, department, domain_title, domain_state, domain_org_type, category_title, source_url, source_title, context_snippet, captured_at`
 
 **Response:** `text/csv` download.
 
 ---
 
 ### `PUT /api/leads/{lead_id}`
+
 Update editable fields of a lead.
 
 **Body:**
+
 ```json
 {
   "person_name": "Dr. Rajesh Kumar",
@@ -300,6 +333,7 @@ Update editable fields of a lead.
   "domain_state": "Delhi"
 }
 ```
+
 All fields are optional. Blank strings are stored as `null`.
 
 ---
@@ -307,6 +341,7 @@ All fields are optional. Blank strings are stored as `null`.
 ## System
 
 ### `GET /api/logs`
+
 Returns the last 1000 lines of `portal/data/portal.log`.
 
 **Response:** `{ "logs": "..." }`
@@ -314,6 +349,7 @@ Returns the last 1000 lines of `portal/data/portal.log`.
 ---
 
 ### `DELETE /api/visited-urls`
+
 Clears the `visited_urls` table. Useful before a fresh full crawl.
 
 **Response:** `{ "message": "Visited URLs cleared." }`
@@ -323,11 +359,13 @@ Clears the `visited_urls` table. Useful before a fresh full crawl.
 ## Email Templates
 
 ### `GET /api/templates`
+
 List all templates.
 
 ---
 
 ### `GET /api/templates/{template_id}`
+
 Get a single template.
 
 **Response:** `{ "id", "name", "subject", "raw_body" }`
@@ -335,6 +373,7 @@ Get a single template.
 ---
 
 ### `POST /api/templates`
+
 Create a template. Subject and body are validated for Jinja2 syntax.
 
 **Body:** `{ "name": "...", "subject": "Dear {{ name }}", "raw_body": "..." }`
@@ -344,6 +383,7 @@ Create a template. Subject and body are validated for Jinja2 syntax.
 ---
 
 ### `PUT /api/templates/{template_id}`
+
 Update a template. Any field can be updated; Jinja2 fields are re-validated.
 
 **Body:** `{ "name": null, "subject": "...", "raw_body": "..." }` (all optional)
@@ -351,6 +391,7 @@ Update a template. Any field can be updated; Jinja2 fields are re-validated.
 ---
 
 ### `DELETE /api/templates/{template_id}`
+
 Delete a template.
 
 ---
@@ -358,6 +399,7 @@ Delete a template.
 ## Email Blacklist
 
 ### `GET /api/blacklist`
+
 Paginated blacklist.
 
 **Query params:** `page`, `limit` (max 200)
@@ -365,6 +407,7 @@ Paginated blacklist.
 ---
 
 ### `POST /api/blacklist`
+
 Manually blacklist an email. Domain is auto-extracted from the email address.
 
 **Body:** `{ "email": "foo@example.gov.in", "reason": "opt-out" }`
@@ -374,6 +417,7 @@ Manually blacklist an email. Domain is auto-extracted from the email address.
 ---
 
 ### `DELETE /api/blacklist/{blacklist_id}`
+
 Remove a blacklist entry.
 
 ---
@@ -381,14 +425,17 @@ Remove a blacklist entry.
 ## SMTP Credentials
 
 ### `GET /api/credentials`
+
 List all credentials. Passwords are masked (`••••••••`).
 
 ---
 
 ### `POST /api/credentials`
+
 Add a new SMTP credential.
 
 **Body:**
+
 ```json
 {
   "host": "smtp.gmail.com",
@@ -397,24 +444,29 @@ Add a new SMTP credential.
   "password": "app-password"
 }
 ```
+
 **Supported ports:** 465 (TLS), 587 (STARTTLS)
 
 ---
 
 ### `PUT /api/credentials/{credential_id}`
+
 Update a credential. All fields optional.
 
 ---
 
 ### `DELETE /api/credentials/{credential_id}`
+
 Delete a credential.
 
 ---
 
 ### `POST /api/credentials/{credential_id}/test`
+
 Test SMTP connection and authentication. Re-activates credential on success.
 
 **Response:**
+
 ```json
 { "success": true, "message": "Connection successful" }
 { "success": false, "error": "Authentication failed: ..." }
@@ -425,9 +477,12 @@ Test SMTP connection and authentication. Re-activates credential on success.
 ## Campaigns
 
 ### `POST /api/campaigns`
-Generate draft emails for a new campaign. Blacklisted leads are skipped. Missing template variables (`name`, `designation`) are detected and the email is automatically deselected.
+
+Generate draft emails for a new campaign. Blacklisted leads are skipped. Missing template variables (`name`,
+`designation`) are detected and the email is automatically deselected.
 
 **Body:**
+
 ```json
 {
   "name": "Q2 Outreach",
@@ -437,6 +492,7 @@ Generate draft emails for a new campaign. Blacklisted leads are skipped. Missing
 ```
 
 **Response:**
+
 ```json
 {
   "campaign_id": 5,
@@ -449,6 +505,7 @@ Generate draft emails for a new campaign. Blacklisted leads are skipped. Missing
 ---
 
 ### `GET /api/campaigns`
+
 Paginated campaign list (optionally including test campaigns).
 
 **Query params:** `page`, `limit`, `include_test` (default false)
@@ -458,11 +515,13 @@ Each campaign includes an embedded `stats` object.
 ---
 
 ### `GET /api/campaigns/{campaign_id}`
+
 Campaign detail including live stats.
 
 ---
 
 ### `PATCH /api/campaigns/{campaign_id}`
+
 Update campaign status.
 
 **Body:** `{ "status": "PAUSED" }` — one of `RUNNING, PAUSED, CANCELLED, COMPLETED`
@@ -470,15 +529,18 @@ Update campaign status.
 ---
 
 ### `GET /api/campaigns/{campaign_id}/stats`
+
 Live email counts by status (for UI polling every 3 s).
 
-**Response:** `{ "draft": 8, "queued": 2, "sent": 5, "failed": 1, "skipped": 2, "total": 18, "campaign_status": "RUNNING" }`
+**Response:**
+`{ "draft": 8, "queued": 2, "sent": 5, "failed": 1, "skipped": 2, "total": 18, "campaign_status": "RUNNING" }`
 
 `skipped` = deselected DRAFT emails; `draft` = selected drafts only.
 
 ---
 
 ### `GET /api/campaigns/{campaign_id}/emails`
+
 Paginated list of staged emails.
 
 **Query params:** `status` (optional filter), `page`, `limit` (max 200)
@@ -486,6 +548,7 @@ Paginated list of staged emails.
 ---
 
 ### `PUT /api/campaigns/{campaign_id}/emails/{email_id}`
+
 Manually override subject and body of a DRAFT email.
 
 **Body:** `{ "subject": "...", "body": "..." }`
@@ -493,6 +556,7 @@ Manually override subject and body of a DRAFT email.
 ---
 
 ### `PATCH /api/campaigns/{campaign_id}/emails/{email_id}/selection`
+
 Select or deselect a DRAFT email for the next dispatch.
 
 **Body:** `{ "is_selected": false }`
@@ -500,11 +564,13 @@ Select or deselect a DRAFT email for the next dispatch.
 ---
 
 ### `DELETE /api/campaigns/{campaign_id}/emails/{email_id}`
+
 Permanently remove a DRAFT email from the campaign.
 
 ---
 
 ### `POST /api/campaigns/{campaign_id}/emails`
+
 Add more leads to an existing campaign (renders template for new lead_ids, skips duplicates and blacklisted).
 
 **Body:** `{ "lead_ids": [20, 21] }`
@@ -512,6 +578,7 @@ Add more leads to an existing campaign (renders template for new lead_ids, skips
 ---
 
 ### `POST /api/campaigns/{campaign_id}/dispatch`
+
 Start the background SMTP dispatch worker for this campaign. Requires at least one active, non-cooling SMTP credential.
 
 **Response:** `{ "message": "Dispatch started" }`
@@ -522,19 +589,20 @@ Start the background SMTP dispatch worker for this campaign. Requires at least o
 
 Mirror structure of production campaigns but use dummy recipient data instead of real leads.
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/test-campaigns` | Create test campaign with dummy recipients |
-| POST | `/api/test-campaigns/{id}/dispatch` | Dispatch test emails |
-| GET | `/api/test-campaigns/{id}` | Campaign detail + stats |
-| GET | `/api/test-campaigns/{id}/stats` | Live stats |
-| GET | `/api/test-campaigns/{id}/emails` | Email list |
-| PUT | `/api/test-campaigns/{id}/emails/{eid}` | Edit subject/body |
-| PATCH | `/api/test-campaigns/{id}/emails/{eid}/selection` | Select/deselect |
-| DELETE | `/api/test-campaigns/{id}/emails/{eid}` | Remove draft |
-| PATCH | `/api/test-campaigns/{id}` | Update status |
+| Method | Path                                              | Description                                |
+|--------|---------------------------------------------------|--------------------------------------------|
+| POST   | `/api/test-campaigns`                             | Create test campaign with dummy recipients |
+| POST   | `/api/test-campaigns/{id}/dispatch`               | Dispatch test emails                       |
+| GET    | `/api/test-campaigns/{id}`                        | Campaign detail + stats                    |
+| GET    | `/api/test-campaigns/{id}/stats`                  | Live stats                                 |
+| GET    | `/api/test-campaigns/{id}/emails`                 | Email list                                 |
+| PUT    | `/api/test-campaigns/{id}/emails/{eid}`           | Edit subject/body                          |
+| PATCH  | `/api/test-campaigns/{id}/emails/{eid}/selection` | Select/deselect                            |
+| DELETE | `/api/test-campaigns/{id}/emails/{eid}`           | Remove draft                               |
+| PATCH  | `/api/test-campaigns/{id}`                        | Update status                              |
 
 **`POST /api/test-campaigns` body:**
+
 ```json
 {
   "name": "SMTP Test",
@@ -550,4 +618,5 @@ Mirror structure of production campaigns but use dummy recipient data instead of
   ]
 }
 ```
+
 `test_credential_id` is optional; falls back to round-robin over active credentials.

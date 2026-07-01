@@ -5,7 +5,7 @@ let editTemplateId = null;
 function switchTab(tabId) {
     document.querySelectorAll('.settings-nav li').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.settings-tab').forEach(el => el.style.display = 'none');
-    
+
     document.getElementById(`nav-${tabId}`).classList.add('active');
     document.getElementById(`tab-${tabId}`).style.display = 'block';
 }
@@ -16,15 +16,15 @@ async function loadCredentials() {
     try {
         const res = await fetch('/api/credentials');
         const creds = await res.json();
-        
+
         const tbody = document.getElementById('credentials-tbody');
         tbody.innerHTML = '';
-        
+
         if (creds.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No credentials configured.</td></tr>`;
             return;
         }
-        
+
         creds.forEach(c => {
             const status = c.is_active ? '<span style="color:var(--success)">Active</span>' : '<span style="color:var(--danger)">Disabled</span>';
             let cooldown = '—';
@@ -34,7 +34,7 @@ async function loadCredentials() {
                     cooldown = `<span style="color:var(--warning)">Cooldown til ${cdDate.toLocaleTimeString()}</span>`;
                 }
             }
-            
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><input type="checkbox" class="cred-checkbox" value="${c.id}" onchange="updateBatchActionVisibility('cred-checkbox', 'batch-action-cred')"></td>
@@ -74,18 +74,18 @@ async function saveCredential() {
         username: document.getElementById('cred-user').value,
         password: document.getElementById('cred-pass').value
     };
-    
+
     try {
         const res = await fetch('/api/credentials', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
+
         if (res.ok) {
             const data = await res.json();
             const newId = data.id;
-            
+
             // Auto-test logic
             const saveBtn = document.querySelector('#modal-credential .btn-primary');
             let origText = "Save";
@@ -94,11 +94,11 @@ async function saveCredential() {
                 saveBtn.textContent = "Testing...";
                 saveBtn.disabled = true;
             }
-            
+
             try {
-                const testRes = await fetch(`/api/credentials/${newId}/test`, { method: 'POST' });
+                const testRes = await fetch(`/api/credentials/${newId}/test`, {method: 'POST'});
                 const testData = await testRes.json();
-                
+
                 if (testData.success) {
                     alert("✅ Credential saved and connection test successful!");
                 } else {
@@ -125,7 +125,7 @@ async function saveCredential() {
 
 async function deleteCredential(id) {
     if (!confirm("Delete this credential?")) return;
-    await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+    await fetch(`/api/credentials/${id}`, {method: 'DELETE'});
     loadCredentials();
 }
 
@@ -133,9 +133,9 @@ async function testCredential(id, btn) {
     const origText = btn.textContent;
     btn.textContent = "Testing...";
     btn.disabled = true;
-    
+
     try {
-        const res = await fetch(`/api/credentials/${id}/test`, { method: 'POST' });
+        const res = await fetch(`/api/credentials/${id}/test`, {method: 'POST'});
         const data = await res.json();
         if (data.success) {
             alert("✅ Connection successful!");
@@ -179,15 +179,15 @@ async function loadTemplates() {
     try {
         const res = await fetch('/api/templates');
         const templates = await res.json();
-        
+
         const tbody = document.getElementById('templates-tbody');
         tbody.innerHTML = '';
-        
+
         if (templates.length === 0) {
             tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No templates created.</td></tr>`;
             return;
         }
-        
+
         templates.forEach(t => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -227,11 +227,11 @@ function openTemplateModal() {
     document.getElementById('tpl-name').value = '';
     subj.value = '';
     body.value = '';
-    
+
     subj.onfocus = () => lastFocusedInput = subj;
     body.onfocus = () => lastFocusedInput = body;
     lastFocusedInput = body;
-    
+
     document.getElementById('modal-template').style.display = 'flex';
 }
 
@@ -251,11 +251,11 @@ async function editTemplate(id) {
         document.getElementById('tpl-name').value = tpl.name;
         subj.value = tpl.subject;
         body.value = tpl.raw_body;
-        
+
         subj.onfocus = () => lastFocusedInput = subj;
         body.onfocus = () => lastFocusedInput = body;
         lastFocusedInput = body;
-        
+
         document.getElementById('modal-template').style.display = 'flex';
     } catch (e) {
         console.error(e);
@@ -268,24 +268,24 @@ async function saveTemplate() {
         subject: document.getElementById('tpl-subject').value,
         raw_body: document.getElementById('tpl-body').value
     };
-    
+
     if (!payload.name) {
         const errDiv = document.getElementById('tpl-error');
         errDiv.textContent = "Template name cannot be empty.";
         errDiv.style.display = 'block';
         return;
     }
-    
+
     const method = editTemplateId ? 'PUT' : 'POST';
     const url = editTemplateId ? `/api/templates/${editTemplateId}` : '/api/templates';
-    
+
     try {
         const res = await fetch(url, {
             method: method,
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
+
         if (res.ok) {
             closeTemplateModal();
             loadTemplates();
@@ -302,7 +302,7 @@ async function saveTemplate() {
 
 async function deleteTemplate(id) {
     if (!confirm("Delete this template?")) return;
-    await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+    await fetch(`/api/templates/${id}`, {method: 'DELETE'});
     loadTemplates();
 }
 
@@ -312,15 +312,15 @@ async function loadBlacklist() {
     try {
         const res = await fetch('/api/blacklist');
         const data = await res.json();
-        
+
         const tbody = document.getElementById('blacklist-tbody');
         tbody.innerHTML = '';
-        
+
         if (data.entries.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Blacklist is empty.</td></tr>`;
             return;
         }
-        
+
         data.entries.forEach(b => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -355,14 +355,14 @@ async function saveBlacklist() {
         email: document.getElementById('blk-email').value,
         reason: document.getElementById('blk-reason').value || null
     };
-    
+
     try {
         const res = await fetch('/api/blacklist', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
+
         if (res.ok) {
             closeBlacklistModal();
             loadBlacklist();
@@ -379,7 +379,7 @@ async function saveBlacklist() {
 
 async function removeBlacklist(id) {
     if (!confirm("Unblock this email?")) return;
-    await fetch(`/api/blacklist/${id}`, { method: 'DELETE' });
+    await fetch(`/api/blacklist/${id}`, {method: 'DELETE'});
     loadBlacklist();
 }
 
@@ -388,18 +388,18 @@ async function removeBlacklist(id) {
 async function batchTestCredentials() {
     const ids = getSelectedIds('cred-checkbox');
     if (ids.length === 0) return;
-    
+
     const btns = document.querySelectorAll('.batch-action-cred');
     const btn = btns[0];
     const origText = btn.textContent;
     btn.textContent = "Testing...";
     btn.disabled = true;
-    
+
     let successes = 0;
     let fails = 0;
     for (const id of ids) {
         try {
-            const res = await fetch(`/api/credentials/${id}/test`, { method: 'POST' });
+            const res = await fetch(`/api/credentials/${id}/test`, {method: 'POST'});
             const data = await res.json();
             if (data.success) successes++;
             else fails++;
@@ -407,7 +407,7 @@ async function batchTestCredentials() {
             fails++;
         }
     }
-    
+
     btn.textContent = origText;
     btn.disabled = false;
     alert(`Batch Test Complete:\n✅ ${successes} Successful\n❌ ${fails} Failed`);
@@ -418,12 +418,12 @@ async function batchDeleteCredentials() {
     const ids = getSelectedIds('cred-checkbox');
     if (ids.length === 0) return;
     if (!confirm(`Delete ${ids.length} credentials?`)) return;
-    
+
     for (const id of ids) {
-        await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+        await fetch(`/api/credentials/${id}`, {method: 'DELETE'});
     }
     const selectAll = document.querySelector('input[onchange*="cred-checkbox"]');
-    if(selectAll) selectAll.checked = false;
+    if (selectAll) selectAll.checked = false;
     updateBatchActionVisibility('cred-checkbox', 'batch-action-cred');
     loadCredentials();
 }
@@ -432,12 +432,12 @@ async function batchDeleteTemplates() {
     const ids = getSelectedIds('tpl-checkbox');
     if (ids.length === 0) return;
     if (!confirm(`Delete ${ids.length} templates?`)) return;
-    
+
     for (const id of ids) {
-        await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+        await fetch(`/api/templates/${id}`, {method: 'DELETE'});
     }
     const selectAll = document.querySelector('input[onchange*="tpl-checkbox"]');
-    if(selectAll) selectAll.checked = false;
+    if (selectAll) selectAll.checked = false;
     updateBatchActionVisibility('tpl-checkbox', 'batch-action-tpl');
     loadTemplates();
 }
@@ -446,12 +446,12 @@ async function batchDeleteBlacklist() {
     const ids = getSelectedIds('blk-checkbox');
     if (ids.length === 0) return;
     if (!confirm(`Unblock ${ids.length} items?`)) return;
-    
+
     for (const id of ids) {
-        await fetch(`/api/blacklist/${id}`, { method: 'DELETE' });
+        await fetch(`/api/blacklist/${id}`, {method: 'DELETE'});
     }
     const selectAll = document.querySelector('input[onchange*="blk-checkbox"]');
-    if(selectAll) selectAll.checked = false;
+    if (selectAll) selectAll.checked = false;
     updateBatchActionVisibility('blk-checkbox', 'batch-action-blk');
     loadBlacklist();
 }

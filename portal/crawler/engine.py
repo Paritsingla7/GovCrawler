@@ -113,7 +113,7 @@ class CrawlerEngine:
         self._queue: asyncio.PriorityQueue[_QueueItem] = asyncio.PriorityQueue()
         self._visited: set[str] = set()
         self._domain_locks: dict[str, asyncio.Lock] = {}
-        self._domain_next: dict[str, float] = {}   # netloc → earliest next-request time
+        self._domain_next: dict[str, float] = {}  # netloc → earliest next-request time
         self._counter = 0
         self._skipped = 0
         self._session_visited_count = 0
@@ -293,6 +293,7 @@ class CrawlerEngine:
                     )
                 except Exception:
                     return None
+
             contexts = list(await asyncio.gather(
                 *[_new_ctx() for _ in range(workers)]))
         else:

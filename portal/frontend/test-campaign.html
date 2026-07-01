@@ -5,14 +5,58 @@
 {% block extra_head %}
 <link href="/static/css/settings.css" rel="stylesheet">
 <style>
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; margin-bottom: 4px; font-weight: 500; font-size: 13px; color: var(--text-muted); }
-.form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 14px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; max-width: 600px; margin: 0 auto; }
-.card-header { margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
-.card-header h2 { font-size: 18px; font-weight: 600; margin: 0; color: var(--text); }
-.checkbox-group { display: flex; align-items: center; gap: 8px; }
-.checkbox-group input { width: auto; }
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 500;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+    }
+
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .card-header {
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 16px;
+    }
+
+    .card-header h2 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+        color: var(--text);
+    }
+
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .checkbox-group input {
+        width: auto;
+    }
 </style>
 {% endblock %}
 
@@ -29,9 +73,9 @@
         <form id="testCampaignForm" onsubmit="submitTestCampaign(event)">
             <div class="form-group">
                 <label>Campaign Name</label>
-                <input type="text" id="test-name" required placeholder="e.g. Test Email 1">
+                <input id="test-name" placeholder="e.g. Test Email 1" required type="text">
             </div>
-            
+
             <div class="form-group">
                 <label>Select Template</label>
                 <select id="test-template" required>
@@ -40,7 +84,7 @@
             </div>
 
             <div class="form-group checkbox-group">
-                <input type="checkbox" id="test-round-robin" checked onchange="toggleCredentialSelect()">
+                <input checked id="test-round-robin" onchange="toggleCredentialSelect()" type="checkbox">
                 <label for="test-round-robin" style="margin: 0;">Use Round Robin (All active credentials)</label>
             </div>
 
@@ -55,35 +99,38 @@
             <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 16px;">Dummy Lead Details</h3>
 
             <div id="dummy-leads-container">
-                <div class="dummy-lead-entry" style="border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <div class="dummy-lead-entry"
+                     style="border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
                     <h4 style="margin-top:0; margin-bottom: 12px; font-size: 14px; font-weight: 600;">Lead 1</h4>
                     <div class="form-group">
                         <label>Name</label>
-                        <input type="text" class="test-lead-name" required placeholder="John Doe">
+                        <input class="test-lead-name" placeholder="John Doe" required type="text">
                     </div>
 
                     <div class="form-group">
                         <label>Designation</label>
-                        <input type="text" class="test-lead-designation" placeholder="Director">
+                        <input class="test-lead-designation" placeholder="Director" type="text">
                     </div>
-                    
+
                     <div class="form-group">
                         <label>Department</label>
-                        <input type="text" class="test-lead-department" placeholder="IT Department">
+                        <input class="test-lead-department" placeholder="IT Department" type="text">
                     </div>
 
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>Email Address</label>
-                        <input type="email" class="test-lead-email" required placeholder="john@example.com">
+                        <input class="test-lead-email" placeholder="john@example.com" required type="email">
                     </div>
                 </div>
             </div>
 
-            <button type="button" class="btn-secondary btn-sm" onclick="addDummyLead()">+ Add Another Lead</button>
+            <button class="btn-secondary btn-sm" onclick="addDummyLead()" type="button">+ Add Another Lead</button>
 
             <div style="margin-top: 24px; text-align: right;">
-                <button type="button" class="btn-secondary" onclick="window.location.href='/settings'">Cancel</button>
-                <button type="submit" class="btn-primary" id="btn-run-test" style="margin-left: 8px;">Create & Dispatch Test</button>
+                <button class="btn-secondary" onclick="window.location.href='/settings'" type="button">Cancel</button>
+                <button class="btn-primary" id="btn-run-test" style="margin-left: 8px;" type="submit">Create & Dispatch
+                    Test
+                </button>
             </div>
         </form>
     </div>

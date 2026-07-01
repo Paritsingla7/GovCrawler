@@ -43,11 +43,17 @@
                        type="text">
             </div>
             <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:4px;">
-                <input id="leads-complete-only" type="checkbox" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);">
-                <label for="leads-complete-only" style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Complete data only</label>
+                <input id="leads-complete-only" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                       type="checkbox">
+                <label for="leads-complete-only"
+                       style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Complete
+                    data only</label>
             </div>
             <div id="leads-count-label" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
-            <button onclick="clearLeadsFilters()" style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:4px;">Clear Filters</button>
+            <button onclick="clearLeadsFilters()"
+                    style="background:none;border:none;padding:0;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-top:4px;">
+                Clear Filters
+            </button>
         </div>
     </aside>
 
@@ -66,8 +72,12 @@
             <div style="margin-left:16px; display:flex; align-items:center; gap: 12px;">
                 <span id="sel-leads-count-label" style="font-size:12px; font-weight:bold; display:none;"><span
                         id="sel-leads-count">0</span> selected</span>
-                <button class="btn-primary btn-sm" id="btn-create-campaign" onclick="openCampaignModal()" style="display:none;">+ Create Campaign</button>
-                <button class="btn-secondary btn-sm" id="btn-add-to-campaign" onclick="openAddToCampaignModal()" style="display:none;">+ Add to Campaign</button>
+                <button class="btn-primary btn-sm" id="btn-create-campaign" onclick="openCampaignModal()"
+                        style="display:none;">+ Create Campaign
+                </button>
+                <button class="btn-secondary btn-sm" id="btn-add-to-campaign" onclick="openAddToCampaignModal()"
+                        style="display:none;">+ Add to Campaign
+                </button>
             </div>
         </div>
 
@@ -105,21 +115,30 @@
             Select the fields to include in the export.
         </p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;">
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="email" checked disabled> Email <span style="font-size:10px;color:var(--muted)">(required)</span></label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="person_name" checked> Name</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="designation" checked> Designation</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="department" checked> Department</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_title" checked> Domain / Org</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_state" checked> State</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="domain_org_type"> Org Type</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="category_title" checked> Category</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="source_url"> Source URL</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="source_title"> Page Title</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="context_snippet"> Context Snippet</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="captured_at"> Captured At</label>
-            <label class="export-field-row"><input type="checkbox" name="export-field" value="depth"> Crawl Depth</label>
+            <label class="export-field-row"><input checked disabled name="export-field" type="checkbox" value="email">
+                Email <span style="font-size:10px;color:var(--muted)">(required)</span></label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="person_name"> Name</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="designation">
+                Designation</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="department">
+                Department</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="domain_title">
+                Domain / Org</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="domain_state">
+                State</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="domain_org_type"> Org Type</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="category_title">
+                Category</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="source_url"> Source
+                URL</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="source_title"> Page Title</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="context_snippet"> Context
+                Snippet</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="captured_at"> Captured At</label>
+            <label class="export-field-row"><input name="export-field" type="checkbox" value="depth"> Crawl
+                Depth</label>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:4px;" id="export-scope-label"></p>
+        <p id="export-scope-label" style="font-size:12px;color:var(--muted);margin-bottom:4px;"></p>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
             <button class="btn-primary" id="btn-export-confirm" onclick="confirmExport()">⬇ Export CSV</button>
@@ -134,19 +153,19 @@
         <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
             Creating a campaign will generate email drafts for <strong id="camp-leads-count">0</strong> selected leads.
         </p>
-        
+
         <div class="form-group">
             <label>Campaign Name</label>
-            <input type="text" id="camp-name" placeholder="e.g. Follow-up Batch 1">
+            <input id="camp-name" placeholder="e.g. Follow-up Batch 1" type="text">
         </div>
-        
+
         <div class="form-group">
             <label>Select Template</label>
             <select id="camp-template">
                 <option value="">Loading templates...</option>
             </select>
         </div>
-        
+
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeCampaignModal()">Cancel</button>
             <button class="btn-primary" id="btn-camp-submit" onclick="submitCampaign()">Generate Drafts</button>

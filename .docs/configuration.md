@@ -1,10 +1,13 @@
 # Configuration Reference
 
-Config lives in `portal/config.yaml` (live, user-editable) and `portal/default_config.yaml` (shipped defaults, read-only in the compiled `.exe`).
+Config lives in `portal/config.yaml` (live, user-editable) and `portal/default_config.yaml` (shipped defaults, read-only
+in the compiled `.exe`).
 
-On first run, `default_config.yaml` is copied to `config.yaml` if it does not exist. Changes to `config.yaml` are picked up by the Settings page in the UI (`POST /api/config`) or by restarting the server.
+On first run, `default_config.yaml` is copied to `config.yaml` if it does not exist. Changes to `config.yaml` are picked
+up by the Settings page in the UI (`POST /api/config`) or by restarting the server.
 
-> **Crawler settings** (workers, depth, timeouts, keywords) take effect on the **next** job created after saving. In-flight jobs continue with their original settings.
+> **Crawler settings** (workers, depth, timeouts, keywords) take effect on the **next** job created after saving.
+> In-flight jobs continue with their original settings.
 
 ---
 
@@ -192,30 +195,43 @@ extraction:
 ## Key Decisions and Trade-offs
 
 ### `workers`
-Higher values increase throughput but also server load on crawled sites. 50 is a good default for a local machine. Reduce to 10–20 for slow machines or rate-sensitive targets.
+
+Higher values increase throughput but also server load on crawled sites. 50 is a good default for a local machine.
+Reduce to 10–20 for slow machines or rate-sensitive targets.
 
 ### `max_depth`
-Depth 0 = only the seed URL (fastest, but may miss contact pages). Depth 3 = enough to reach most `/contact`, `/about`, `/staff` pages two hops from the home page. Deeper crawls grow exponentially in URL count.
+
+Depth 0 = only the seed URL (fastest, but may miss contact pages). Depth 3 = enough to reach most `/contact`, `/about`,
+`/staff` pages two hops from the home page. Deeper crawls grow exponentially in URL count.
 
 ### `recrawl_days`
-Set to 0 to always re-crawl everything (useful for development). A higher value is more conservative but prevents re-extracting the same leads.
+
+Set to 0 to always re-crawl everything (useful for development). A higher value is more conservative but prevents
+re-extracting the same leads.
 
 ### `httpx_first` + `playwright_fallback`
+
 - `httpx_first: true, playwright_fallback: false` — Fastest; skips all JS sites silently.
 - `httpx_first: true, playwright_fallback: true` — Recommended for production; handles JS after plain HTML fails.
 - `httpx_first: false` — Not recommended; launches a browser page for every URL.
 
 ### `max_links_per_page`
-Tighter limits reduce crawl scope and duration. Seed pages (depth 0) are typically the home page with many nav links, hence a higher limit of 100. By depth 2, you're usually on specific subpages with fewer relevant links.
+
+Tighter limits reduce crawl scope and duration. Seed pages (depth 0) are typically the home page with many nav links,
+hence a higher limit of 100. By depth 2, you're usually on specific subpages with fewer relevant links.
 
 ### `valid_suffixes` (extraction)
-Extend this list if you want to capture emails from `.edu.in`, `.ac.in`, `.res.in`, or other government-adjacent domains that are cross-linked from `.gov.in` pages.
+
+Extend this list if you want to capture emails from `.edu.in`, `.ac.in`, `.res.in`, or other government-adjacent domains
+that are cross-linked from `.gov.in` pages.
 
 ---
 
 ## Editing via the Settings UI
 
-The Settings page (`/settings`) renders all the above fields in an editable form. Multiline fields (keyword lists, extensions) are newline-separated text areas. On save, `POST /api/config` writes the new `config.yaml` and updates the in-memory `_config` dict. The browser reloads the form to confirm the saved values.
+The Settings page (`/settings`) renders all the above fields in an editable form. Multiline fields (keyword lists,
+extensions) are newline-separated text areas. On save, `POST /api/config` writes the new `config.yaml` and updates the
+in-memory `_config` dict. The browser reloads the form to confirm the saved values.
 
 ---
 
@@ -239,4 +255,5 @@ The Settings page (`/settings`) renders all the above fields in an editable form
    alembic upgrade head
    ```
 
-SQLAlchemy will use PostgreSQL instead of SQLite transparently. The WAL pragmas applied for SQLite are no-ops on PostgreSQL.
+SQLAlchemy will use PostgreSQL instead of SQLite transparently. The WAL pragmas applied for SQLite are no-ops on
+PostgreSQL.

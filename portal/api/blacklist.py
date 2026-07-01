@@ -23,11 +23,10 @@ class BlacklistAdd(BaseModel):
 # ── Route registration ────────────────────────────────────────────────────────
 
 def register_blacklist_routes(app: FastAPI, db: Database):
-
     @app.get("/api/blacklist")
     async def list_blacklist(
-        page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=200),
+            page: int = Query(1, ge=1),
+            limit: int = Query(50, ge=1, le=200),
     ):
         entries, total = db.list_blacklist(page=page, limit=limit)
         return {

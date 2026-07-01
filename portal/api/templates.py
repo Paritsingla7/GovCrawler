@@ -44,7 +44,6 @@ class TemplateUpdate(BaseModel):
 # ── Route registration ────────────────────────────────────────────────────────
 
 def register_template_routes(app: FastAPI, db: Database):
-
     @app.get("/api/templates")
     async def list_templates():
         return db.list_templates()

@@ -51,32 +51,38 @@ function restoreSelection() {
     try {
         const saved = JSON.parse(sessionStorage.getItem('dashboard_selection') || '[]');
         selectedIds = new Set(saved);
-    } catch { selectedIds = new Set(); }
+    } catch {
+        selectedIds = new Set();
+    }
 }
 
 // ── Filter Persistence ────────────────────────────────────────────────────────
 function getDashboardFilters() {
-    try { return JSON.parse(sessionStorage.getItem('dashboard_filters') || '{}'); } catch { return {}; }
+    try {
+        return JSON.parse(sessionStorage.getItem('dashboard_filters') || '{}');
+    } catch {
+        return {};
+    }
 }
 
 function saveDashboardFilters() {
     sessionStorage.setItem('dashboard_filters', JSON.stringify({
-        cat:     document.getElementById('cat-select')?.value || '',
-        state:   document.getElementById('state-select')?.value || '',
+        cat: document.getElementById('cat-select')?.value || '',
+        state: document.getElementById('state-select')?.value || '',
         orgType: document.getElementById('orgtype-select')?.value || '',
-        search:  document.getElementById('search-input')?.value || '',
+        search: document.getElementById('search-input')?.value || '',
     }));
 }
 
 function clearDashboardFilters() {
     sessionStorage.removeItem('dashboard_filters');
-    const catSel   = document.getElementById('cat-select');
+    const catSel = document.getElementById('cat-select');
     const stateSel = document.getElementById('state-select');
-    const orgSel   = document.getElementById('orgtype-select');
+    const orgSel = document.getElementById('orgtype-select');
     const searchEl = document.getElementById('search-input');
-    if (catSel)   catSel.value   = '';
+    if (catSel) catSel.value = '';
     if (stateSel) stateSel.value = '';
-    if (orgSel)   orgSel.value   = '';
+    if (orgSel) orgSel.value = '';
     if (searchEl) searchEl.value = '';
     currentPage = 1;
     reloadStateOptions('').then(() => reloadOrgTypeOptions('', '')).then(() => loadDomains());
@@ -592,14 +598,14 @@ async function exportDashboardLeads() {
         return;
     }
 
-    const body = { job_id: activeJobId };
-    
+    const body = {job_id: activeJobId};
+
     // Optional: show loading feedback on the button
     const btn1 = document.getElementById('btn-export-leads');
     const btn2 = document.getElementById('btn-export-leads-tab');
     const originalText1 = btn1 ? btn1.textContent : '';
     const originalText2 = btn2 ? btn2.textContent : '';
-    
+
     if (btn1) btn1.textContent = "Exporting...";
     if (btn2) btn2.textContent = "Exporting...";
 
@@ -609,7 +615,7 @@ async function exportDashboardLeads() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(body)
         });
-        
+
         if (!resp.ok) {
             if (resp.status === 404) {
                 alert("No leads found for this job.");
@@ -825,10 +831,16 @@ async function loadConfig() {
         Object.assign(c, await apiFetch('/api/config'));
     } catch {
     }
-    
-    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-    const setCheck = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
-    
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    };
+    const setCheck = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = val;
+    };
+
     setVal('cfg-workers', c.workers);
     setVal('cfg-max-depth', c.max_depth);
     setVal('cfg-recrawl-days', c.recrawl_days);
@@ -888,10 +900,16 @@ document.getElementById('cfg-max-depth')?.addEventListener('input', checkConfigW
 
 async function saveConfig() {
     const body = {};
-    
+
     // Explicit manual mappings to match server payload exactly
-    const addIf = (id, key, parser) => { const el = document.getElementById(id); if (el) body[key] = parser(el.value); };
-    const addCheckIf = (id, key) => { const el = document.getElementById(id); if (el) body[key] = el.checked; };
+    const addIf = (id, key, parser) => {
+        const el = document.getElementById(id);
+        if (el) body[key] = parser(el.value);
+    };
+    const addCheckIf = (id, key) => {
+        const el = document.getElementById(id);
+        if (el) body[key] = el.checked;
+    };
 
     addIf('cfg-workers', 'workers', parseInt);
     addIf('cfg-max-depth', 'max_depth', parseInt);

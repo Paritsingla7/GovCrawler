@@ -36,7 +36,6 @@ class CredentialUpdate(BaseModel):
 # ── Route registration ────────────────────────────────────────────────────────
 
 def register_credential_routes(app: FastAPI, db: Database):
-
     @app.get("/api/credentials")
     async def list_credentials():
         creds = db.list_credentials()
@@ -92,13 +91,13 @@ def register_credential_routes(app: FastAPI, db: Database):
             await smtp.connect()
             await smtp.login(cred["username"], cred["password"])
             await smtp.quit()
-            
+
             # If we get here, connection works! Activate if it was disabled.
             if not cred["is_active"]:
                 db.update_credential(credential_id, is_active=True)
-                
+
             return {"success": True, "message": "Connection successful"}
-            
+
         except aiosmtplib.SMTPAuthenticationError as e:
             db.update_credential(credential_id, is_active=False)
             return {"success": False, "error": f"Authentication failed: {e.message}"}

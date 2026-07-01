@@ -34,18 +34,18 @@ log = logging.getLogger(__name__)
 
 # Maps category titles (as they appear in gov_domains.json) to stable short codes.
 _CAT_CODE = {
-    "State / UT Government":  "sg",
-    "Union Government":        "ug",
-    "Judiciary":               "jud",
-    "Legislature":             "leg",
-    "Indian Missions Abroad":  "ims",
-    "Apex Bodies":             "apex",
-    "Districts":               "dist",
+    "State / UT Government": "sg",
+    "Union Government": "ug",
+    "Judiciary": "jud",
+    "Legislature": "leg",
+    "Indian Missions Abroad": "ims",
+    "Apex Bodies": "apex",
+    "Districts": "dist",
 }
 
 import_status: dict = {
     "running": False,
-    "source": None,           # "json" or "api"
+    "source": None,  # "json" or "api"
     "total_categories": 0,
     "done_categories": 0,
     "total_entries": 0,
@@ -177,8 +177,8 @@ def import_all(db: Database, config: dict):
     global import_status
 
     scraper_cfg = config.get("scraper", {})
-    cat_filter  = scraper_cfg.get("category_filter", "") or ""
-    org_filter  = scraper_cfg.get("org_type_filter", "") or ""
+    cat_filter = scraper_cfg.get("category_filter", "") or ""
+    org_filter = scraper_cfg.get("org_type_filter", "") or ""
 
     import_status.update({
         "running": True,
@@ -202,7 +202,7 @@ def import_all(db: Database, config: dict):
             db.clear_domains()
 
             for cat in categories:
-                code  = cat["category"]
+                code = cat["category"]
                 title = cat.get("title", code)
 
                 if cat_filter and code != cat_filter:
@@ -212,8 +212,8 @@ def import_all(db: Database, config: dict):
                 # Build org_type code → title mapping for this category
                 try:
                     org_types = get_organization_types(client, code)
-                    org_map   = {ot["organization_type"]: ot["title"]
-                                 for ot in org_types if ot.get("organization_type")}
+                    org_map = {ot["organization_type"]: ot["title"]
+                               for ot in org_types if ot.get("organization_type")}
                 except Exception as e:
                     log.warning(f"[{code}] Could not fetch org types: {e}")
                     org_map = {}
@@ -234,11 +234,11 @@ def import_all(db: Database, config: dict):
                 inserted_this_cat = 0
 
                 for entry in entries:
-                    main_url    = entry.get("url") or ""
+                    main_url = entry.get("url") or ""
                     contact_url = entry.get("url_1") or ""
                     entry_title = entry.get("title") or ""
-                    state       = entry.get("stateName") or "National / Unknown"
-                    org_code    = entry.get("organization_type") or "UNKNOWN"
+                    state = entry.get("stateName") or "National / Unknown"
+                    org_code = entry.get("organization_type") or "UNKNOWN"
                     org_t_title = org_map.get(org_code, org_code)
 
                     if not (_is_target(main_url) or _is_target(contact_url)):

@@ -16,6 +16,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+
 # ==========================================
 # 1. PATH MANAGER
 # ==========================================
@@ -27,12 +28,14 @@ def get_app_dir() -> Path:
     # Native: Steps up from /project_root/portal/main.py -> /project_root
     return Path(__file__).resolve().parent.parent
 
+
 def get_bundle_dir() -> Path:
     """The temporary PyInstaller extraction folder (Read-Only)."""
     if getattr(sys, 'frozen', False):
         return Path(sys._MEIPASS)
     # Native: Steps up to project root
     return Path(__file__).resolve().parent.parent
+
 
 APP_DIR = get_app_dir()
 BUNDLE_DIR = get_bundle_dir()
@@ -93,7 +96,7 @@ log = logging.getLogger(__name__)
 def load_config() -> dict:
     # Always read from the LIVE config next to the .exe
     target_config = LIVE_CONFIG_PATH if LIVE_CONFIG_PATH.exists() else (Path(__file__).parent / "config.yaml")
-    
+
     if not target_config.exists():
         log.error(f"Config not found at: {target_config}")
         os.makedirs(target_config.parent, exist_ok=True)
@@ -101,8 +104,9 @@ def load_config() -> dict:
     with open(target_config) as f:
         return yaml.safe_load(f)
 
+
 def cmd_serve(config: dict):
-    db  = Database(config)
+    db = Database(config)
     app = create_app(config, db)
     host = config["api"]["host"]
     port = config["api"]["port"]
@@ -110,7 +114,7 @@ def cmd_serve(config: dict):
     # to allow local network traffic, we must open the browser at 127.0.0.1.
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
     url = f"http://{display_host}:{port}"
-    
+
     log.info(f"Portal starting at {url}")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
@@ -139,7 +143,7 @@ async def cmd_crawl(config: dict, job_id: int):
     from playwright.async_api import async_playwright
     from .crawler.engine import CrawlerEngine
 
-    db  = Database(config)
+    db = Database(config)
     job = db.get_job(job_id)
     if not job:
         log.error(f"Job {job_id} not found.")
@@ -147,9 +151,9 @@ async def cmd_crawl(config: dict, job_id: int):
         return
 
     domain_ids = json.loads(job.get("domain_ids") or "[]")
-    domains    = db.get_domains_by_ids(domain_ids)
-    seeds      = [(d["contact_url"] or d["main_url"], d["id"])
-                  for d in domains if (d["contact_url"] or d["main_url"])]
+    domains = db.get_domains_by_ids(domain_ids)
+    seeds = [(d["contact_url"] or d["main_url"], d["id"])
+             for d in domains if (d["contact_url"] or d["main_url"])]
 
     log.info(f"Running job {job_id} with {len(seeds)} seeds…")
     db.start_job(job_id)
@@ -176,7 +180,7 @@ def main():
     config = load_config()
 
     args = sys.argv[1:]
-    cmd  = args[0] if args else "serve"
+    cmd = args[0] if args else "serve"
 
     if cmd in ("serve", ""):
         cmd_serve(config)
@@ -198,4 +202,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

@@ -1,10 +1,13 @@
 # india.gov.in Web Directory API Documentation
 
-This document describes the internal Next.js API routes used by the `india.gov.in` directory pages, which are utilized by the GovCrawler scraper.
+This document describes the internal Next.js API routes used by the `india.gov.in` directory pages, which are utilized
+by the GovCrawler scraper.
 
 ## Overview
 
-The directory pages (e.g., `/directory/web-directory`) load data via POST JSON APIs. These APIs act as proxies to a GraphQL backend. Since they are same-origin Next.js routes, they do not have standard bot detection or CAPTCHAs, making them ideal for scraping.
+The directory pages (e.g., `/directory/web-directory`) load data via POST JSON APIs. These APIs act as proxies to a
+GraphQL backend. Since they are same-origin Next.js routes, they do not have standard bot detection or CAPTCHAs, making
+them ideal for scraping.
 
 ### Endpoints
 
@@ -39,7 +42,7 @@ Retrieves all available directory categories and the count of entries in each.
 ```
 
 - **Response Structure**:
-The relevant data is nested deeply within the response.
+  The relevant data is nested deeply within the response.
 
 ```json
 {
@@ -108,7 +111,8 @@ Retrieves the available organization type filters for a given category.
 
 ## 3. Fetching Entries for a Category (Paginated)
 
-Retrieves the actual directory entries (including URLs) for a specific category code (e.g., `ug`, `sg`). This endpoint requires pagination.
+Retrieves the actual directory entries (including URLs) for a specific category code (e.g., `ug`, `sg`). This endpoint
+requires pagination.
 
 - **URL**: `https://www.india.gov.in/directory/web-directory/api`
 - **Method**: `POST`
@@ -136,7 +140,8 @@ Retrieves the actual directory entries (including URLs) for a specific category 
 }
 ```
 
-*Replace `<cat_code>` with the actual category code (e.g., "ug"). The `organization_type` filter object is optional. `pageSize` 100 is known to be stable.*
+*Replace `<cat_code>` with the actual category code (e.g., "ug"). The `organization_type` filter object is
+optional. `pageSize` 100 is known to be stable.*
 
 - **Response Structure**:
 
@@ -164,5 +169,8 @@ Retrieves the actual directory entries (including URLs) for a specific category 
 ## Notes
 
 - The target domains of interest are typically those ending in `.gov.in` and `.nic.in`.
-- The GraphQL backend uses `mustvalue` and `shouldvalue` for filtering, suggesting a search engine like Elasticsearch might be behind the GraphQL layer.
-- If the API routes fail or change, `india.gov.in` uses React Server Components (RSC). Passing `RSC: 1` and `Next-Url: <path>` headers to the actual page paths (e.g., `/directory/web-directory/union-government`) can retrieve raw RSC streams containing the data as a fallback.
+- The GraphQL backend uses `mustvalue` and `shouldvalue` for filtering, suggesting a search engine like Elasticsearch
+  might be behind the GraphQL layer.
+- If the API routes fail or change, `india.gov.in` uses React Server Components (RSC). Passing `RSC: 1` and
+  `Next-Url: <path>` headers to the actual page paths (e.g., `/directory/web-directory/union-government`) can retrieve
+  raw RSC streams containing the data as a fallback.

@@ -90,6 +90,7 @@ input.lead-cell-input::placeholder {
     accent-color: var(--accent);
     flex-shrink: 0;
 }
+
 input.lead-cell-input.saving {
     opacity: 0.45;
     cursor: wait;

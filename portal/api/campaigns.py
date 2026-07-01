@@ -57,11 +57,13 @@ class DummyDetails(BaseModel):
     email: str
     department: str
 
+
 class TestCampaignCreate(BaseModel):
     name: str
     template_id: int
     dummy_details: list[DummyDetails]
     test_credential_id: int | None = None
+
 
 # ── Jinja2 rendering helper ──────────────────────────────────────────────────
 
@@ -78,7 +80,6 @@ def render_template_string(template_str: str, **kwargs) -> str:
 # ── Route registration ────────────────────────────────────────────────────────
 
 def register_campaign_routes(app: FastAPI, db: Database):
-
     @app.post("/api/campaigns", status_code=201)
     async def create_campaign(req: CampaignCreate):
         """The core draft generation endpoint.
@@ -187,44 +188,45 @@ def register_campaign_routes(app: FastAPI, db: Database):
         campaign = db.get_campaign(campaign_id)
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
-            
+
         stats = db.get_campaign_stats(campaign_id)
         # draft count is now only selected drafts; skipped are deselected
         if stats.get("draft", 0) == 0:
-            raise HTTPException(status_code=400, detail="No selected DRAFT emails to dispatch. Select at least one email first.")
-            
+            raise HTTPException(status_code=400,
+                                detail="No selected DRAFT emails to dispatch. Select at least one email first.")
+
         # 2. Reject if already running
         if campaign["status"] == CampaignStatus.RUNNING.value and campaign_id in _active_campaign_tasks:
             task = _active_campaign_tasks[campaign_id]
             if not task.done():
                 raise HTTPException(status_code=409, detail="Campaign is already running")
-                
+
         # 3. Verify at least 1 active SMTP credential
         active_creds = db.get_active_credentials()
         if not active_creds:
             raise HTTPException(status_code=400, detail="No active SMTP credentials available")
-            
+
         # 4. Start background task
         # Make sure campaign status is RUNNING
         if campaign["status"] != CampaignStatus.RUNNING.value:
             db.update_campaign_status(campaign_id, CampaignStatus.RUNNING)
-            
+
         async def _run_and_clean():
             try:
                 await run_campaign_dispatch(campaign_id, db)
             finally:
                 _active_campaign_tasks.pop(campaign_id, None)
-                
+
         task = asyncio.create_task(_run_and_clean())
         _active_campaign_tasks[campaign_id] = task
-        
+
         return {"message": "Dispatch started"}
 
     @app.get("/api/campaigns")
     async def list_campaigns(
-        page: int = Query(1, ge=1),
-        limit: int = Query(20, ge=1, le=100),
-        include_test: bool = Query(False)
+            page: int = Query(1, ge=1),
+            limit: int = Query(20, ge=1, le=100),
+            include_test: bool = Query(False)
     ):
         campaigns, total = db.list_campaigns(page=page, limit=limit, include_test=include_test)
 
@@ -281,10 +283,10 @@ def register_campaign_routes(app: FastAPI, db: Database):
 
     @app.get("/api/campaigns/{campaign_id}/emails")
     async def get_campaign_emails(
-        campaign_id: int,
-        status: str = Query(None),
-        page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=200),
+            campaign_id: int,
+            status: str = Query(None),
+            page: int = Query(1, ge=1),
+            limit: int = Query(50, ge=1, le=200),
     ):
         campaign = db.get_campaign(campaign_id)
         if not campaign:
@@ -302,7 +304,7 @@ def register_campaign_routes(app: FastAPI, db: Database):
 
     @app.put("/api/campaigns/{campaign_id}/emails/{email_id}")
     async def update_campaign_email(campaign_id: int, email_id: int,
-                                     req: CampaignEmailUpdate):
+                                    req: CampaignEmailUpdate):
         """Manual body override for a specific staged email."""
         campaign = db.get_campaign(campaign_id)
         if not campaign:
@@ -435,7 +437,7 @@ def register_campaign_routes(app: FastAPI, db: Database):
                 "designation": details.designation or "",
                 "department": details.department or "",
             }
-            
+
             rendered_subject = render_template_string(template["subject"], **render_vars)
             rendered_body = render_template_string(template["raw_body"], **render_vars)
 
@@ -456,18 +458,18 @@ def register_campaign_routes(app: FastAPI, db: Database):
         campaign = db.get_test_campaign(campaign_id)
         if not campaign:
             raise HTTPException(status_code=404, detail="Test Campaign not found")
-            
+
         if campaign["status"] != CampaignStatus.RUNNING.value:
             db.update_test_campaign_status(campaign_id, CampaignStatus.RUNNING)
 
         from .dispatcher import run_test_campaign_dispatch
-            
+
         async def _run_and_clean():
             try:
                 await run_test_campaign_dispatch(campaign_id, db)
             except Exception as e:
                 log.error(f"Test campaign dispatch failed: {e}")
-                
+
         asyncio.create_task(_run_and_clean())
         return {"message": "Test Dispatch started"}
 
@@ -490,10 +492,10 @@ def register_campaign_routes(app: FastAPI, db: Database):
 
     @app.get("/api/test-campaigns/{campaign_id}/emails")
     async def get_test_campaign_emails(
-        campaign_id: int,
-        status: str = Query(None),
-        page: int = Query(1, ge=1),
-        limit: int = Query(50, ge=1, le=200),
+            campaign_id: int,
+            status: str = Query(None),
+            page: int = Query(1, ge=1),
+            limit: int = Query(50, ge=1, le=200),
     ):
         campaign = db.get_test_campaign(campaign_id)
         if not campaign:

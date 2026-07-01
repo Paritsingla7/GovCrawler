@@ -23,6 +23,7 @@ from portal.db.models import Base
 
 target_metadata = Base.metadata
 
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired here.
 # my_important_variable = config.get_main_option("my_important_variable")
@@ -71,6 +72,7 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

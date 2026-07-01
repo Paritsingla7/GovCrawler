@@ -9,6 +9,7 @@ from .config import WEB_DIR_API, PAGE_SIZE
 
 log = logging.getLogger(__name__)
 
+
 def get_categories(client: httpx.Client) -> list[dict]:
     """
     Fetch all directory categories and their entry counts.
@@ -56,9 +57,9 @@ def get_organization_types(client: httpx.Client, category_code: str) -> list[dic
 
 
 def get_entries_for_category(
-    client: httpx.Client,
-    category_code: str,
-    org_type_code: str = None,
+        client: httpx.Client,
+        category_code: str,
+        org_type_code: str = None,
 ) -> list[dict]:
     """
     Paginate through all entries for a given category code (e.g. 'ug', 'sg').
@@ -94,7 +95,7 @@ def get_entries_for_category(
             .get("getIgodWebDirectoryByFilters", {})
         )
         results = payload.get("results") or []
-        total   = payload.get("total", 0)
+        total = payload.get("total", 0)
 
         all_entries.extend(results)
         fetched = len(all_entries)
