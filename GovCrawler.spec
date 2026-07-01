@@ -1,11 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+import certifi
+cert_file = certifi.where()
 
 a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[('portal/frontend', 'portal/frontend'), ('portal/default_config.yaml', 'portal')],
+    datas=[('portal/frontend', 'portal/frontend'), ('portal/default_config.yaml', 'portal'), (cert_file, 'certifi')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

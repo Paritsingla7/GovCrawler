@@ -398,8 +398,7 @@ class Database:
                   context_snippet: str, entity_kind: str | None = None,
                   phone: str | None = None, channel_tag: str | None = None,
                   confidence_band: str | None = None,
-                  field_provenance: str | None = None) -> bool:
-                  context_snippet: str, depth: int = 0) -> bool:
+                  field_provenance: str | None = None, depth: int = 0) -> bool:
         if not email:
             return False
         email = email.lower()

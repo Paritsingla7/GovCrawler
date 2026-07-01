@@ -1,0 +1,832 @@
+{% extends "base.html" %}
+
+{% block title %}User Guide — GovCrawler{% endblock %}
+
+{% block extra_head %}
+<link href="/static/css/settings.css" rel="stylesheet">
+<style>
+/* === User Guide styles === */
+main { scroll-behavior: smooth; }
+.guide-section { padding-bottom: 48px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+.guide-section:last-child { border-bottom: none; padding-bottom: 24px; }
+.guide-section h2 { font-size: 20px; font-weight: 600; margin: 0 0 6px; color: var(--text); }
+.guide-section h3 { font-size: 15px; font-weight: 600; margin: 28px 0 8px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+.guide-section p { line-height: 1.7; color: var(--text); margin-bottom: 10px; font-size: 14px; }
+.guide-section ul, .guide-section ol { padding-left: 22px; margin-bottom: 12px; }
+.guide-section li { line-height: 1.7; color: var(--text); margin-bottom: 4px; font-size: 14px; }
+.guide-section code { background: var(--surface2, #161b22); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 12px; font-family: 'Courier New', monospace; }
+.guide-section pre { background: var(--surface2, #161b22); border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-size: 13px; font-family: monospace; line-height: 1.65; overflow-x: auto; margin: 12px 0; }
+.guide-section a { color: var(--accent); text-decoration: none; }
+.guide-section a:hover { text-decoration: underline; }
+kbd { background: var(--surface2, #161b22); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-size: 12px; font-family: monospace; }
+
+/* Numbered workflow steps */
+.guide-steps { counter-reset: step; list-style: none; padding: 0; margin: 16px 0; }
+.guide-steps li { counter-increment: step; display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; font-size: 14px; }
+.guide-steps li::before {
+  content: counter(step);
+  min-width: 26px; height: 26px;
+  background: var(--accent); color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px;
+}
+
+/* Config reference table */
+.config-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+.config-table th { background: var(--surface2, #161b22); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+.config-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.6; font-size: 13px; }
+.config-table tr:last-child td { border-bottom: none; }
+.config-table tr:hover > td { background: var(--surface2, #161b22); }
+.config-table td code { white-space: nowrap; }
+/* 2-column settings layout: left cell holds name + meta, right holds description */
+.cfg-name { font-weight: 600; color: var(--text); display: block; margin-bottom: 5px; }
+.cfg-key  { font-size: 11px; font-family: 'Courier New', monospace; color: var(--muted); background: var(--surface2, #161b22); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; display: inline-block; margin-bottom: 4px; }
+.cfg-default { font-size: 11px; color: var(--muted); display: block; }
+.cfg-default strong { color: var(--text); }
+
+/* Callout boxes */
+.callout { border-left: 3px solid var(--accent); background: var(--surface2, #161b22); border-radius: 0 6px 6px 0; padding: 10px 14px; margin: 16px 0; font-size: 13px; line-height: 1.65; color: var(--text); }
+.callout-warn { border-left-color: #f0a500; }
+.callout-danger { border-left-color: #f85149; }
+.callout p { margin-bottom: 0; font-size: 13px; }
+.callout strong { font-weight: 600; }
+
+/* Troubleshooting list */
+.trouble-list { list-style: none; padding: 0; }
+.trouble-list > li { border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; }
+.trouble-list .problem { font-weight: 600; color: var(--text); margin-bottom: 6px; font-size: 14px; }
+.trouble-list .solution { color: var(--muted); font-size: 13px; line-height: 1.65; }
+
+/* Mockup diagrams */
+.mockup { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 12px; max-width: 640px; margin: 20px 0; }
+.mockup-header { background: var(--surface2, #161b22); border-bottom: 1px solid var(--border); padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.mockup-label { font-size: 11px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid var(--accent); border-radius: 3px; padding: 1px 6px; margin-bottom: 10px; display: inline-block; }
+
+/* Campaign status pills */
+.status-pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.status-running  { background: rgba(82,196,26,0.15);  color: #52c41a; }
+.status-paused   { background: rgba(240,165,0,0.15);  color: #f0a500; }
+.status-completed{ background: rgba(100,180,250,0.15);color: var(--accent, #58a6ff); }
+.status-cancelled{ background: rgba(248,81,73,0.15);  color: #f85149; }
+</style>
+{% endblock %}
+
+{% block header_actions %}
+<button class="btn-secondary btn-sm" onclick="window.history.back()">← Back</button>
+{% endblock %}
+
+{% block content %}
+<div class="layout">
+
+  <!-- ── Sidebar navigation ── -->
+  <aside>
+    <div class="sidebar-section">
+      <div class="section-label">User Guide</div>
+      <ul class="settings-nav" id="guide-nav" style="font-size:13px;">
+        <li onclick="document.getElementById('overview').scrollIntoView({behavior:'smooth'})">Overview</li>
+        <li onclick="document.getElementById('importing-domains').scrollIntoView({behavior:'smooth'})">Importing Domains</li>
+        <li onclick="document.getElementById('running-a-crawl').scrollIntoView({behavior:'smooth'})">Running a Crawl Job</li>
+        <li onclick="document.getElementById('bottom-dock-guide').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ The Bottom Dock</li>
+        <li onclick="document.getElementById('reviewing-leads').scrollIntoView({behavior:'smooth'})">Reviewing Leads</li>
+        <li onclick="document.getElementById('csv-export').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ CSV Export</li>
+        <li onclick="document.getElementById('outreach-setup').scrollIntoView({behavior:'smooth'})">Outreach Setup</li>
+        <li onclick="document.getElementById('smtp-credentials').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ SMTP Credentials</li>
+        <li onclick="document.getElementById('email-templates').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ Email Templates</li>
+        <li onclick="document.getElementById('blacklist').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ Blacklist</li>
+        <li onclick="document.getElementById('creating-campaigns').scrollIntoView({behavior:'smooth'})">Creating Campaigns</li>
+        <li onclick="document.getElementById('dispatching-campaigns').scrollIntoView({behavior:'smooth'})">Dispatching Campaigns</li>
+        <li onclick="document.getElementById('campaign-status').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ Status Reference</li>
+        <li onclick="document.getElementById('test-campaigns').scrollIntoView({behavior:'smooth'})">Test Campaigns</li>
+        <li onclick="document.getElementById('settings-reference').scrollIntoView({behavior:'smooth'})">Settings Reference</li>
+        <li onclick="document.getElementById('crawler-settings').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ Crawler Settings</li>
+        <li onclick="document.getElementById('extraction-settings').scrollIntoView({behavior:'smooth'})" style="padding-left:28px; font-size:12px; color:var(--muted);">↳ Extraction Settings</li>
+        <li onclick="document.getElementById('troubleshooting').scrollIntoView({behavior:'smooth'})">Troubleshooting</li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- ── Main content ── -->
+  <main style="overflow-y:auto; padding:0;">
+    <div class="settings-tab" style="max-width:860px; padding:32px 40px;">
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 1 — OVERVIEW
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="overview">
+        <div class="mockup-label">User Guide</div>
+        <h2>What is GovCrawler?</h2>
+        <p>GovCrawler is a local lead-generation and email outreach platform for Indian government domains. It crawls <code>.gov.in</code> and <code>.nic.in</code> websites, extracts official email addresses and personnel information, and lets you send personalised outreach emails — all from a single web interface running on your machine.</p>
+        <p>There are two phases:</p>
+        <ul>
+          <li><strong>Phase 1 — Lead Generation:</strong> Import government domains → select and crawl → review extracted contacts.</li>
+          <li><strong>Phase 2 — Email Outreach:</strong> Configure SMTP → create templates → build campaigns → dispatch and monitor.</li>
+        </ul>
+
+        <h3>The Six-Step Workflow</h3>
+        <!-- Workflow diagram -->
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:20px; background:var(--surface2,#161b22); border:1px solid var(--border); border-radius:8px; margin:20px 0;">
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">📥</div>
+            <strong>1. Import</strong><br>
+            <span style="color:var(--muted); font-size:11px;">Load domains</span>
+          </div>
+          <span style="color:var(--muted); font-size:18px;">→</span>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">🔍</div>
+            <strong>2. Crawl</strong><br>
+            <span style="color:var(--muted); font-size:11px;">Select &amp; start</span>
+          </div>
+          <span style="color:var(--muted); font-size:18px;">→</span>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">👤</div>
+            <strong>3. Leads</strong><br>
+            <span style="color:var(--muted); font-size:11px;">Review &amp; export</span>
+          </div>
+          <span style="color:var(--muted); font-size:18px;">→</span>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">⚙️</div>
+            <strong>4. Setup</strong><br>
+            <span style="color:var(--muted); font-size:11px;">SMTP + templates</span>
+          </div>
+          <span style="color:var(--muted); font-size:18px;">→</span>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">✉️</div>
+            <strong>5. Campaign</strong><br>
+            <span style="color:var(--muted); font-size:11px;">Build drafts</span>
+          </div>
+          <span style="color:var(--muted); font-size:18px;">→</span>
+          <div style="background:var(--surface); border:1px solid var(--accent,#58a6ff); border-radius:6px; padding:10px 14px; font-size:12px; text-align:center; min-width:96px;">
+            <div style="font-size:20px; margin-bottom:4px;">🚀</div>
+            <strong>6. Dispatch</strong><br>
+            <span style="color:var(--muted); font-size:11px;">Send &amp; track</span>
+          </div>
+        </div>
+
+        <h3>Pages at a Glance</h3>
+        <table class="config-table">
+          <thead><tr><th>Page</th><th>URL</th><th>What you do here</th></tr></thead>
+          <tbody>
+            <tr><td>Dashboard</td><td><code>/</code></td><td>Import domains, filter the registry, select domains and start a crawl job. Monitor recent jobs in the sidebar.</td></tr>
+            <tr><td>Leads</td><td><code>/leads</code></td><td>Browse all extracted contacts across every job. Edit fields inline, filter, export to CSV, and create campaigns.</td></tr>
+            <tr><td>Campaigns</td><td><code>/campaigns</code></td><td>Manage email campaigns. Review drafts, edit per-recipient content, dispatch, and track send progress.</td></tr>
+            <tr><td>Settings</td><td><code>/settings</code></td><td>Configure the crawler, add SMTP credentials, create email templates, manage the blacklist.</td></tr>
+            <tr><td>Test Campaign</td><td><code>/test-campaign</code></td><td>Send a test email to yourself to validate credentials and template rendering before real outreach.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 2 — IMPORTING DOMAINS
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="importing-domains">
+        <h2>Step 1 — Import Domains</h2>
+        <p>Before crawling anything you need to load the government domain registry. The Dashboard sidebar offers two methods:</p>
+
+        <h3>JSON Upload (Recommended)</h3>
+        <p>Click <strong>Import</strong> next to "Choose a JSON file…" and upload a <code>gov_domains.json</code> export from the india.gov.in web directory. This is instant — no API calls, no internet needed. A progress bar appears while the file is processed; the domain count in the top-right header updates when done.</p>
+        <div class="callout">
+          <p><strong>Tip:</strong> Download the JSON file once and reuse it across sessions. The file does not expire. Use Live API Refresh only when you need the very latest domain additions.</p>
+        </div>
+
+        <h3>Live API Refresh</h3>
+        <p>Click <strong>Refresh</strong> to fetch the current domain list directly from india.gov.in. This requires an internet connection and takes longer on first use. Use it when your local JSON is outdated or when newly registered government domains are needed.</p>
+        <div class="callout callout-warn">
+          <p><strong>Note:</strong> Both methods replace the existing domain list in full. Clicking Refresh while an import is already running shows "Import already running" — wait for the first to complete.</p>
+        </div>
+
+        <h3>Filters on the Dashboard</h3>
+        <p>Once domains are loaded, use the sidebar filters to narrow the list before selecting domains to crawl:</p>
+        <ul>
+          <li><strong>Category</strong> — Government tier (Central Government, State Government, District, etc.)</li>
+          <li><strong>State</strong> — Restricts to domains for a specific state. Updates automatically when a Category is chosen.</li>
+          <li><strong>Org Type</strong> — Department, Board, Commission, Tribunal, etc.</li>
+          <li><strong>Search</strong> — Free-text match against domain name or ministry title.</li>
+        </ul>
+        <p>The count label below the filters shows how many domains match the current selection. Click <strong>Clear Filters</strong> to reset all dropdowns at once.</p>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 3 — RUNNING A CRAWL JOB
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="running-a-crawl">
+        <h2>Step 2 — Run a Crawl Job</h2>
+        <p>After filtering to the domains you want, select them using the checkboxes in the domain table:</p>
+        <ul>
+          <li><strong>Select page</strong> — Selects all 50 domains visible on the current page.</li>
+          <li><strong>Select all N</strong> — Selects every domain matching your filters, even across pages. This button appears after you first check a page.</li>
+          <li><strong>Clear</strong> — Deselects everything.</li>
+        </ul>
+        <p>Once at least one domain is checked, the <strong>▶ Crawl Selected</strong> button appears in the toolbar. Click it to start a crawl job. The bottom dock opens automatically and the job begins running in the background.</p>
+
+        <!-- Dashboard layout mockup -->
+        <div class="mockup">
+          <div class="mockup-header">
+            <span style="font-weight:600;">⚡ GovCrawler</span>
+            <span style="color:var(--muted); font-size:11px;">📃 Logs &nbsp;·&nbsp; 📣 Campaigns &nbsp;·&nbsp; ⚙️ Settings &nbsp;·&nbsp; 📋 View Leads &nbsp;·&nbsp; <strong style="color:var(--accent);">?</strong></span>
+          </div>
+          <div style="display:flex; min-height:180px;">
+            <div style="width:195px; border-right:1px solid var(--border); padding:12px; background:var(--surface2,#161b22); flex-shrink:0;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Data Import</div>
+              <div style="border:1px solid var(--border); border-radius:4px; padding:7px; margin-bottom:12px; font-size:11px; color:var(--muted);">📁 JSON &nbsp;&nbsp; 🔄 Refresh</div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Filters</div>
+              <div style="font-size:11px; color:var(--text); line-height:2.1;">Category ▾<br>State ▾<br>Org Type ▾<br>Search…</div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:10px 0 5px;">Recent Jobs</div>
+              <div style="font-size:11px; color:var(--muted);">Job #3 ✓ done<br>Job #2 ✓ done</div>
+            </div>
+            <div style="flex:1; padding:12px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:11px; flex-wrap:wrap;">
+                <span style="color:var(--muted);">☐ Select page &nbsp;·&nbsp; Clear</span>
+                <span style="margin-left:auto; font-weight:600;">☑ 3 selected &nbsp;
+                  <span style="background:var(--accent,#58a6ff); color:#fff; padding:3px 10px; border-radius:4px; white-space:nowrap;">▶ Crawl Selected</span>
+                </span>
+              </div>
+              <table style="width:100%; font-size:11px; border-collapse:collapse;">
+                <tr style="border-bottom:1px solid var(--border); color:var(--muted); text-align:left;">
+                  <th style="padding:5px 4px;"></th>
+                  <th style="padding:5px 8px;">Domain / Ministry</th>
+                  <th style="padding:5px 8px;">Cat</th>
+                  <th style="padding:5px 8px;">URL</th>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:5px 4px;">☑</td>
+                  <td style="padding:5px 8px;">Ministry of Finance</td>
+                  <td style="padding:5px 8px;">CG</td>
+                  <td style="padding:5px 8px; color:var(--accent,#58a6ff);">finmin.gov.in</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:5px 4px;">☑</td>
+                  <td style="padding:5px 8px;">Dept. of Revenue</td>
+                  <td style="padding:5px 8px;">CG</td>
+                  <td style="padding:5px 8px; color:var(--accent,#58a6ff);">dor.gov.in</td>
+                </tr>
+                <tr>
+                  <td style="padding:5px 4px;">☐</td>
+                  <td style="padding:5px 8px;">CBDT</td>
+                  <td style="padding:5px 8px;">CG</td>
+                  <td style="padding:5px 8px; color:var(--accent,#58a6ff);">incometaxindia.gov.in</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <p><strong>Tip:</strong> For your first crawl, select 5–10 domains and monitor the Found Leads tab in the dock to verify extraction is working before running a larger batch.</p>
+        </div>
+
+        <!-- Sub-section: Bottom Dock -->
+        <h3 id="bottom-dock-guide">The Bottom Dock</h3>
+        <p>When a job starts (or after it completes), a panel slides up from the bottom of the Dashboard. It has four tabs:</p>
+
+        <!-- Dock mockup -->
+        <div class="mockup">
+          <div style="background:var(--surface2,#161b22); border-bottom:1px solid var(--border); display:flex; align-items:center; font-size:12px; overflow-x:auto;">
+            <div style="padding:9px 16px; border-bottom:2px solid var(--accent,#58a6ff); font-weight:600; color:var(--text); white-space:nowrap;">Job Details</div>
+            <div style="padding:9px 16px; color:var(--muted); white-space:nowrap;">Seeds</div>
+            <div style="padding:9px 16px; color:var(--muted); white-space:nowrap;">Found Leads</div>
+            <div style="padding:9px 16px; color:var(--muted); white-space:nowrap;">Server Logs</div>
+            <div style="margin-left:auto; padding:9px 16px; color:var(--muted); border-left:1px solid var(--border);">✕</div>
+          </div>
+          <div style="padding:14px; display:flex; flex-wrap:wrap; gap:16px; background:var(--surface);">
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700; color:#52c41a;">running</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Status</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700;">1m 23s</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Time</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700;">3</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Seed</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700;">142</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Queued</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700;">87</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Visited</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700;">12</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Skipped</div></div>
+            <div style="text-align:center; min-width:60px;"><div style="font-size:15px; font-weight:700; color:#52c41a;">34</div><div style="color:var(--muted); font-size:10px; text-transform:uppercase; margin-top:2px;">Leads found</div></div>
+          </div>
+          <div style="padding:2px 14px 14px; background:var(--surface);">
+            <div style="background:var(--border); border-radius:4px; height:5px; overflow:hidden; margin-bottom:6px;">
+              <div style="background:var(--accent,#58a6ff); width:38%; height:100%; border-radius:4px;"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted); flex-wrap:wrap; gap:4px;">
+              <span>Depth 2</span><span>2 / 3 domains</span><span>4.2 URLs/s</span><span>50 active workers</span>
+            </div>
+          </div>
+        </div>
+
+        <ul>
+          <li><strong>Job Details</strong> — Live counters (Seed, Queued, Visited, Skipped, Leads found), elapsed time, a progress bar, and crawl rate (URLs/s). "Export Leads (CSV)" downloads all leads for this job. While running, a red <strong>Cancel Job</strong> button appears.</li>
+          <li><strong>Seeds</strong> — The domains included in this job. <strong>▶ Use Same Seeds</strong> re-selects those exact domains on the Dashboard for a quick re-run.</li>
+          <li><strong>Found Leads</strong> — A live table of emails extracted so far: email, person, department, and source domain.</li>
+          <li><strong>Server Logs</strong> — Last 1000 lines of the application log. Useful for diagnosing crawl errors (timeouts, JS rendering failures, etc.).</li>
+        </ul>
+        <p>The dock is resizable — drag its top edge to make it taller or shorter. Click ✕ to close it. Reopen it by clicking any job in the "Recent Jobs" list in the sidebar.</p>
+
+        <h3>Recrawl Protection</h3>
+        <p>GovCrawler tracks every URL it visits. By default, any URL visited in the last 30 days (across all jobs) is skipped on re-runs. To force a full re-crawl, go to Settings and click <strong>Clear Cache</strong> under Maintenance, or set <strong>Recrawl Days</strong> to 0.</p>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 4 — REVIEWING LEADS
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="reviewing-leads">
+        <h2>Step 3 — Review &amp; Export Leads</h2>
+        <p>Navigate to <a href="/leads"><strong>Leads</strong></a> to see all extracted contacts across every crawl job. The sidebar filters narrow the results; the main table shows each contact's email, name, designation, department, and source.</p>
+
+        <!-- Leads table mockup -->
+        <div class="mockup">
+          <div style="display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-size:11px; background:var(--surface2,#161b22); flex-wrap:wrap;">
+            <span style="color:var(--muted);">☐ Select page &nbsp;·&nbsp; Clear</span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span>☑ 12 selected</span>
+              <span style="background:var(--accent,#58a6ff); color:#fff; padding:3px 9px; border-radius:4px;">+ Create Campaign</span>
+              <span style="border:1px solid var(--border); padding:3px 9px; border-radius:4px;">+ Add to Campaign</span>
+            </span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%; font-size:11px; border-collapse:collapse; min-width:500px;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border); color:var(--muted); text-align:left; background:var(--surface2,#161b22);">
+                  <th style="padding:6px 4px; width:20px;"></th>
+                  <th style="padding:6px 4px; width:14px;"></th>
+                  <th style="padding:6px 8px;">Band</th>
+                  <th style="padding:6px 8px;">Contact</th>
+                  <th style="padding:6px 8px;">Person</th>
+                  <th style="padding:6px 8px;">Department</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:6px 4px;">☑</td>
+                  <td style="padding:6px 4px;"></td>
+                  <td style="padding:6px 8px;"><span style="background:rgba(82,196,26,.15); color:#52c41a; border-radius:3px; padding:1px 5px; font-size:10px; font-weight:600;">HIGH</span></td>
+                  <td style="padding:6px 8px; color:var(--accent,#58a6ff);">js.sharma@finmin.gov.in</td>
+                  <td style="padding:6px 8px;">Shri J.S. Sharma</td>
+                  <td style="padding:6px 8px;">Dept. of Expenditure</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border); border-left:2px solid #f0a500;">
+                  <td style="padding:6px 4px;">☐</td>
+                  <td style="padding:6px 4px; color:#f0a500; font-size:14px;">!</td>
+                  <td style="padding:6px 8px;"><span style="background:rgba(240,165,0,.15); color:#f0a500; border-radius:3px; padding:1px 5px; font-size:10px; font-weight:600;">LOW</span></td>
+                  <td style="padding:6px 8px; color:var(--accent,#58a6ff);">info@revenue.gov.in</td>
+                  <td style="padding:6px 8px; color:var(--muted); font-style:italic;">—</td>
+                  <td style="padding:6px 8px; color:var(--muted); font-style:italic;">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h3>Understanding the Band Column</h3>
+        <ul>
+          <li><strong>HIGH</strong> (green) — Email found in a structured table row or a <code>mailto:</code> link, with a person name identified nearby. High confidence.</li>
+          <li><strong>LOW</strong> (yellow) — Email found via proximity scan (regex pattern). Name or designation may be inaccurate or absent.</li>
+        </ul>
+        <p>A yellow left-border on a row means one or more fields (name, designation, or department) are missing. These rows are automatically deselected when you create a campaign so they won't receive a badly rendered email.</p>
+
+        <h3>Inline Editing</h3>
+        <p>Click any editable cell in the table (Name, Designation, Department, State) to edit it in place. Press <kbd>Enter</kbd> or click elsewhere to save. The change persists immediately — no separate Save button needed.</p>
+
+        <h3>Filters &amp; Search</h3>
+        <ul>
+          <li><strong>Job</strong> — Show leads from one specific crawl job only.</li>
+          <li><strong>Category / State</strong> — Geographic and tier-based filtering.</li>
+          <li><strong>Search</strong> — Matches against name, email, and designation fields.</li>
+          <li><strong>Complete data only</strong> — Hides leads with no name or no designation. Use this before building a campaign to see only well-populated records.</li>
+        </ul>
+
+        <h3 id="csv-export">CSV Export</h3>
+        <p>Click <strong>⬇ Export CSV</strong> (top right of the Leads page) to open the field selector. Email is always included. Tick or untick any other column:</p>
+        <p style="color:var(--muted); font-size:13px;">Name &nbsp;·&nbsp; Designation &nbsp;·&nbsp; Department &nbsp;·&nbsp; Domain/Org &nbsp;·&nbsp; State &nbsp;·&nbsp; Org Type &nbsp;·&nbsp; Category &nbsp;·&nbsp; Source URL &nbsp;·&nbsp; Page Title &nbsp;·&nbsp; Context Snippet &nbsp;·&nbsp; Captured At &nbsp;·&nbsp; Crawl Depth</p>
+        <p>The export respects your current filters and selection. If leads are checked, only those N leads are exported. If nothing is selected, all leads matching the current filters are exported.</p>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 5 — OUTREACH SETUP
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="outreach-setup">
+        <h2>Step 4 — Outreach Setup</h2>
+        <p>Before creating campaigns, configure three things in <a href="/settings"><strong>Settings</strong></a>:</p>
+
+        <h3 id="smtp-credentials">SMTP Credentials</h3>
+        <p>Go to Settings → <strong>SMTP Credentials</strong> → <strong>+ Add Credential</strong>. Fill in:</p>
+        <ul>
+          <li><strong>Host</strong> — Your SMTP server address (e.g. <code>smtp.gmail.com</code>)</li>
+          <li><strong>Port</strong> — <code>465</code> for SSL/TLS, <code>587</code> for STARTTLS</li>
+          <li><strong>Username</strong> — Your sender email address</li>
+          <li><strong>Password</strong> — Your app password (not your regular account password)</li>
+        </ul>
+        <div class="callout callout-warn">
+          <p><strong>Gmail users:</strong> Generate an App Password in your Google Account → Security → 2-Step Verification → App Passwords. Your regular Google password will not work and will cause an auth failure.</p>
+        </div>
+        <p>You can add multiple credentials. During dispatch, GovCrawler uses them in <strong>round-robin rotation</strong> — each email is sent through the next available credential, spreading the load across sender accounts.</p>
+
+        <p><strong>Credential states:</strong></p>
+        <table class="config-table">
+          <thead><tr><th>State</th><th>What it means</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>Active</td><td>Available for sending</td><td>Nothing — it will be used automatically</td></tr>
+            <tr><td>Cooling</td><td>Temporarily paused after a rate-limit error (421 / 450 / 451). Cooldown duration shown in the table.</td><td>Wait — it auto-resumes after cooldown expires</td></tr>
+            <tr><td>Disabled</td><td>Auth failure — the SMTP server rejected the username or password</td><td>Fix the password, then re-enable manually via the Edit action</td></tr>
+          </tbody>
+        </table>
+        <p>Use <strong>Test Selected</strong> to verify credentials connect successfully before running a real campaign. A successful test auto-activates the credential.</p>
+
+        <h3 id="email-templates">Email Templates</h3>
+        <p>Go to Settings → <strong>Email Templates</strong> → <strong>+ Create Template</strong>. Templates use <strong>Jinja2</strong> syntax for dynamic content per recipient.</p>
+        <p><strong>Available variables:</strong></p>
+        <table class="config-table">
+          <thead><tr><th>Variable</th><th>Resolves to</th><th>Fallback if missing</th></tr></thead>
+          <tbody>
+            <tr><td><code>{{ name }}</code></td><td>Lead's person name</td><td>Subject: <em>"Official"</em> &nbsp;/&nbsp; Body: <code>[MISSING: name]</code></td></tr>
+            <tr><td><code>{{ designation }}</code></td><td>Lead's designation / job title</td><td>Subject: blank &nbsp;/&nbsp; Body: <code>[MISSING: designation]</code></td></tr>
+            <tr><td><code>{{ email }}</code></td><td>Lead's email address</td><td>Always present</td></tr>
+          </tbody>
+        </table>
+
+        <p><strong>Example template:</strong></p>
+        <pre>Subject: Important Communication — {{ designation }}, {{ name }}
+
+Dear {{ designation }} {{ name }},
+
+We are writing to inform you about an upcoming initiative
+that may be relevant to your role.
+
+Please feel free to reach us at [Your Contact].
+
+Regards,
+[Your Name]</pre>
+
+        <div class="callout">
+          <p><strong>Tip:</strong> Use the Insert chip buttons in the template editor to add variables at the cursor position. The template is validated for Jinja2 syntax on save; if there is an error, the line number and message are shown.</p>
+        </div>
+
+        <h3 id="blacklist">Blacklist</h3>
+        <p>The blacklist prevents emails from being staged in new campaigns and from being sent in existing ones. Addresses are added two ways:</p>
+        <ul>
+          <li><strong>Automatically</strong> — When an email hard-bounces (SMTP codes 550 or 553), GovCrawler adds it to the blacklist and marks the email FAILED.</li>
+          <li><strong>Manually</strong> — Settings → Blacklist → <strong>+ Block Email</strong>. Use this for opt-out requests or known-invalid addresses.</li>
+        </ul>
+        <p>To unblock an address, click the delete icon on its row in the blacklist table. It will be eligible for future campaigns again.</p>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 6 — CREATING CAMPAIGNS
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="creating-campaigns">
+        <h2>Step 5 — Create a Campaign</h2>
+        <p>Campaigns turn a selection of leads into email drafts ready to send. The system auto-renders one draft per lead before you dispatch anything.</p>
+
+        <h3>Creating from the Leads Page</h3>
+        <ol class="guide-steps">
+          <li>On the <a href="/leads">Leads</a> page, use filters to find the contacts you want to target.</li>
+          <li>Check the leads you want, or click <strong>Select all N</strong> for the full filtered set.</li>
+          <li>Click <strong>+ Create Campaign</strong> in the toolbar.</li>
+          <li>Enter a Campaign Name and choose a Template from the dropdown.</li>
+          <li>Click <strong>Generate Drafts</strong>. You are taken to the Campaigns page.</li>
+        </ol>
+        <p>To add leads to an existing campaign later, select them and click <strong>+ Add to Campaign</strong> instead, then pick the target campaign from the dropdown.</p>
+
+        <h3>Reviewing Drafts</h3>
+        <p>The campaign opens with status <span class="status-pill status-paused">PAUSED</span>. No emails have been sent. The email table shows every draft:</p>
+        <ul>
+          <li><strong>Checkbox</strong> — Checked = will be sent; Unchecked = skipped. Leads with missing data are auto-unchecked on creation.</li>
+          <li><strong>Recipient / Subject</strong> — Preview the rendered output. <code>[MISSING: name]</code> in the subject means that lead has no name.</li>
+          <li><strong>Edit icon</strong> — Opens a modal to manually override the subject and body for that specific recipient only.</li>
+          <li><strong>Delete icon</strong> — Removes the draft from the campaign entirely.</li>
+        </ul>
+        <div class="callout callout-warn">
+          <p><strong>Always review drafts before dispatching.</strong> Fix or uncheck any draft containing <code>[MISSING:]</code> markers — these create a poor first impression when sent.</p>
+        </div>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 7 — DISPATCHING CAMPAIGNS
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="dispatching-campaigns">
+        <h2>Step 6 — Dispatch &amp; Monitor</h2>
+        <p>On the <a href="/campaigns">Campaigns</a> page, select a campaign from the sidebar and click <strong>▶ Dispatch emails</strong>. A confirmation dialog shows the count of checked drafts. Click <strong>Yes, Dispatch</strong> to begin.</p>
+        <p>The dispatcher runs in the background. Status changes to <span class="status-pill status-running">RUNNING</span>. The stats boxes update every 3 seconds:</p>
+
+        <!-- Campaign stats mockup -->
+        <div style="display:flex; flex-wrap:wrap; gap:1px; border:1px solid var(--border); border-radius:8px; overflow:hidden; max-width:560px; margin:20px 0; font-size:12px;">
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px;"><div style="font-size:22px; font-weight:700;">63</div><div style="color:var(--muted); font-size:11px;">Total</div></div>
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px; border-left:1px solid var(--border);"><div style="font-size:22px; font-weight:700; color:var(--accent,#58a6ff);">8</div><div style="color:var(--muted); font-size:11px;">Selected</div></div>
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px; border-left:1px solid var(--border);"><div style="font-size:22px; font-weight:700; color:var(--muted);">5</div><div style="color:var(--muted); font-size:11px;">Skipped</div></div>
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px; border-left:1px solid var(--border);"><div style="font-size:22px; font-weight:700; color:#f0a500;">2</div><div style="color:var(--muted); font-size:11px;">Queued</div></div>
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px; border-left:1px solid var(--border);"><div style="font-size:22px; font-weight:700; color:#52c41a;">45</div><div style="color:var(--muted); font-size:11px;">Sent</div></div>
+          <div style="flex:1; text-align:center; padding:14px 8px; background:var(--surface); min-width:70px; border-left:1px solid var(--border);"><div style="font-size:22px; font-weight:700; color:#f85149;">3</div><div style="color:var(--muted); font-size:11px;">Failed</div></div>
+        </div>
+
+        <div class="callout">
+          <p><strong>Rate limiting is intentional.</strong> GovCrawler waits 30–90 seconds between sends (randomised) to avoid triggering SMTP rate limits. A batch of 100 emails takes roughly 50–90 minutes. Do not close the app mid-dispatch.</p>
+        </div>
+
+        <h3>Pause and Cancel</h3>
+        <ul>
+          <li><strong>Pause</strong> — Stops dispatching after the current send finishes. Status returns to PAUSED. Click Dispatch again to resume — it picks up exactly where it stopped.</li>
+          <li><strong>Cancel</strong> — All remaining QUEUED emails are marked FAILED. This cannot be undone. Use only to abandon a campaign entirely.</li>
+        </ul>
+
+        <h3 id="campaign-status">Campaign Status Reference</h3>
+        <table class="config-table">
+          <thead><tr><th>Status</th><th>Set by</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="status-pill status-paused">PAUSED</span></td>
+              <td>Campaign creation; Pause button; no active credentials</td>
+              <td>Drafts exist but nothing is being sent. Safe state — you can edit drafts.</td>
+            </tr>
+            <tr>
+              <td><span class="status-pill status-running">RUNNING</span></td>
+              <td>Dispatch button clicked</td>
+              <td>Background SMTP worker is actively sending. Stats update every 3 s.</td>
+            </tr>
+            <tr>
+              <td><span class="status-pill status-completed">COMPLETED</span></td>
+              <td>Dispatcher (all selected drafts sent)</td>
+              <td>All checked emails have been processed. Campaign is done.</td>
+            </tr>
+            <tr>
+              <td><span class="status-pill status-cancelled">CANCELLED</span></td>
+              <td>User (Cancel button)</td>
+              <td>Remaining QUEUED emails marked FAILED. Irreversible.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Auto-Blacklist on Hard Bounce</h3>
+        <p>If a recipient's mail server permanently rejects an email (SMTP codes <strong>550</strong> or <strong>553</strong>), GovCrawler automatically:</p>
+        <ol class="guide-steps">
+          <li>Adds the address to the blacklist (Settings → Blacklist).</li>
+          <li>Marks the email as FAILED in the campaign with the bounce reason in the Error/Note column.</li>
+          <li>Excludes the address from all future campaigns automatically.</li>
+        </ol>
+        <p>You can remove a blacklist entry manually if the address was corrected or if the block was accidental.</p>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 8 — TEST CAMPAIGNS
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="test-campaigns">
+        <h2>Step 7 — Test Campaigns</h2>
+        <p>Before sending to real leads, validate that your SMTP credentials and email template work correctly. Go to Settings → <strong>Run Test Campaign</strong>, or navigate directly to <a href="/test-campaign"><code>/test-campaign</code></a>.</p>
+
+        <p><strong>Fill in the form:</strong></p>
+        <ul>
+          <li><strong>Campaign Name</strong> — An internal label (e.g. "SMTP Check 1")</li>
+          <li><strong>Select Template</strong> — The template you want to preview</li>
+          <li><strong>Use Round Robin</strong> — Checked = send through all active credentials in rotation. Uncheck to test one specific credential.</li>
+          <li><strong>Dummy Lead Details</strong> — Add Name, Designation, Department, and <em>your own email address</em> as the recipient. Use "+ Add Another Lead" to test multiple slots.</li>
+        </ul>
+
+        <p>Click <strong>Create &amp; Dispatch Test</strong>. The test campaign is created and dispatched immediately. You should receive the test email within a minute or two.</p>
+
+        <div class="callout">
+          <p><strong>What to verify when the email arrives:</strong> (1) It arrived in your inbox (not spam). (2) Template variables rendered correctly — no <code>[MISSING:]</code> markers. (3) Subject and body look as intended. (4) Sender address is the credential you expected.</p>
+        </div>
+
+        <p>To review test results, go to <a href="/campaigns">Campaigns</a> and enable the <strong>Show Tests</strong> checkbox in the sidebar. Test campaigns appear alongside production campaigns.</p>
+
+        <table class="config-table" style="margin-top:16px;">
+          <thead><tr><th>Feature</th><th>Production Campaign</th><th>Test Campaign</th></tr></thead>
+          <tbody>
+            <tr><td>Recipients</td><td>From leads table (real contacts)</td><td>Manually provided dummy details</td></tr>
+            <tr><td>Blacklist check</td><td>Yes — blocked addresses excluded</td><td>No — blacklist is ignored</td></tr>
+            <tr><td>Credential selection</td><td>Round-robin over all active</td><td>Round-robin or one pinned credential</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 9 — SETTINGS REFERENCE
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="settings-reference">
+        <h2>Settings Reference</h2>
+        <p>All settings are stored in <code>portal/config.yaml</code>. The <a href="/settings">Settings page</a> lets you edit most of them in the browser. A quick-access panel (⚙️ button on the Dashboard header) covers the most common crawler knobs without leaving the dashboard.</p>
+
+        <div class="callout callout-warn">
+          <p><strong>Important:</strong> Crawler settings take effect on the <em>next job you create</em>. Any job currently running continues with its original settings.</p>
+        </div>
+
+        <!-- Settings sidebar mockup -->
+        <div class="mockup" style="max-width:440px;">
+          <div class="mockup-header"><span style="font-weight:600;">⚙️ Settings</span></div>
+          <div style="display:flex; font-size:12px; min-height:180px;">
+            <div style="width:160px; border-right:1px solid var(--border); padding:12px; background:var(--surface2,#161b22); flex-shrink:0;">
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">Crawler Config</div>
+              <ul style="list-style:none; padding:0; margin:0 0 14px; font-size:12px; line-height:2.2;">
+                <li style="color:var(--accent,#58a6ff); font-weight:600; background:var(--surface); padding:2px 8px; border-radius:4px;">Depth &amp; Limits</li>
+                <li style="color:var(--muted); padding:2px 8px;">Filtering &amp; Domains</li>
+                <li style="color:var(--muted); padding:2px 8px;">Extraction Rules</li>
+                <li style="color:var(--muted); padding:2px 8px;">System Configs</li>
+              </ul>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">Outreach</div>
+              <ul style="list-style:none; padding:0; margin:0; font-size:12px; line-height:2.2;">
+                <li style="color:var(--muted); padding:2px 8px;">SMTP Credentials</li>
+                <li style="color:var(--muted); padding:2px 8px;">Email Templates</li>
+                <li style="color:var(--muted); padding:2px 8px;">Blacklist</li>
+              </ul>
+            </div>
+            <div style="flex:1; padding:14px; color:var(--muted); font-size:12px; line-height:1.8;">
+              <div style="font-weight:600; color:var(--text); margin-bottom:8px;">Depth &amp; Rate Limiting</div>
+              Workers &nbsp;·&nbsp; Max Depth &nbsp;·&nbsp; Recrawl Days<br>
+              Request Delay &nbsp;·&nbsp; Per-URL Timeout<br>
+              Max Links per depth level<br>
+              <br>
+              <div style="color:var(--muted); font-size:11px;">Click a tab in the sidebar to configure each group.</div>
+            </div>
+          </div>
+        </div>
+
+        <h3 id="crawler-settings">Crawler Settings</h3>
+        <table class="config-table">
+          <colgroup><col style="width:28%"><col></colgroup>
+          <thead>
+            <tr><th>Setting</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="cfg-name">Workers</span><span class="cfg-key">crawler.workers</span><span class="cfg-default">Default: <strong>50</strong></span></td>
+              <td>Number of parallel coroutines crawling simultaneously. Reduce to 10–20 for slow machines or rate-sensitive targets. Higher values increase throughput but also put more load on crawled servers.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Max Depth</span><span class="cfg-key">crawler.max_depth</span><span class="cfg-default">Default: <strong>3</strong></span></td>
+              <td>How many link hops from the seed URL to follow. <strong>0</strong> = seed page only (fastest, fewest leads). <strong>3</strong> = enough to reach most /contact, /about, /staff pages. Beyond 4 grows exponentially in URL count.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Recrawl Days</span><span class="cfg-key">crawler.recrawl_days</span><span class="cfg-default">Default: <strong>30</strong></span></td>
+              <td>URLs visited in any job within the last N days are skipped globally. Set to <strong>0</strong> to always re-crawl everything (useful for testing). Use <strong>Clear Cache</strong> in Settings to reset the history without changing this number.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Request Delay</span><span class="cfg-key">crawler.request_delay</span><span class="cfg-default">Default: <strong>1.5 s</strong></span></td>
+              <td>Minimum seconds between consecutive requests to the same domain (politeness throttle). Increase to 3–5 s if a site starts returning 429 errors or blocking your IP address.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Per-URL Timeout</span><span class="cfg-key">crawler.per_url_timeout</span><span class="cfg-default">Default: <strong>100 s</strong></span></td>
+              <td>Hard watchdog per URL. If fetch + parse takes longer, the worker skips it and moves on. Must be higher than the Playwright timeout to avoid internal conflicts.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Try HTTP First</span><span class="cfg-key">crawler.httpx_first</span><span class="cfg-default">Default: <strong>true</strong></span></td>
+              <td>Attempt a lightweight HTTPX request before launching a browser. Most .gov.in sites are static HTML — this saves significant time and resources. Disable only if you want Playwright for every URL (not recommended).</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Playwright Fallback</span><span class="cfg-key">crawler.playwright_fallback</span><span class="cfg-default">Default: <strong>true</strong></span></td>
+              <td>If a page contains JavaScript-rendering indicators (React/Next.js root elements, "Please enable JavaScript"), escalate to a full Chromium browser. Disable to skip JS-heavy pages entirely — faster but misses some modern government portals.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Playwright Timeout</span><span class="cfg-key">crawler.playwright_timeout</span><span class="cfg-default">Default: <strong>45 s</strong></span></td>
+              <td>Seconds the browser waits for a page's initial load (page.goto()) to complete. Increase for very slow government sites.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">JS Settle Time</span><span class="cfg-key">crawler.js_settle_time</span><span class="cfg-default">Default: <strong>3.0 s</strong></span></td>
+              <td>Extra seconds to wait after the page fires its load event, so JavaScript-rendered content (React, Angular) has time to populate the DOM before extraction runs. Increase to 5–6 s if JS-rendered pages return empty results.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Target Suffixes</span><span class="cfg-key">crawler.target_suffixes</span><span class="cfg-default">Default: <strong>.gov.in &nbsp;.nic.in</strong></span></td>
+              <td>Only follow links whose domain ends in one of these suffixes. Add <code>.edu.in</code> or <code>.res.in</code> to extend coverage to government-affiliated institutions.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Priority Keywords</span><span class="cfg-key">crawler.priority_keywords</span><span class="cfg-default">Default: <strong>contact, officer, directory…</strong></span></td>
+              <td>URLs containing any of these words are crawled first. This ensures /contact, /staff, /directory pages are reached early rather than after thousands of generic navigation pages.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Skip Extensions</span><span class="cfg-key">crawler.skip_extensions</span><span class="cfg-default">Default: <strong>.pdf, .jpg, .zip…</strong></span></td>
+              <td>URLs whose path ends in any listed extension are never queued. Prevents wasting worker slots on binary files and documents that contain no extractable email addresses.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Max Links per Depth</span><span class="cfg-key">crawler.max_links_per_page</span><span class="cfg-default">Default: <strong>100 / 50 / 40 / 15</strong></span></td>
+              <td>Per-page link budget at each depth level (0 / 1 / 2 / default). Seed pages (depth 0) get 100 because home pages have many navigation links. Deeper levels get fewer since subpages are more focused. Tighter limits reduce runtime.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3 id="extraction-settings">Extraction Settings</h3>
+        <table class="config-table">
+          <colgroup><col style="width:28%"><col></colgroup>
+          <thead>
+            <tr><th>Setting</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="cfg-name">Valid Email Suffixes</span><span class="cfg-key">extraction.email.valid_suffixes</span><span class="cfg-default">Default: <strong>.gov.in .nic.in .res.in .ac.in</strong></span></td>
+              <td>Only emails whose domain ends in one of these suffixes are saved as leads. Emails from commercial providers found incidentally on government pages are discarded. Add <code>.edu.in</code> to include educational institutions.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Context Characters</span><span class="cfg-key">extraction.email.context_chars</span><span class="cfg-default">Default: <strong>200</strong></span></td>
+              <td>Characters captured on each side of a found email address. Stored as the "context snippet" in the lead record, and used to search for the person's name and title nearby.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Person Title Prefixes</span><span class="cfg-key">extraction.person.title_prefixes</span><span class="cfg-default">Default: <strong>Shri, Dr, Mr, Smt, Ms, Prof…</strong></span></td>
+              <td>Words that signal the start of a person's name in the surrounding text. The crawler finds the nearest prefix followed by capitalized words and extracts that as the name.</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Designation Keywords</span><span class="cfg-key">extraction.person.designation_keywords</span><span class="cfg-default">Default: <strong>Secretary, Director, Commissioner…</strong></span></td>
+              <td>The first occurrence of any of these words near an email becomes the designation, followed by up to 60 more characters (e.g. "Joint Secretary, Ministry of Finance").</td>
+            </tr>
+            <tr>
+              <td><span class="cfg-name">Proximity Characters</span><span class="cfg-key">extraction.person.proximity_chars</span><span class="cfg-default">Default: <strong>300</strong></span></td>
+              <td>Characters on each side of the email searched for name and designation matches. Increase to capture more context; decrease if unrelated text is being mistakenly extracted as names.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>System Configs (Read-Only in UI)</h3>
+        <p>These parameters appear in Settings → <strong>System Configs</strong> tab as read-only fields. To change them, edit <code>portal/config.yaml</code> directly and restart the server:</p>
+        <ul>
+          <li><strong>User Agent</strong> — The HTTP <code>User-Agent</code> header sent with every request.</li>
+          <li><strong>Email Regex</strong> — The regular expression used to detect email addresses in page text.</li>
+          <li><strong>JS Indicators</strong> — HTML strings that signal a page requires JavaScript rendering (e.g. <code>&lt;div id="__next"</code>).</li>
+          <li><strong>Email Obfuscation Rules</strong> — Regex replacements for de-obfuscating disguised emails, e.g. <code>[at]</code> → <code>@</code>, <code>(dot)</code> → <code>.</code>.</li>
+        </ul>
+      </div>
+
+
+      <!-- ════════════════════════════════════════════════
+           SECTION 10 — TROUBLESHOOTING
+      ════════════════════════════════════════════════ -->
+      <div class="guide-section" id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <ul class="trouble-list">
+          <li>
+            <div class="problem">No domains show in the table after import</div>
+            <div class="solution">The import may still be running — check the progress bar in the sidebar. If it finished, the JSON file format may be invalid (must be an india.gov.in export). Try refreshing the page after the import completes.</div>
+          </li>
+          <li>
+            <div class="problem">Crawl job starts but finds zero leads</div>
+            <div class="solution">
+              Check three things: (1) The domain may not publicly list emails with <code>.gov.in</code>/<code>.nic.in</code> suffixes — check <strong>Valid Email Suffixes</strong> in Settings → Extraction Rules.
+              (2) Max Depth may be too low — depth 0 only crawls the seed page; try 2 or 3.
+              (3) The site may require JavaScript — enable <strong>Playwright Fallback</strong> in Settings.
+            </div>
+          </li>
+          <li>
+            <div class="problem">JS-heavy site shows empty results / no content extracted</div>
+            <div class="solution">Enable <strong>Playwright Fallback</strong> in Settings. Also try increasing <strong>JS Settle Time</strong> to 5–6 seconds to give React/Angular frameworks more time to finish rendering before extraction runs.</div>
+          </li>
+          <li>
+            <div class="problem">Crawl runs very fast but visits very few URLs</div>
+            <div class="solution">Recrawl protection is likely skipping URLs already visited in a recent job. Go to Settings → System Configs and click <strong>Clear Cache</strong> to reset the visited-URL history, or reduce <strong>Recrawl Days</strong> to 0.</div>
+          </li>
+          <li>
+            <div class="problem">Dispatch stalls or a credential shows "Disabled"</div>
+            <div class="solution">The SMTP server rejected the username or password (auth failure). Go to Settings → SMTP Credentials, edit the credential to fix the password, and re-enable it. For Gmail, ensure you are using an App Password — not your Google account password.</div>
+          </li>
+          <li>
+            <div class="problem">Campaign status stays PAUSED after clicking Dispatch</div>
+            <div class="solution">No active credentials are available for sending. Check Settings → SMTP Credentials — all entries may be Disabled or Cooling. Wait for the cooldown to expire, fix a disabled credential, or add and test a new one.</div>
+          </li>
+          <li>
+            <div class="problem">Template renders with [MISSING: name] in the body</div>
+            <div class="solution">The lead's person name is blank. Either (1) edit the name inline on the Leads page before creating the campaign, or (2) uncheck that specific draft in the campaign review so it is skipped during dispatch.</div>
+          </li>
+          <li>
+            <div class="problem">Sent count increases very slowly during dispatch</div>
+            <div class="solution">This is expected. GovCrawler waits 30–90 seconds between sends (randomised jitter) to avoid SMTP rate limits. A campaign of 100 emails takes 50–90 minutes. Keep the app open and do not restart the server mid-dispatch.</div>
+          </li>
+          <li>
+            <div class="problem">A domain I want to crawl is not in the domain list</div>
+            <div class="solution">The domain registry is sourced from india.gov.in. Run a <strong>Live API Refresh</strong> to fetch the latest additions. If the domain is not in the india.gov.in registry at all, it cannot be added through the standard import flow.</div>
+          </li>
+          <li>
+            <div class="problem">The bottom dock does not open after starting a crawl</div>
+            <div class="solution">The dock is fixed to the bottom of the viewport — scroll down if it is not visible. If the job status immediately shows "failed", click on the job in the Recent Jobs sidebar to open the dock, then check the Server Logs tab for the error message.</div>
+          </li>
+        </ul>
+      </div>
+
+
+    </div><!-- /settings-tab -->
+  </main>
+
+</div><!-- /layout -->
+{% endblock %}
+
+{% block extra_js %}
+// Sidebar active-section highlighting via IntersectionObserver
+(function () {
+  var sections = document.querySelectorAll('.guide-section[id]');
+  var items = document.querySelectorAll('#guide-nav li');
+  if (!sections.length || !items.length) return;
+
+  function activate(id) {
+    items.forEach(function (li) {
+      var fn = li.getAttribute('onclick') || '';
+      var isActive = fn.indexOf("'" + id + "'") !== -1 || fn.indexOf('"' + id + '"') !== -1;
+      li.style.color = isActive ? 'var(--text)' : '';
+      li.style.fontWeight = isActive ? '600' : '';
+      if (isActive) li.style.background = 'var(--surface2, #161b22)';
+      else li.style.background = '';
+    });
+  }
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) activate(e.target.id);
+    });
+  }, { threshold: 0.2 });
+
+  sections.forEach(function (s) { observer.observe(s); });
+})();
+{% endblock %}
