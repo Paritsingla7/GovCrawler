@@ -1,14 +1,14 @@
 database:
   uri: sqlite:///portal/data/govcrawler.db
 api:
-  host: 127.0.0.1
+  host: 0.0.0.0
   port: 8001
 scraper:
   category_filter: ''
   org_type_filter: ''
 crawler:
-  workers: 10
-  max_depth: 4
+  workers: 50
+  max_depth: 3
   recrawl_days: 30
   httpx_first: true
   playwright_fallback: false
@@ -23,7 +23,7 @@ crawler:
     0: 100
     1: 50
     2: 40
-    default: 20
+    default: 15
   target_suffixes:
     - .gov.in
     - .nic.in
@@ -42,6 +42,8 @@ crawler:
     - committee
     - administration
     - team
+    - tender
+    - procurement
     - telephone
     - tele-directory
     - phone-directory
@@ -86,7 +88,6 @@ extraction:
       - .nic.in
       - .res.in
       - .ac.in
-      - .com
     obfuscation:
       - - \s*\[at\]\s*
         - '@'
@@ -96,12 +97,8 @@ extraction:
         - .
       - - \s*\(dot\)\s*
         - .
-      - - \s*\[hyphen\]\s*
-        - '-'
-      - - \s*\(hyphen\)\s*
-        - '-'
     context_chars: 200
-  max_input_chars: 200000
+  max_input_chars: 50000
   role_local_parts:
     - webmaster
     - info
@@ -152,7 +149,4 @@ extraction:
       - IPS
       - IFS
       - IRS
-      - Jt
-      - Jr
-      - Junior
     proximity_chars: 300
