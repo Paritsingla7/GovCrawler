@@ -15,10 +15,10 @@ import asyncio
 import logging
 
 from fastapi import FastAPI, HTTPException, Query
-from jinja2 import Template, TemplateSyntaxError
 from pydantic import BaseModel
 
-from ..db import Database, CampaignStatus
+from ..db import Database, CampaignStatus, Lead
+from ..services.campaign_service import render_draft_emails, render_template_string
 from .dispatcher import run_campaign_dispatch
 
 log = logging.getLogger(__name__)
@@ -65,18 +65,6 @@ class TestCampaignCreate(BaseModel):
     test_credential_id: int | None = None
 
 
-# ── Jinja2 rendering helper ──────────────────────────────────────────────────
-
-def render_template_string(template_str: str, **kwargs) -> str:
-    """Render a Jinja2 template string with the given variables.
-    Pre-validated templates should never fail here, but we handle it gracefully."""
-    try:
-        return Template(template_str).render(**kwargs)
-    except Exception as e:
-        log.warning(f"Template render failed: {e}")
-        return template_str  # Fallback to raw string
-
-
 # ── Route registration ────────────────────────────────────────────────────────
 
 def register_campaign_routes(app: FastAPI, db: Database):
@@ -100,12 +88,9 @@ def register_campaign_routes(app: FastAPI, db: Database):
         if not leads:
             raise HTTPException(status_code=404, detail="No matching leads found")
 
-        # 4. Blacklist filter
+        # 4. Blacklist filter (checked up front so we can 422 before creating the campaign)
         blacklisted = db.get_blacklisted_emails_set()
-        filtered_leads = [l for l in leads if l["email"] not in blacklisted]
-        blacklisted_count = len(leads) - len(filtered_leads)
-
-        if not filtered_leads:
+        if all(l["email"] in blacklisted for l in leads):
             raise HTTPException(
                 status_code=422,
                 detail=f"All {len(leads)} leads are blacklisted. "
@@ -122,49 +107,15 @@ def register_campaign_routes(app: FastAPI, db: Database):
         # 6. Jinja2 render loop + build email dicts
         # We need lead IDs for the FK — get_all_leads_for_export doesn't return them,
         # so we build a lookup from the original lead_ids query
-        lead_id_by_email = {}
         with db._Session() as s:
-            from ..db import Lead
             rows = s.query(Lead.id, Lead.email).filter(
                 Lead.id.in_(req.lead_ids)
             ).all()
             lead_id_by_email = {r.email: r.id for r in rows}
 
-        email_dicts = []
-        for lead in filtered_leads:
-            # Detect missing template variables before applying fallbacks
-            missing = []
-            if not lead.get("person_name"):
-                missing.append("name")
-            if not lead.get("designation"):
-                missing.append("designation")
-
-            # Subject uses clean fallbacks (no placeholder markers)
-            subject_vars = {
-                "name": lead.get("person_name") or "Official",
-                "designation": lead.get("designation") or "",
-            }
-            # Body uses visible [MISSING: field] markers so the user knows what to fix
-            body_vars = {
-                "name": lead.get("person_name") or "[MISSING: name]",
-                "designation": lead.get("designation") or "[MISSING: designation]",
-            }
-
-            rendered_subject = render_template_string(template["subject"], **subject_vars)
-            rendered_body = render_template_string(template["raw_body"], **body_vars)
-
-            lead_id = lead_id_by_email.get(lead["email"])
-            if lead_id is None:
-                continue  # Safety: skip if we can't resolve the FK
-
-            email_dicts.append({
-                "lead_id": lead_id,
-                "recipient_email": lead["email"],
-                "subject": rendered_subject,
-                "body": rendered_body,
-                "is_selected": len(missing) == 0,  # deselect emails with missing data
-                "missing_fields": ",".join(missing) if missing else None,
-            })
+        email_dicts, blacklisted_count, _ = render_draft_emails(
+            leads, template, blacklisted, lead_id_by_email
+        )
 
         # 7. Bulk insert staged drafts
         staged_count = db.bulk_create_campaign_emails(campaign_id, email_dicts)
@@ -365,47 +316,16 @@ def register_campaign_routes(app: FastAPI, db: Database):
             raise HTTPException(status_code=404, detail="No matching leads found")
 
         blacklisted = db.get_blacklisted_emails_set()
-        filtered_leads = [l for l in leads if l["email"] not in blacklisted]
-        blacklisted_count = len(leads) - len(filtered_leads)
-
         existing_in_campaign = db.get_campaign_recipient_emails(campaign_id)
-        already_count = sum(1 for l in filtered_leads if l["email"] in existing_in_campaign)
-        filtered_leads = [l for l in filtered_leads if l["email"] not in existing_in_campaign]
 
         with db._Session() as s:
-            from ..db import Lead
             rows = s.query(Lead.id, Lead.email).filter(Lead.id.in_(req.lead_ids)).all()
             lead_id_by_email = {r.email: r.id for r in rows}
 
-        email_dicts = []
-        for lead in filtered_leads:
-            missing = []
-            if not lead.get("person_name"):
-                missing.append("name")
-            if not lead.get("designation"):
-                missing.append("designation")
-
-            subject_vars = {
-                "name": lead.get("person_name") or "Official",
-                "designation": lead.get("designation") or "",
-            }
-            body_vars = {
-                "name": lead.get("person_name") or "[MISSING: name]",
-                "designation": lead.get("designation") or "[MISSING: designation]",
-            }
-
-            lead_id = lead_id_by_email.get(lead["email"])
-            if lead_id is None:
-                continue
-
-            email_dicts.append({
-                "lead_id": lead_id,
-                "recipient_email": lead["email"],
-                "subject": render_template_string(template["subject"], **subject_vars),
-                "body": render_template_string(template["raw_body"], **body_vars),
-                "is_selected": len(missing) == 0,
-                "missing_fields": ",".join(missing) if missing else None,
-            })
+        email_dicts, blacklisted_count, already_count = render_draft_emails(
+            leads, template, blacklisted, lead_id_by_email,
+            exclude_emails=existing_in_campaign,
+        )
 
         staged_count = db.bulk_create_campaign_emails(campaign_id, email_dicts)
         return {
