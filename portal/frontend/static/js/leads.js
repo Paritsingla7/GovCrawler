@@ -263,9 +263,11 @@ function renderLeads(leads, total) {
                 ? `<p class="d-name" style="display:block;color:var(--text);text-decoration:none">${esc(l.domain_title)}</p>`
                 : `<div class="d-name">${esc(l.domain_title || '—')}</div>`
             }<div style="font-size:10px;color:var(--small);margin-top:2px">Depth: ${l.depth ?? 0}</div></td>`,
-            `<td style="max-width:200px">${l.source_url
-                ? `<a href="${esc(l.source_url)}" target="_blank" style="font-size:11px;color:var(--muted)" title="${esc(l.source_url)}">${esc(l.source_title || '')}${l.source_title ? '' : '—'}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>`
-                : `<span style="color:var(--small)">${esc(l.source_title || '—')}</span>`
+            `<td style="max-width:200px">${l.channel_tag === 'manual'
+                ? `<span class="badge badge-secondary" title="Uploaded via CSV">Manual Upload</span>`
+                : l.source_url
+                    ? `<a href="${esc(l.source_url)}" target="_blank" style="font-size:11px;color:var(--muted)" title="${esc(l.source_url)}">${esc(l.source_title || '')}${l.source_title ? '' : '—'}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>`
+                    : `<span style="color:var(--small)">${esc(l.source_title || '—')}</span>`
             }</td>`,
         ].join('');
         tbody.appendChild(tr);
@@ -468,6 +470,70 @@ async function confirmExport() {
     } finally {
         btn.textContent = '⬇ Export CSV';
         btn.disabled = false;
+    }
+}
+
+// ── Import Leads from CSV ────────────────────────────────────────────────────
+
+function openImportModal() {
+    document.getElementById('import-csv-file').value = '';
+    document.getElementById('import-result').style.display = 'none';
+    document.getElementById('modal-import').style.display = 'flex';
+}
+
+function closeImportModal() {
+    document.getElementById('modal-import').style.display = 'none';
+}
+
+async function confirmImport() {
+    const fileInput = document.getElementById('import-csv-file');
+    const file = fileInput.files[0];
+    if (!file) {
+        alert('Choose a CSV file first.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-import-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+
+    const resultBox = document.getElementById('import-result');
+    resultBox.style.display = 'none';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/leads/import-csv', {method: 'POST', body: formData});
+        if (!res.ok) {
+            let detail = 'Import failed';
+            try {
+                detail = (await res.json()).detail || detail;
+            } catch (_) {
+            }
+            throw new Error(detail);
+        }
+
+        const data = await res.json();
+        let html = `<strong>${data.imported}</strong> imported, <strong>${data.updated}</strong> updated`;
+        if (data.skipped.length) {
+            html += `, <strong>${data.skipped.length}</strong> skipped:`;
+            html += '<ul style="margin:6px 0 0 18px;max-height:160px;overflow-y:auto;">';
+            data.skipped.forEach(s => {
+                html += `<li>Row ${s.row}${s.email ? ` (${esc(s.email)})` : ''}: ${esc(s.reason)}</li>`;
+            });
+            html += '</ul>';
+        }
+        resultBox.innerHTML = html;
+        resultBox.style.display = 'block';
+
+        if (data.imported > 0 || data.updated > 0) loadLeads();
+    } catch (e) {
+        resultBox.innerHTML = `Import failed: ${esc(e.message)}`;
+        resultBox.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '⬆ Import';
     }
 }
 

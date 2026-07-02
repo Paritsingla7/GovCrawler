@@ -14,11 +14,12 @@ Registers routes:
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ..db import Database, CampaignStatus, Lead
 from ..services.campaign_service import render_draft_emails, render_template_string
+from ..services.csv_import import parse_contacts_csv
 from .deps import get_db
 from .dispatcher import run_campaign_dispatch, run_test_campaign_dispatch
 
@@ -55,10 +56,10 @@ class AddEmailsRequest(BaseModel):
 
 
 class DummyDetails(BaseModel):
-    name: str
-    designation: str
+    name: str | None = None
+    designation: str | None = None
     email: str
-    department: str
+    department: str | None = None
 
 
 class TestCampaignCreate(BaseModel):
@@ -351,6 +352,23 @@ async def add_emails_to_campaign(campaign_id: int, req: AddEmailsRequest, db: Da
 
 
 # ── Test Campaign routes ──────────────────────────────────────────────────────
+
+@router.post("/api/test-campaigns/parse-csv")
+async def parse_test_campaign_csv(file: UploadFile = File(...)):
+    """Parse an uploaded CSV into dummy_details for a test campaign. No DB writes."""
+    content = await file.read()
+    rows, skipped = parse_contacts_csv(content)
+    dummy_details = [
+        {
+            "name": r.get("name") or "",
+            "designation": r.get("designation") or "",
+            "email": r["email"],
+            "department": r.get("department") or "",
+        }
+        for r in rows
+    ]
+    return {"dummy_details": dummy_details, "skipped": skipped}
+
 
 @router.post("/api/test-campaigns", status_code=201)
 async def create_test_campaign(req: TestCampaignCreate, db: Database = Depends(get_db)):

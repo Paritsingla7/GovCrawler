@@ -92,6 +92,7 @@ class LeadMixin:
                   "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
                   "confidence_band": l.confidence_band,
                   "field_provenance": l.field_provenance,
+                  "channel_tag": l.channel_tag,
                   "phone": l.phone,
                   "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
@@ -169,6 +170,39 @@ class LeadMixin:
                 q = q.filter(Domain.category_code == category)
             rows = q.distinct().order_by(Domain.state).all()
             return [r[0] for r in rows if r[0]]
+
+    def bulk_upsert_manual_leads(self, job_id: int, rows: list[dict]) -> tuple[int, int, list[dict]]:
+        """Insert/update CSV-uploaded leads. Updates a row only if the existing
+        lead with that email is itself manual; leaves crawled leads untouched."""
+        imported = 0
+        updated = 0
+        skipped: list[dict] = []
+        with self._Session() as s:
+            for row in rows:
+                existing = s.query(Lead).filter(Lead.email == row["email"]).first()
+                if existing:
+                    if existing.channel_tag == "manual":
+                        existing.person_name = row.get("name") or existing.person_name
+                        existing.designation = row.get("designation") or existing.designation
+                        existing.department = row.get("department") or existing.department
+                        existing.phone = row.get("phone") or existing.phone
+                        updated += 1
+                    else:
+                        skipped.append({
+                            "row": row.get("row"), "email": row["email"],
+                            "reason": "email already exists as a crawled lead",
+                        })
+                    continue
+                s.add(Lead(
+                    job_id=job_id, domain_id=None, email=row["email"],
+                    person_name=row.get("name"), designation=row.get("designation"),
+                    department=row.get("department"), source_url="manual-csv-upload",
+                    source_title=None, context_snippet=None,
+                    phone=row.get("phone"), channel_tag="manual", depth=0,
+                ))
+                imported += 1
+            s.commit()
+        return imported, updated, skipped
 
     _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "domain_state"})
 

@@ -55,34 +55,84 @@ function toggleCredentialSelect() {
 
 let leadCount = 1;
 
-function addDummyLead() {
+function addDummyLead(prefill) {
     leadCount++;
     const container = document.getElementById('dummy-leads-container');
     const newLead = document.createElement('div');
     newLead.className = 'dummy-lead-entry';
     newLead.style = 'border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin-bottom: 16px; position: relative;';
 
+    const v = prefill || {};
+    const esc = (s) => (s || '').toString().replace(/"/g, '&quot;');
+
     newLead.innerHTML = `
         <button type="button" onclick="this.parentElement.remove()" style="position: absolute; right: 16px; top: 16px; background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px;">✕</button>
         <h4 style="margin-top:0; margin-bottom: 12px; font-size: 14px; font-weight: 600;">Lead ${leadCount}</h4>
         <div class="form-group">
             <label>Name</label>
-            <input type="text" class="test-lead-name" required placeholder="John Doe">
+            <input type="text" class="test-lead-name" placeholder="John Doe" value="${esc(v.name)}">
         </div>
         <div class="form-group">
             <label>Designation</label>
-            <input type="text" class="test-lead-designation" placeholder="Director">
+            <input type="text" class="test-lead-designation" placeholder="Director" value="${esc(v.designation)}">
         </div>
         <div class="form-group">
             <label>Department</label>
-            <input type="text" class="test-lead-department" placeholder="IT Department">
+            <input type="text" class="test-lead-department" placeholder="IT Department" value="${esc(v.department)}">
         </div>
         <div class="form-group" style="margin-bottom: 0;">
             <label>Email Address</label>
-            <input type="email" class="test-lead-email" required placeholder="john@example.com">
+            <input type="email" class="test-lead-email" required placeholder="john@example.com" value="${esc(v.email)}">
         </div>
     `;
     container.appendChild(newLead);
+}
+
+async function uploadDummyLeadsCsv() {
+    const fileInput = document.getElementById('test-csv-file');
+    const file = fileInput.files[0];
+    const resultBox = document.getElementById('test-csv-result');
+    if (!file) {
+        alert('Choose a CSV file first.');
+        return;
+    }
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/test-campaigns/parse-csv', {method: 'POST', body: formData});
+        if (!res.ok) {
+            let detail = 'Failed to parse CSV';
+            try {
+                detail = (await res.json()).detail || detail;
+            } catch (_) {
+            }
+            throw new Error(detail);
+        }
+
+        const data = await res.json();
+
+        const container = document.getElementById('dummy-leads-container');
+        container.innerHTML = '';
+        leadCount = 0;
+        data.dummy_details.forEach(d => addDummyLead(d));
+
+        let html = `Loaded <strong>${data.dummy_details.length}</strong> lead(s) from CSV.`;
+        if (data.skipped.length) {
+            html += ` <strong>${data.skipped.length}</strong> row(s) skipped:`;
+            html += '<ul style="margin:6px 0 0 18px;max-height:140px;overflow-y:auto;">';
+            data.skipped.forEach(s => {
+                html += `<li>Row ${s.row}${s.email ? ` (${s.email})` : ''}: ${s.reason}</li>`;
+            });
+            html += '</ul>';
+        }
+        resultBox.innerHTML = html;
+        resultBox.style.display = 'block';
+    } catch (e) {
+        resultBox.innerHTML = `CSV upload failed: ${e.message}`;
+        resultBox.style.display = 'block';
+    }
 }
 
 async function submitTestCampaign(e) {

@@ -9,6 +9,7 @@
 
 
 {% block header_actions %}
+<button class="btn-secondary" onclick="openImportModal()">⬆ Import CSV</button>
 <button class="btn-primary" onclick="openExportModal()">⬇ Export CSV</button>
 <button class="btn-secondary" onclick="window.location.href='/'">Back to Dashboard</button>
 {% endblock %}
@@ -142,6 +143,27 @@
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
             <button class="btn-primary" id="btn-export-confirm" onclick="confirmExport()">⬇ Export CSV</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Import Leads CSV Modal -->
+<div class="modal-overlay" id="modal-import" style="display:none;">
+    <div class="modal modal-lg">
+        <h3>Import Leads from CSV</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+            Columns: <code>email</code> (required), <code>name</code>, <code>designation</code>,
+            <code>department</code>, <code>phone</code>. Existing manual leads are updated by email;
+            crawled leads are left untouched. <a href="/api/leads/import-csv/template">Download template</a>.
+        </p>
+        <div class="form-group">
+            <input accept=".csv" id="import-csv-file" type="file">
+        </div>
+        <div id="import-result" style="display:none;font-size:13px;margin-top:12px;"></div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeImportModal()">Close</button>
+            <button class="btn-primary" id="btn-import-confirm" onclick="confirmImport()">⬆ Import</button>
         </div>
     </div>
 </div>

@@ -2,22 +2,25 @@
 Lead browsing, export, and editing endpoints.
 
 Registers routes:
-  GET  /api/leads           → paginated leads for a job
-  GET  /api/leads/ids       → all matching lead IDs (for select-all)
-  GET  /api/leads/categories→ category counts for leads
-  GET  /api/leads/states    → distinct states for leads
-  POST /api/leads/export    → CSV download
-  PUT  /api/leads/{id}      → edit name/designation/department/state
+  GET  /api/leads                    → paginated leads for a job
+  GET  /api/leads/ids                → all matching lead IDs (for select-all)
+  GET  /api/leads/categories         → category counts for leads
+  GET  /api/leads/states             → distinct states for leads
+  POST /api/leads/export             → CSV download
+  POST /api/leads/import-csv         → bulk-create/update manual leads from CSV
+  GET  /api/leads/import-csv/template→ downloadable CSV template
+  PUT  /api/leads/{id}               → edit name/designation/department/state
 """
 
 import csv
 import io
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..db import Database
+from ..services.csv_import import build_template_csv, parse_contacts_csv
 from .deps import get_db
 
 router = APIRouter(tags=["leads"])
@@ -123,6 +126,30 @@ async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition":
                      f'attachment; filename="leads_export.csv"'},
+    )
+
+
+@router.post("/api/leads/import-csv")
+async def import_leads_csv(file: UploadFile = File(...), db: Database = Depends(get_db)):
+    """Bulk-create or update manual leads from an uploaded CSV file."""
+    content = await file.read()
+    rows, skipped = parse_contacts_csv(content)
+    if not rows and not skipped:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+
+    job_id = db.get_or_create_manual_upload_job()
+    imported, updated, db_skipped = db.bulk_upsert_manual_leads(job_id, rows)
+    skipped.extend(db_skipped)
+
+    return {"imported": imported, "updated": updated, "skipped": skipped}
+
+
+@router.get("/api/leads/import-csv/template")
+async def download_leads_csv_template():
+    return StreamingResponse(
+        iter([build_template_csv()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="leads_import_template.csv"'},
     )
 
 

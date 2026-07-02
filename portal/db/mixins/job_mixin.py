@@ -59,6 +59,17 @@ class JobMixin:
             })
             s.commit()
 
+    def get_or_create_manual_upload_job(self) -> int:
+        """Shared synthetic job that all CSV-uploaded manual leads attach to."""
+        with self._Session() as s:
+            job = s.query(CrawlJob).filter_by(status="manual_upload").first()
+            if job:
+                return job.id
+            job = CrawlJob(status="manual_upload", total_domains=0, seed_domains=0)
+            s.add(job)
+            s.commit()
+            return job.id
+
     def get_job(self, job_id: int) -> dict | None:
         with self._Session() as s:
             j = s.query(CrawlJob).filter_by(id=job_id).first()
