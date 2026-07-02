@@ -1,4 +1,3 @@
-from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
@@ -9,6 +8,8 @@ import os
 import uvicorn
 
 from portal.main import load_config
+from portal.paths import BROWSER_PATH
+
 config = load_config()
 
 # ==========================================
@@ -41,30 +42,31 @@ if sys.stderr is None:
 if len(sys.argv) > 1 and sys.argv[1] == "INSTALL_BROWSERS":
     # We are running as a background worker. Do not load Tkinter.
     from playwright.__main__ import main as pw_main
-    
+
     # Trick Playwright into thinking we typed this in the terminal
     sys.argv = ["playwright", "install", "chromium", "--force"]
-    
+
     try:
         pw_main()
         sys.exit(0)
     except SystemExit as e:
         sys.exit(e.code)
 
+
 class CrawlerLauncher:
     def __init__(self, root):
         self.root = root
         self.root.title("GovCrawler Control Panel")
-        self.root.geometry("400x400") # Made taller to fit 4 buttons
+        self.root.geometry("400x400")  # Made taller to fit 4 buttons
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
+
         # --- UI Elements ---
         self.status_label = tk.Label(root, text="Status: Ready", fg="black")
         self.status_label.pack(pady=20)
-        
+
         self.btn_download = tk.Button(root, text="1. Download Browsers (First Time)", command=self.trigger_download)
         self.btn_download.pack(pady=10)
-        
+
         self.btn_start = tk.Button(root, text="2. Start Server", command=self.trigger_start_server)
         self.btn_start.pack(pady=10)
 
@@ -72,9 +74,10 @@ class CrawlerLauncher:
         self.btn_browser.pack(pady=10)
 
         # The new Stop Button
-        self.btn_stop = tk.Button(root, text="4. Stop Server", command=self.trigger_stop_server, state=tk.DISABLED, fg="red")
+        self.btn_stop = tk.Button(root, text="4. Stop Server", command=self.trigger_stop_server, state=tk.DISABLED,
+                                  fg="red")
         self.btn_stop.pack(pady=10)
-        
+
         self.server_thread = None
         self.uvicorn_server = None
 
@@ -86,30 +89,28 @@ class CrawlerLauncher:
 
     def _download_browsers_task(self):
         try:
-            # 1. Intelligently determine paths and commands based on the environment
+            # 1. Determine the launch command based on the environment
             if getattr(sys, 'frozen', False):
                 # COMPILED MODE: Running as GovCrawler.exe
-                base_dir = Path(sys.executable).parent
                 cmd = [sys.executable, "INSTALL_BROWSERS"]
             else:
                 # DEV MODE: Running as python launcher.py
-                base_dir = Path(__file__).resolve().parent
                 cmd = [sys.executable, __file__, "INSTALL_BROWSERS"]
 
             # 2. Create the browsers folder safely
-            browser_dir = base_dir / "playwright_browsers"
-            browser_dir.mkdir(parents=True, exist_ok=True)
-            
+            BROWSER_PATH.mkdir(parents=True, exist_ok=True)
+
             # 3. Copy the current environment and inject the Playwright path
             env = os.environ.copy()
-            env["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_dir)
-            
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSER_PATH)
+
             # 4. Trigger the background process
             subprocess.run(cmd, env=env, check=True)
-            
+
             self.root.after(0, lambda: self.status_label.config(text="Status: Download Complete!", fg="green"))
         except subprocess.CalledProcessError as e:
-            self.root.after(0, lambda: self.status_label.config(text="Status: Download Failed. Check Firewall.", fg="red"))
+            self.root.after(0,
+                            lambda: self.status_label.config(text="Status: Download Failed. Check Firewall.", fg="red"))
             self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to download binaries.\n{e}"))
         except Exception as e:
             self.root.after(0, lambda: self.status_label.config(text="Status: Unexpected Error.", fg="red"))
@@ -117,7 +118,6 @@ class CrawlerLauncher:
         finally:
             self.root.after(0, lambda: self.btn_download.config(state=tk.NORMAL))
 
-            
     # --- ACTION: Start Server ---
     def trigger_start_server(self):
         # Update UI States
@@ -125,32 +125,32 @@ class CrawlerLauncher:
         self.btn_stop.config(state=tk.NORMAL)
         self.btn_browser.config(state=tk.NORMAL)
         self.status_label.config(text="Status: Server Running.", fg="green")
-        
+
         # Start the server on a background thread so the GUI doesn't freeze
         self.server_thread = threading.Thread(target=self._run_server_task, daemon=True)
         self.server_thread.start()
 
     def _run_server_task(self):
         # Local imports ensure we don't trigger backend logic until the button is clicked
-        from portal.db.models import Database
+        from portal.db import Database
         from portal.api.server import create_app
-        
+
         db = Database(config)
         app = create_app(config, db)
-        
+
         # 1. Use Uvicorn's Config object instead of uvicorn.run()
         u_config = uvicorn.Config(
-            app=app, 
-            host=config["api"]["host"], 
-            port=config["api"]["port"], 
+            app=app,
+            host=config["api"]["host"],
+            port=config["api"]["port"],
             log_level="info"
         )
         # 2. Instantiate the server object so we can access it later
         self.uvicorn_server = uvicorn.Server(u_config)
-        
+
         # 3. This runs the server. It completely blocks this thread until stopped.
         self.uvicorn_server.run()
-        
+
         # 4. This code ONLY executes after the server has fully shut down
         self.root.after(0, self._on_server_stopped)
 
@@ -160,7 +160,7 @@ class CrawlerLauncher:
             self.status_label.config(text="Status: Stopping Server safely...", fg="orange")
             self.btn_stop.config(state=tk.DISABLED)
             self.btn_browser.config(state=tk.DISABLED)
-            
+
             # This is the exact programmatic equivalent of pressing Ctrl+C
             self.uvicorn_server.should_exit = True
 
@@ -196,16 +196,16 @@ class CrawlerLauncher:
         # If the server is actively running, we must wait for it to die
         if self.uvicorn_server and self.server_thread and self.server_thread.is_alive():
             self.status_label.config(text="Status: Shutting down safely... please wait.", fg="orange")
-            
+
             # Disable the whole UI so the user doesn't click anything else
             self.btn_start.config(state=tk.DISABLED)
             self.btn_stop.config(state=tk.DISABLED)
             self.btn_browser.config(state=tk.DISABLED)
             self.btn_download.config(state=tk.DISABLED)
-            
+
             # Send the graceful shutdown signal to Uvicorn
             self.uvicorn_server.should_exit = True
-            
+
             # Start polling to see when the thread actually finishes
             self.root.after(200, self._check_shutdown_complete)
         else:
@@ -221,6 +221,7 @@ class CrawlerLauncher:
             # Thread is completely dead. Safe to destroy the application.
             self.root.destroy()
             sys.exit(0)
+
 
 if __name__ == "__main__":
     root = tk.Tk()

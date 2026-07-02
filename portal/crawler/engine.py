@@ -7,7 +7,7 @@ Design goals (this revision):
     write is offloaded to a thread pool. The loop stays free for network I/O
     and the web UI stays responsive.
   - HTML is parsed exactly ONCE per page. A single BeautifulSoup tree feeds both
-    lead extraction and link discovery (see _parse_html / parser.extract_leads).
+    lead extraction and link discovery (see parser.parse_for_engine / parser.extract_leads).
   - One shared httpx.AsyncClient across all workers → connection pooling and
     keep-alive instead of a fresh TCP+TLS handshake per URL.
   - Per-domain politeness spacing without double-sleeping the httpx→Playwright
@@ -34,13 +34,12 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import urlparse, urlsplit
 
 import httpx
-from bs4 import BeautifulSoup
 
-from .parser import extract_leads
-from ..db.models import Database
+from .parser import parse_for_engine
+from ..db import Database
 
 log = logging.getLogger(__name__)
 
@@ -55,53 +54,6 @@ class _QueueItem:
     is_seed: bool = field(compare=False, default=False)
 
 
-def _parse_html(html: str, url: str, excfg: dict):
-    """
-    Runs in the parse thread pool. Builds ONE soup and returns:
-      (leads, raw_links)
-    raw_links is a list of (absolute_url, anchor_text) — filtering happens on
-    the event-loop thread (cheap string ops with access to the visited set).
-
-    Anchors are harvested BEFORE extract_leads runs, because extract_leads
-    decomposes <script>/<style>/<noscript> from the tree.
-
-    Uses html.parser (pure Python) instead of lxml to avoid C-extension
-    thread-safety edge cases when many threads parse concurrently.
-    """
-    try:
-        soup = BeautifulSoup(html, "html.parser")
-    except Exception as e:
-        log.warning(f"_parse_html: soup parse failed for {url}: {e}")
-        return [], []
-
-    raw_links: list[tuple[str, str]] = []
-    try:
-        for a in soup.find_all("a", href=True):
-            href = a["href"].strip()
-            if not href:
-                continue
-            text = (a.get_text() or "").strip().lower()[:100]
-            try:
-                absolute = urljoin(url, href)
-            except Exception:
-                continue
-            raw_links.append((absolute, text))
-    except Exception as e:
-        log.warning(f"_parse_html: link extraction failed for {url}: {e}")
-        raw_links = []
-
-    try:
-        leads = extract_leads(soup, url, excfg)
-    except Exception as e:
-        log.warning(f"_parse_html: extract_leads raised for {url}: {e}")
-        leads = []
-
-    if leads:
-        log.debug(f"_parse_html: {len(leads)} leads at {url}")
-
-    return leads, raw_links
-
-
 class CrawlerEngine:
     def __init__(self, config: dict, db: Database, job_id: int, browser=None):
         self._cfg = config["crawler"]
@@ -113,7 +65,7 @@ class CrawlerEngine:
         self._queue: asyncio.PriorityQueue[_QueueItem] = asyncio.PriorityQueue()
         self._visited: set[str] = set()
         self._domain_locks: dict[str, asyncio.Lock] = {}
-        self._domain_next: dict[str, float] = {}   # netloc → earliest next-request time
+        self._domain_next: dict[str, float] = {}  # netloc → earliest next-request time
         self._counter = 0
         self._skipped = 0
         self._session_visited_count = 0
@@ -293,6 +245,7 @@ class CrawlerEngine:
                     )
                 except Exception:
                     return None
+
             contexts = list(await asyncio.gather(
                 *[_new_ctx() for _ in range(workers)]))
         else:
@@ -406,7 +359,7 @@ class CrawlerEngine:
             return
 
         leads, raw_links = await self._loop.run_in_executor(
-            self._parse_pool, _parse_html, html, url, self._excfg)
+            self._parse_pool, parse_for_engine, html, url, self._excfg)
 
         if domain_id is None:
             netloc = urlparse(url).netloc

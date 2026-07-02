@@ -56,17 +56,26 @@ async function loadCampaigns() {
             ul.appendChild(li);
         });
 
-        document.getElementById('c-page-info').textContent = `${cPage} / ${Math.ceil(data.total/20) || 1}`;
+        document.getElementById('c-page-info').textContent = `${cPage} / ${Math.ceil(data.total / 20) || 1}`;
         document.getElementById('c-btn-prev').disabled = cPage === 1;
-        document.getElementById('c-btn-next').disabled = cPage >= (data.total/20);
+        document.getElementById('c-btn-next').disabled = cPage >= (data.total / 20);
 
     } catch (e) {
         console.error(e);
     }
 }
 
-function prevCampaignPage() { if (cPage > 1) { cPage--; loadCampaigns(); } }
-function nextCampaignPage() { cPage++; loadCampaigns(); }
+function prevCampaignPage() {
+    if (cPage > 1) {
+        cPage--;
+        loadCampaigns();
+    }
+}
+
+function nextCampaignPage() {
+    cPage++;
+    loadCampaigns();
+}
 
 function toggleTestCampaigns() {
     cPage = 1;
@@ -137,7 +146,8 @@ async function pollCampaignStats() {
                 }
             }
         }
-    } catch(e) {}
+    } catch (e) {
+    }
 }
 
 function updateStatsUI(stats) {
@@ -271,9 +281,9 @@ async function loadEmails() {
             tbody.appendChild(tr);
         });
 
-        document.getElementById('e-page-info').textContent = `${ePage} / ${Math.ceil(data.total/50) || 1}`;
+        document.getElementById('e-page-info').textContent = `${ePage} / ${Math.ceil(data.total / 50) || 1}`;
         document.getElementById('e-btn-prev').disabled = ePage === 1;
-        document.getElementById('e-btn-next').disabled = ePage >= (data.total/50);
+        document.getElementById('e-btn-next').disabled = ePage >= (data.total / 50);
         updateToolbarInfo(selectedCount, totalDraft);
 
     } catch (e) {
@@ -286,8 +296,17 @@ function updateToolbarInfo(selectedCount, totalDraft) {
     if (el) el.textContent = totalDraft > 0 ? `${selectedCount} of ${totalDraft} drafts selected` : '';
 }
 
-function prevEmailPage() { if (ePage > 1) { ePage--; loadEmails(); } }
-function nextEmailPage() { ePage++; loadEmails(); }
+function prevEmailPage() {
+    if (ePage > 1) {
+        ePage--;
+        loadEmails();
+    }
+}
+
+function nextEmailPage() {
+    ePage++;
+    loadEmails();
+}
 
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -315,7 +334,7 @@ async function confirmDispatch() {
     const apiPath = currentCampaignIsTest ? 'test-campaigns' : 'campaigns';
 
     try {
-        const res = await fetch(`/api/${apiPath}/${currentCampaignId}/dispatch`, { method: 'POST' });
+        const res = await fetch(`/api/${apiPath}/${currentCampaignId}/dispatch`, {method: 'POST'});
         if (res.ok) {
             closeDispatchModal();
             loadCampaignDetail();
@@ -512,5 +531,8 @@ function openAddLeadsModal() {
     window.location.href = `/leads?add_to_campaign=${currentCampaignId}`;
 }
 
-function closeAddLeadsModal() {}
-async function confirmAddLeads() {}
+function closeAddLeadsModal() {
+}
+
+async function confirmAddLeads() {
+}

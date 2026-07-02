@@ -9,6 +9,7 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+
 def upgrade():
     op.create_table(
         "campaigns",
@@ -71,6 +72,7 @@ def upgrade():
         sa.Column("domain", sa.String(), nullable=False, index=True),
         sa.Column("reason", sa.String(), nullable=True),
     )
+
 
 def downgrade():
     op.drop_table("blacklist")

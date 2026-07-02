@@ -6,7 +6,6 @@ Revises: 0002_patch_campaign_fields
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = '0003_add_test_campaign_models'
 down_revision = '0002_patch_campaign_fields'
@@ -21,7 +20,8 @@ def upgrade():
         sa.Column('name', sa.String(), nullable=False),
         sa.Column('template_id', sa.Integer(), sa.ForeignKey('email_templates.id'), nullable=True),
         sa.Column('test_credential_id', sa.Integer(), sa.ForeignKey('smtp_credentials.id'), nullable=True),
-        sa.Column('status', sa.Enum('RUNNING', 'PAUSED', 'CANCELLED', 'COMPLETED', name='campaignstatus'), nullable=False),
+        sa.Column('status', sa.Enum('RUNNING', 'PAUSED', 'CANCELLED', 'COMPLETED', name='campaignstatus'),
+                  nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=True),
     )
     op.create_table(
@@ -31,7 +31,8 @@ def upgrade():
         sa.Column('recipient_email', sa.String(), nullable=False),
         sa.Column('subject', sa.String(), nullable=False),
         sa.Column('body', sa.Text(), nullable=False),
-        sa.Column('status', sa.Enum('DRAFT', 'QUEUED', 'SENT', 'FAILED', name='emailstatus'), nullable=False, server_default='DRAFT'),
+        sa.Column('status', sa.Enum('DRAFT', 'QUEUED', 'SENT', 'FAILED', name='emailstatus'), nullable=False,
+                  server_default='DRAFT'),
         sa.Column('error_message', sa.String(), nullable=True),
         sa.Column('sent_at', sa.DateTime(), nullable=True),
     )

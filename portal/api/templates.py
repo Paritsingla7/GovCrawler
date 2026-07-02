@@ -9,11 +9,14 @@ Registers routes:
   DELETE /api/templates/{id}     → delete template
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, TemplateSyntaxError
 from pydantic import BaseModel
 
-from ..db.models import Database
+from ..db import Database
+from .deps import get_db
+
+router = APIRouter(tags=["templates"])
 
 
 # ── Jinja2 validation ─────────────────────────────────────────────────────────
@@ -41,67 +44,69 @@ class TemplateUpdate(BaseModel):
     raw_body: str | None = None
 
 
-# ── Route registration ────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────────
 
-def register_template_routes(app: FastAPI, db: Database):
+@router.get("/api/templates")
+async def list_templates(db: Database = Depends(get_db)):
+    return db.list_templates()
 
-    @app.get("/api/templates")
-    async def list_templates():
-        return db.list_templates()
 
-    @app.get("/api/templates/{template_id}")
-    async def get_template(template_id: int):
-        t = db.get_template(template_id)
-        if not t:
-            raise HTTPException(status_code=404, detail="Template not found")
-        return t
+@router.get("/api/templates/{template_id}")
+async def get_template(template_id: int, db: Database = Depends(get_db)):
+    t = db.get_template(template_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return t
 
-    @app.post("/api/templates", status_code=201)
-    async def create_template(req: TemplateCreate):
-        # Validate Jinja2 syntax for both subject and body
-        for field_name, field_val in [("subject", req.subject), ("raw_body", req.raw_body)]:
-            err = validate_jinja2(field_val)
-            if err:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Jinja2 syntax error in {field_name}: {err}",
-                )
 
-        tid = db.create_template(name=req.name, subject=req.subject,
-                                 raw_body=req.raw_body)
-        return {"id": tid, "message": "Template created"}
+@router.post("/api/templates", status_code=201)
+async def create_template(req: TemplateCreate, db: Database = Depends(get_db)):
+    # Validate Jinja2 syntax for both subject and body
+    for field_name, field_val in [("subject", req.subject), ("raw_body", req.raw_body)]:
+        err = validate_jinja2(field_val)
+        if err:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Jinja2 syntax error in {field_name}: {err}",
+            )
 
-    @app.put("/api/templates/{template_id}")
-    async def update_template(template_id: int, req: TemplateUpdate):
-        existing = db.get_template(template_id)
-        if not existing:
-            raise HTTPException(status_code=404, detail="Template not found")
+    tid = db.create_template(name=req.name, subject=req.subject,
+                             raw_body=req.raw_body)
+    return {"id": tid, "message": "Template created"}
 
-        # Validate any Jinja2 fields being updated
-        if req.subject is not None:
-            err = validate_jinja2(req.subject)
-            if err:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Jinja2 syntax error in subject: {err}",
-                )
-        if req.raw_body is not None:
-            err = validate_jinja2(req.raw_body)
-            if err:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Jinja2 syntax error in raw_body: {err}",
-                )
 
-        updates = req.model_dump(exclude_none=True)
-        if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
+@router.put("/api/templates/{template_id}")
+async def update_template(template_id: int, req: TemplateUpdate, db: Database = Depends(get_db)):
+    existing = db.get_template(template_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Template not found")
 
-        db.update_template(template_id, **updates)
-        return {"message": "Template updated"}
+    # Validate any Jinja2 fields being updated
+    if req.subject is not None:
+        err = validate_jinja2(req.subject)
+        if err:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Jinja2 syntax error in subject: {err}",
+            )
+    if req.raw_body is not None:
+        err = validate_jinja2(req.raw_body)
+        if err:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Jinja2 syntax error in raw_body: {err}",
+            )
 
-    @app.delete("/api/templates/{template_id}")
-    async def delete_template(template_id: int):
-        if not db.delete_template(template_id):
-            raise HTTPException(status_code=404, detail="Template not found")
-        return {"message": "Template deleted"}
+    updates = req.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    db.update_template(template_id, **updates)
+    return {"message": "Template updated"}
+
+
+@router.delete("/api/templates/{template_id}")
+async def delete_template(template_id: int, db: Database = Depends(get_db)):
+    if not db.delete_template(template_id):
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"message": "Template deleted"}

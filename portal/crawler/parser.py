@@ -15,7 +15,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
@@ -105,6 +105,53 @@ def extract_leads(soup: BeautifulSoup, source_url: str, config: dict) -> list[Le
     return leads
 
 
+def parse_for_engine(html: str, url: str, excfg: dict) -> tuple[list[Lead], list]:
+    """
+    Thread-pool target for CrawlerEngine. Builds ONE soup and returns:
+      (leads, raw_links)
+    raw_links is a list of (absolute_url, anchor_text) — filtering happens on
+    the event-loop thread (cheap string ops with access to the visited set).
+
+    Anchors are harvested BEFORE extract_leads runs, because extract_leads
+    decomposes <script>/<style>/<noscript> from the tree.
+
+    Uses html.parser (pure Python) instead of lxml to avoid C-extension
+    thread-safety edge cases when many threads parse concurrently.
+    """
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+    except Exception as e:
+        log.warning(f"parse_for_engine: soup parse failed for {url}: {e}")
+        return [], []
+
+    raw_links: list[tuple[str, str]] = []
+    try:
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href:
+                continue
+            text = (a.get_text() or "").strip().lower()[:100]
+            try:
+                absolute = urljoin(url, href)
+            except Exception:
+                continue
+            raw_links.append((absolute, text))
+    except Exception as e:
+        log.warning(f"parse_for_engine: link extraction failed for {url}: {e}")
+        raw_links = []
+
+    try:
+        leads = extract_leads(soup, url, excfg)
+    except Exception as e:
+        log.warning(f"parse_for_engine: extract_leads raised for {url}: {e}")
+        leads = []
+
+    if leads:
+        log.debug(f"parse_for_engine: {len(leads)} leads at {url}")
+
+    return leads, raw_links
+
+
 # ── Stage 1: extract_candidates ──────────────────────────────────────────────
 
 def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -> list[dict]:
@@ -189,7 +236,7 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
 
 
 def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern,
-                               valid_suffixes: tuple) -> list[dict]:
+                              valid_suffixes: tuple) -> list[dict]:
     results = []
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
@@ -231,7 +278,7 @@ _BRACKETED_EMAIL_RE = re.compile(
 
 
 def _extract_proximity_candidates(text: str, email_re: re.Pattern,
-                                   ecfg: dict) -> list[dict]:
+                                  ecfg: dict) -> list[dict]:
     results = []
     seen: set[str] = set()
 

@@ -43,7 +43,7 @@ function toggleCredentialSelect() {
     const isRoundRobin = document.getElementById('test-round-robin').checked;
     const credGroup = document.getElementById('credential-select-group');
     const credSelect = document.getElementById('test-credential');
-    
+
     if (isRoundRobin) {
         credGroup.style.display = 'none';
         credSelect.removeAttribute('required');
@@ -54,13 +54,14 @@ function toggleCredentialSelect() {
 }
 
 let leadCount = 1;
+
 function addDummyLead() {
     leadCount++;
     const container = document.getElementById('dummy-leads-container');
     const newLead = document.createElement('div');
     newLead.className = 'dummy-lead-entry';
     newLead.style = 'border: 1px solid var(--border); padding: 16px; border-radius: 8px; margin-bottom: 16px; position: relative;';
-    
+
     newLead.innerHTML = `
         <button type="button" onclick="this.parentElement.remove()" style="position: absolute; right: 16px; top: 16px; background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px;">✕</button>
         <h4 style="margin-top:0; margin-bottom: 12px; font-size: 14px; font-weight: 600;">Lead ${leadCount}</h4>
@@ -114,7 +115,7 @@ async function submitTestCampaign(e) {
         // 1. Create Test Campaign
         const res = await fetch('/api/test-campaigns', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
 

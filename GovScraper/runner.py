@@ -11,6 +11,7 @@ from api import (
 
 log = logging.getLogger(__name__)
 
+
 def run_all_domains(config: dict = None) -> dict[str, dict[str, str]]:
     """
     Programmatically scrapes categories using optional filters from config,
@@ -27,9 +28,9 @@ def run_all_domains(config: dict = None) -> dict[str, dict[str, str]]:
     domain_metadata = {}
 
     with httpx.Client(
-        headers=HEADERS,
-        follow_redirects=True,
-        timeout=httpx.Timeout(20.0),
+            headers=HEADERS,
+            follow_redirects=True,
+            timeout=httpx.Timeout(20.0),
     ) as client:
         log.info("Fetching categories from GovScraper API...")
         try:

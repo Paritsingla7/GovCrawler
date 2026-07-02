@@ -15,14 +15,17 @@
 <div class="layout">
     <aside style="width: 320px;">
         <div class="sidebar-section">
-            <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+            <div class="section-label"
+                 style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                 <span>Campaigns</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 11px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--text-muted);">
-                        <input type="checkbox" id="toggle-tests" onchange="toggleTestCampaigns()" style="margin:0;">
+                        <input id="toggle-tests" onchange="toggleTestCampaigns()" style="margin:0;" type="checkbox">
                         Show Tests
                     </label>
-                    <button class="btn-icon" onclick="loadCampaigns()" title="Refresh" style="font-size:16px; padding:0;">↻</button>
+                    <button class="btn-icon" onclick="loadCampaigns()" style="font-size:16px; padding:0;"
+                            title="Refresh">↻
+                    </button>
                 </div>
             </div>
             <ul class="campaign-list" id="campaign-list">
@@ -42,16 +45,23 @@
             <div>
                 <h2 id="cd-title">Campaign Name</h2>
                 <div class="campaign-meta">
-                    Status: <span id="cd-status" class="status-badge">UNKNOWN</span>
+                    Status: <span class="status-badge" id="cd-status">UNKNOWN</span>
                     <span style="margin: 0 12px; color:var(--muted)">•</span>
                     Created: <span id="cd-created">—</span>
                 </div>
             </div>
             <div class="campaign-actions">
-                <button class="btn-secondary" id="btn-pause" onclick="pauseCampaign()" style="display:none;">Pause</button>
-                <button class="btn-primary" id="btn-dispatch" onclick="triggerDispatch()" style="display:none;">▶ Dispatch emails</button>
-                <button class="btn-secondary" id="btn-add-leads" onclick="openAddLeadsModal()" style="display:none;">+ Add Leads</button>
-                <button class="btn-secondary" id="btn-cancel" onclick="cancelCampaign()" style="display:none; color:var(--danger)">Cancel</button>
+                <button class="btn-secondary" id="btn-pause" onclick="pauseCampaign()" style="display:none;">Pause
+                </button>
+                <button class="btn-primary" id="btn-dispatch" onclick="triggerDispatch()" style="display:none;">▶
+                    Dispatch emails
+                </button>
+                <button class="btn-secondary" id="btn-add-leads" onclick="openAddLeadsModal()" style="display:none;">+
+                    Add Leads
+                </button>
+                <button class="btn-secondary" id="btn-cancel" onclick="cancelCampaign()"
+                        style="display:none; color:var(--danger)">Cancel
+                </button>
             </div>
         </div>
 
@@ -97,17 +107,19 @@
         <div class="table-wrap" style="flex: 1; overflow: auto;">
             <table>
                 <thead>
-                    <tr>
-                        <th style="width: 36px;"></th>
-                        <th>Recipient</th>
-                        <th>Subject</th>
-                        <th>Status</th>
-                        <th>Error / Note</th>
-                        <th style="width: 100px;">Actions</th>
-                    </tr>
+                <tr>
+                    <th style="width: 36px;"></th>
+                    <th>Recipient</th>
+                    <th>Subject</th>
+                    <th>Status</th>
+                    <th>Error / Note</th>
+                    <th style="width: 100px;">Actions</th>
+                </tr>
                 </thead>
                 <tbody id="emails-tbody">
-                    <tr><td colspan="6" class="empty-state">Loading emails...</td></tr>
+                <tr>
+                    <td class="empty-state" colspan="6">Loading emails...</td>
+                </tr>
                 </tbody>
             </table>
         </div>
@@ -128,8 +140,10 @@
 <div class="modal-overlay" id="modal-dispatch" style="display:none;">
     <div class="modal">
         <h3>Confirm Dispatch</h3>
-        <p style="margin-bottom:10px;">You are about to queue <strong id="dispatch-draft-count">0</strong> selected draft emails for sending.</p>
-        <p style="font-size:13px; color:var(--red);">The background engine will send them using your active SMTP credentials. This cannot be fully undone.</p>
+        <p style="margin-bottom:10px;">You are about to queue <strong id="dispatch-draft-count">0</strong> selected
+            draft emails for sending.</p>
+        <p style="font-size:13px; color:var(--red);">The background engine will send them using your active SMTP
+            credentials. This cannot be fully undone.</p>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeDispatchModal()">Cancel</button>
             <button class="btn-primary" onclick="confirmDispatch()">▶ Yes, Dispatch</button>
@@ -141,10 +155,11 @@
 <div class="modal-overlay" id="modal-edit-email" style="display:none;">
     <div class="modal modal-lg">
         <h3>Edit Email Draft</h3>
-        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Manually overriding template for <strong id="ee-recipient"></strong>.</p>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">Manually overriding template for <strong
+                id="ee-recipient"></strong>.</p>
         <div class="form-group">
             <label>Subject</label>
-            <input type="text" id="ee-subject">
+            <input id="ee-subject" type="text">
         </div>
         <div class="form-group">
             <label>Body</label>
@@ -162,15 +177,17 @@
     <div class="modal modal-lg">
         <h3>Sent Email</h3>
         <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
-            Sent to <strong id="ve-recipient"></strong><span id="ve-sent-at" style="margin-left:8px; color:var(--small);"></span>
+            Sent to <strong id="ve-recipient"></strong><span id="ve-sent-at"
+                                                             style="margin-left:8px; color:var(--small);"></span>
         </p>
         <div class="form-group">
             <label>Subject</label>
-            <input type="text" id="ve-subject" readonly style="cursor:default; opacity:0.75;">
+            <input id="ve-subject" readonly style="cursor:default; opacity:0.75;" type="text">
         </div>
         <div class="form-group">
             <label>Body</label>
-            <textarea id="ve-body" rows="14" readonly style="font-family:monospace; resize:vertical; cursor:default; opacity:0.75;"></textarea>
+            <textarea id="ve-body" readonly rows="14"
+                      style="font-family:monospace; resize:vertical; cursor:default; opacity:0.75;"></textarea>
         </div>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeViewEmailModal()">Close</button>
@@ -187,49 +204,49 @@
 
 {% block init_js %}
 document.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialId = urlParams.get('id') ? parseInt(urlParams.get('id')) : null;
-    const hintIsTest = urlParams.get('is_test') === 'true';
-    const notice = urlParams.get('notice');
-    if (notice) {
-        // Insert after campaigns are loaded so campaign-header exists
-        const showNotice = () => {
-            const anchor = document.getElementById('campaign-main');
-            if (!anchor) return;
-            const bar = document.createElement('div');
-            bar.style.cssText = 'background:#ddeee2; border-bottom:1px solid #a8cdb4; padding:9px 24px; font-size:13px; color:var(--green); flex-shrink:0;';
-            bar.textContent = notice;
-            anchor.insertBefore(bar, anchor.firstChild);
-            setTimeout(() => bar.remove(), 6000);
-        };
-        // campaign-main may be hidden; show after a tick so the campaign loads first
-        setTimeout(showNotice, 800);
-    }
+const urlParams = new URLSearchParams(window.location.search);
+const initialId = urlParams.get('id') ? parseInt(urlParams.get('id')) : null;
+const hintIsTest = urlParams.get('is_test') === 'true';
+const notice = urlParams.get('notice');
+if (notice) {
+// Insert after campaigns are loaded so campaign-header exists
+const showNotice = () => {
+const anchor = document.getElementById('campaign-main');
+if (!anchor) return;
+const bar = document.createElement('div');
+bar.style.cssText = 'background:#ddeee2; border-bottom:1px solid #a8cdb4; padding:9px 24px; font-size:13px; color:var(--green); flex-shrink:0;';
+bar.textContent = notice;
+anchor.insertBefore(bar, anchor.firstChild);
+setTimeout(() => bar.remove(), 6000);
+};
+// campaign-main may be hidden; show after a tick so the campaign loads first
+setTimeout(showNotice, 800);
+}
 
-    if (hintIsTest) {
-        const toggle = document.getElementById('toggle-tests');
-        if (toggle) toggle.checked = true;
-    }
+if (hintIsTest) {
+const toggle = document.getElementById('toggle-tests');
+if (toggle) toggle.checked = true;
+}
 
-    loadCampaigns().then(() => {
-        if (!initialId) return;
+loadCampaigns().then(() => {
+if (!initialId) return;
 
-        // Find by id in whichever campaigns were loaded
-        const found = loadedCampaigns.find(c => c.id === initialId);
-        if (found) {
-            selectCampaign(found.id, found.is_test);
-            return;
-        }
+// Find by id in whichever campaigns were loaded
+const found = loadedCampaigns.find(c => c.id === initialId);
+if (found) {
+selectCampaign(found.id, found.is_test);
+return;
+}
 
-        // Not found — might be a test campaign; enable toggle and retry once
-        const toggle = document.getElementById('toggle-tests');
-        if (toggle && !toggle.checked) {
-            toggle.checked = true;
-            loadCampaigns().then(() => {
-                const foundNow = loadedCampaigns.find(c => c.id === initialId);
-                if (foundNow) selectCampaign(foundNow.id, foundNow.is_test);
-            });
-        }
-    });
+// Not found — might be a test campaign; enable toggle and retry once
+const toggle = document.getElementById('toggle-tests');
+if (toggle && !toggle.checked) {
+toggle.checked = true;
+loadCampaigns().then(() => {
+const foundNow = loadedCampaigns.find(c => c.id === initialId);
+if (foundNow) selectCampaign(foundNow.id, foundNow.is_test);
+});
+}
+});
 });
 {% endblock %}
