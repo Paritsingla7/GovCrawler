@@ -442,6 +442,27 @@ async function startCrawl() {
     }
 }
 
+async function startCustomCrawl() {
+    const raw = document.getElementById('custom-urls-input').value;
+    const urls = raw.split('\n').map(u => u.trim()).filter(Boolean);
+    if (!urls.length) return;
+    try {
+        const resp = await apiFetch('/api/jobs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({custom_urls: urls}),
+        });
+        activeJobId = resp.id;
+        openJobPanel(resp.id);
+        document.getElementById('custom-urls-input').value = '';
+        startJobPoll();
+        const badge = document.getElementById('live-badge');
+        if (badge) badge.style.display = 'flex';
+    } catch (e) {
+        alert('Failed to start crawl: ' + e.message);
+    }
+}
+
 async function cancelJob() {
     if (!activeJobId) return;
     if (!confirm('Cancel this job?')) return;
@@ -703,18 +724,25 @@ async function fetchJobSeeds() {
 async function useSameSeeds() {
     if (!activeJobId) return;
     try {
-        const seeds = await apiFetch(`/api/jobs/${activeJobId}/seeds`);
-        const ids = seeds.map(s => s.id);
-        if (!ids.length) {
+        const [job, seeds] = await Promise.all([
+            apiFetch(`/api/jobs/${activeJobId}`),
+            apiFetch(`/api/jobs/${activeJobId}/seeds`),
+        ]);
+        if (!seeds.length) {
             alert("No seeds found in this job.");
             return;
         }
-        if (!confirm(`Start a new job with these ${ids.length} seeds?`)) return;
+        if (!confirm(`Start a new job with these ${seeds.length} seeds?`)) return;
+
+        const isCustom = job.source_type === 'custom_urls';
+        const body = isCustom
+            ? {custom_urls: seeds.map(s => s.main_url)}
+            : {domain_ids: seeds.map(s => s.id)};
 
         const resp = await apiFetch('/api/jobs', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({domain_ids: ids}),
+            body: JSON.stringify(body),
         });
 
         activeJobId = resp.id;

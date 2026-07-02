@@ -1,24 +1,47 @@
 import datetime
 import json
 
-from ..tables.crawl import CrawlJob
+from ..tables.crawl import CrawlJob, JobCustomUrl
 
 
 class JobMixin:
-    def create_job(self, domain_ids: list[int], category_filter: str = None,
-                   title_filter: str = None) -> int:
+    def create_job(self, domain_ids: list[int] = None, custom_urls: list[str] = None,
+                   category_filter: str = None, title_filter: str = None) -> int:
+        source_type = "custom_urls" if custom_urls else "domains"
+        seed_count = len(custom_urls) if custom_urls else len(domain_ids or [])
         with self._Session() as s:
             job = CrawlJob(
-                domain_ids=json.dumps(domain_ids),
+                domain_ids=json.dumps(domain_ids or []),
+                source_type=source_type,
                 category_filter=category_filter,
                 title_filter=title_filter,
-                total_domains=len(domain_ids),
-                seed_domains=len(domain_ids),
+                total_domains=seed_count,
+                seed_domains=seed_count,
                 status="pending",
             )
             s.add(job)
             s.commit()
             return job.id
+
+    def add_job_custom_urls(self, job_id: int, urls: list[str]) -> None:
+        with self._Session() as s:
+            s.add_all([JobCustomUrl(job_id=job_id, url=url) for url in urls])
+            s.commit()
+
+    def get_job_custom_urls(self, job_id: int) -> list[dict]:
+        with self._Session() as s:
+            rows = (
+                s.query(JobCustomUrl)
+                .filter_by(job_id=job_id)
+                .order_by(JobCustomUrl.id)
+                .all()
+            )
+            return [
+                {"id": r.id, "title": r.url, "main_url": r.url,
+                 "contact_url": None, "category_code": "custom", "state": None,
+                 "org_type": None}
+                for r in rows
+            ]
 
     def start_job(self, job_id: int):
         with self._Session() as s:
@@ -78,6 +101,7 @@ class JobMixin:
     def _job_dict(j: CrawlJob) -> dict:
         return {
             "id": j.id, "status": j.status,
+            "source_type": j.source_type,
             "total_domains": j.total_domains,
             "crawled_domains": j.crawled_domains,
             "seed_domains": j.seed_domains,

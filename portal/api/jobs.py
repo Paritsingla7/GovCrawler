@@ -5,16 +5,17 @@ Registers routes:
   POST /api/jobs                 → create + start a crawl job
   GET  /api/jobs                 → list recent jobs
   GET  /api/jobs/{id}            → single job status
-  GET  /api/jobs/{id}/seeds      → resolve a job's seed domains
+  GET  /api/jobs/{id}/seeds      → resolve a job's seed domains / custom URLs
   POST /api/jobs/{id}/cancel     → cancel a running job
 """
 
 import asyncio
 import json
 import logging
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from ..crawler.engine import CrawlerEngine
 from ..db import CrawlJob, Database
@@ -26,9 +27,44 @@ router = APIRouter(tags=["jobs"])
 
 
 class StartJobRequest(BaseModel):
-    domain_ids: list[int]
+    domain_ids: list[int] | None = None
+    custom_urls: list[str] | None = None
     category_filter: str | None = None
     title_filter: str | None = None
+
+    @model_validator(mode="after")
+    def _check_exclusive_source(self):
+        if bool(self.domain_ids) == bool(self.custom_urls):
+            raise ValueError("Provide exactly one of domain_ids or custom_urls")
+        return self
+
+
+def _normalize_custom_urls(urls: list[str], max_urls: int) -> list[str]:
+    normalized = []
+    seen = set()
+    invalid = []
+    for raw in urls:
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        if "://" not in candidate:
+            candidate = "http://" + candidate
+        netloc = urlsplit(candidate).netloc
+        if not netloc:
+            invalid.append(raw)
+            continue
+        if candidate not in seen:
+            seen.add(candidate)
+            normalized.append(candidate)
+    if invalid:
+        raise HTTPException(status_code=422,
+                            detail=f"Invalid URL(s): {', '.join(invalid)}")
+    if not normalized:
+        raise HTTPException(status_code=422, detail="No valid custom URLs provided")
+    if len(normalized) > max_urls:
+        raise HTTPException(status_code=422,
+                            detail=f"Too many custom URLs ({len(normalized)}); max is {max_urls}")
+    return normalized
 
 
 async def _run_crawl(job_id: int, seeds: list[tuple[str, int | None]],
@@ -59,37 +95,51 @@ async def create_job(
         browser=Depends(get_browser),
         active_tasks: dict = Depends(get_active_tasks),
 ):
-    if not req.domain_ids:
-        raise HTTPException(status_code=400, detail="domain_ids is empty")
+    engine_config = config
 
-    domains = db.get_domains_by_ids(req.domain_ids)
-    if not domains:
-        raise HTTPException(status_code=404, detail="No matching domains found")
+    if req.custom_urls:
+        max_urls = config["crawler"].get("max_custom_urls", 50)
+        urls = _normalize_custom_urls(req.custom_urls, max_urls)
 
-    job_id = db.create_job(
-        domain_ids=req.domain_ids,
-        category_filter=req.category_filter,
-        title_filter=req.title_filter,
-    )
+        job_id = db.create_job(
+            custom_urls=urls,
+            category_filter=req.category_filter,
+            title_filter=req.title_filter,
+        )
+        db.add_job_custom_urls(job_id, urls)
+        seeds = [(url, None) for url in urls]
+        # Custom URLs are explicitly chosen by the caller — don't restrict them
+        # to the configured gov-domain suffixes.
+        engine_config = {**config, "crawler": {**config["crawler"], "target_suffixes": []}}
+    else:
+        domains = db.get_domains_by_ids(req.domain_ids)
+        if not domains:
+            raise HTTPException(status_code=404, detail="No matching domains found")
 
-    seeds = []
-    for d in domains:
-        url = d["contact_url"] or d["main_url"]
-        if url:
-            seeds.append((url, d["id"]))
+        job_id = db.create_job(
+            domain_ids=req.domain_ids,
+            category_filter=req.category_filter,
+            title_filter=req.title_filter,
+        )
 
-    if not seeds:
-        db.finish_job(job_id, status="failed",
-                      error="No valid URLs for selected domains")
-        raise HTTPException(status_code=422,
-                            detail="Selected domains have no crawlable URLs")
+        seeds = []
+        for d in domains:
+            url = d["contact_url"] or d["main_url"]
+            if url:
+                seeds.append((url, d["id"]))
+
+        if not seeds:
+            db.finish_job(job_id, status="failed",
+                          error="No valid URLs for selected domains")
+            raise HTTPException(status_code=422,
+                                detail="Selected domains have no crawlable URLs")
 
     db.start_job(job_id)
-    task = asyncio.create_task(_run_crawl(job_id, seeds, db, config, browser, active_tasks))
+    task = asyncio.create_task(_run_crawl(job_id, seeds, db, engine_config, browser, active_tasks))
     active_tasks[job_id] = task
 
     return {"id": job_id,
-            "message": f"Crawl started for {len(seeds)} domains"}
+            "message": f"Crawl started for {len(seeds)} seed URL(s)"}
 
 
 @router.get("/api/jobs")
@@ -113,6 +163,10 @@ async def get_job_seeds(job_id: int, db: Database = Depends(get_db)):
     job = db.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["source_type"] == "custom_urls":
+        return db.get_job_custom_urls(job_id)
+
     # In CrawlJob, domain_ids is stored as JSON list[int].
     # Since db.get_job doesn't include it in _job_dict, we can fetch it directly from the DB here
     with db._Session() as s:

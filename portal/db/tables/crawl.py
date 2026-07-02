@@ -25,6 +25,7 @@ class CrawlJob(Base):
     category_filter = Column(String)
     title_filter = Column(String)
     domain_ids = Column(Text)  # JSON list[int]
+    source_type = Column(String, nullable=False, default="domains")  # "domains" | "custom_urls"
     status = Column(String, default="pending")
     total_domains = Column(Integer, default=0)
     crawled_domains = Column(Integer, default=0)
@@ -39,6 +40,17 @@ class CrawlJob(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     started_at = Column(DateTime)
     finished_at = Column(DateTime)
+
+
+class JobCustomUrl(Base):
+    __tablename__ = "job_custom_urls"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("crawl_jobs.id"), nullable=False, index=True)
+    url = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("job_id", "url", name="uq_job_custom_url"),
+    )
 
 
 class VisitedUrl(Base):

@@ -38,6 +38,7 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
             "crawl_jobs": [
                 ("current_depth", "INTEGER NOT NULL DEFAULT 0"),
                 ("active_workers", "INTEGER NOT NULL DEFAULT 0"),
+                ("source_type", "VARCHAR NOT NULL DEFAULT 'domains'"),
             ],
             "leads": [
                 ("entity_kind", "VARCHAR"),

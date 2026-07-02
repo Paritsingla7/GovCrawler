@@ -27,6 +27,7 @@ crawler:
   target_suffixes:
     - .gov.in
     - .nic.in
+  max_custom_urls: 50
   priority_keywords:
     - contact
     - officer

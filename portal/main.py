@@ -106,10 +106,16 @@ async def cmd_crawl(config: dict, job_id: int):
         db.close()
         return
 
-    domain_ids = json.loads(job.get("domain_ids") or "[]")
-    domains = db.get_domains_by_ids(domain_ids)
-    seeds = [(d["contact_url"] or d["main_url"], d["id"])
-             for d in domains if (d["contact_url"] or d["main_url"])]
+    engine_config = config
+    if job.get("source_type") == "custom_urls":
+        urls = [u["main_url"] for u in db.get_job_custom_urls(job_id)]
+        seeds = [(url, None) for url in urls]
+        engine_config = {**config, "crawler": {**config["crawler"], "target_suffixes": []}}
+    else:
+        domain_ids = json.loads(job.get("domain_ids") or "[]")
+        domains = db.get_domains_by_ids(domain_ids)
+        seeds = [(d["contact_url"] or d["main_url"], d["id"])
+                 for d in domains if (d["contact_url"] or d["main_url"])]
 
     log.info(f"Running job {job_id} with {len(seeds)} seeds…")
     db.start_job(job_id)
@@ -117,7 +123,7 @@ async def cmd_crawl(config: dict, job_id: int):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         try:
-            engine = CrawlerEngine(config=config, db=db,
+            engine = CrawlerEngine(config=engine_config, db=db,
                                    job_id=job_id, browser=browser)
             await engine.run(seeds)
             db.finish_job(job_id, status="done")
