@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 
 import aiosmtplib
 
-from ..db.models import Database, CampaignStatus
+from ..db import Database, CampaignStatus
 
 log = logging.getLogger(__name__)
 

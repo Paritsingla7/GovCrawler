@@ -16,67 +16,23 @@ import asyncio
 import logging
 from pathlib import Path
 
+from .paths import LOG_FILE_PATH, LIVE_CONFIG_PATH, DEFAULT_CONFIG_PATH, bootstrap
 
 # ==========================================
-# 1. PATH MANAGER
+# 1. FIRST-RUN SETUP & ENVIRONMENT
 # ==========================================
-def get_app_dir() -> Path:
-    """The root directory (Writeable)."""
-    if getattr(sys, 'frozen', False):
-        # Compiled: Returns the folder where the .exe physically lives
-        return Path(sys.executable).parent
-    # Native: Steps up from /project_root/portal/main.py -> /project_root
-    return Path(__file__).resolve().parent.parent
-
-
-def get_bundle_dir() -> Path:
-    """The temporary PyInstaller extraction folder (Read-Only)."""
-    if getattr(sys, 'frozen', False):
-        return Path(sys._MEIPASS)
-    # Native: Steps up to project root
-    return Path(__file__).resolve().parent.parent
-
-
-APP_DIR = get_app_dir()
-BUNDLE_DIR = get_bundle_dir()
-
-# --- WRITEABLE PATHS (Next to the .exe) ---
-PORTAL_LIVE_DIR = APP_DIR / "portal"
-DATA_DIR = PORTAL_LIVE_DIR / "data"
-
-LOG_FILE_PATH = DATA_DIR / "portal.log"
-LIVE_CONFIG_PATH = PORTAL_LIVE_DIR / "config.yaml"
-
-# --- READ-ONLY PATHS (Inside the bundle) ---
-BROWSER_PATH = APP_DIR / "playwright_browsers"
-DEFAULT_CONFIG_PATH = BUNDLE_DIR / "portal" / "default_config.yaml"
+bootstrap()
 
 # ==========================================
-# 2. FIRST-RUN SETUP & ENVIRONMENT
-# ==========================================
-# Only execute the copy logic if running as an executable
-if getattr(sys, 'frozen', False) and not LIVE_CONFIG_PATH.exists():
-    PORTAL_LIVE_DIR.mkdir(parents=True, exist_ok=True)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if DEFAULT_CONFIG_PATH.exists():
-        shutil.copy(DEFAULT_CONFIG_PATH, LIVE_CONFIG_PATH)
-else:
-    # Safe to create in development mode too
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-# Force Playwright to use the bundled browser path BEFORE importing Playwright
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSER_PATH)
-
-# ==========================================
-# 3. LATE IMPORTS (Safe now that env is set)
+# 2. LATE IMPORTS (Safe now that env is set)
 # ==========================================
 import yaml
 import uvicorn
-from .db.models import Database
+from .db import Database
 from .api.server import create_app
 
 # ==========================================
-# 4. LOGGING SETUP (Using Absolute Path)
+# 3. LOGGING SETUP (Using Absolute Path)
 # ==========================================
 # Safely configure log handlers
 log_handlers = [logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")]

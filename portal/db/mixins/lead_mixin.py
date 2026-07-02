@@ -1,0 +1,186 @@
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
+
+from ..tables.crawl import Domain
+from ..tables.leads import Lead
+
+
+class LeadMixin:
+    def save_lead(self, job_id: int, domain_id: int | None, email: str | None,
+                  person_name: str | None, designation: str | None,
+                  department: str | None, source_url: str, source_title: str | None,
+                  context_snippet: str, entity_kind: str | None = None,
+                  phone: str | None = None, channel_tag: str | None = None,
+                  confidence_band: str | None = None,
+                  field_provenance: str | None = None, depth: int = 0) -> bool:
+        if not email:
+            return False
+        email = email.lower()
+        with self._Session() as s:
+            existing = s.query(Lead.id).filter(Lead.email == email).first()
+            if existing:
+                return False
+
+            domain_state = None
+            domain_org_type = None
+            if domain_id:
+                row = s.query(Domain.state, Domain.org_type).filter_by(id=domain_id).first()
+                if row:
+                    domain_state, domain_org_type = row.state, row.org_type
+            try:
+                s.add(Lead(
+                    job_id=job_id, domain_id=domain_id, email=email,
+                    person_name=person_name, designation=designation,
+                    department=department, source_url=source_url,
+                    source_title=source_title,
+                    context_snippet=context_snippet,
+                    domain_state=domain_state, domain_org_type=domain_org_type,
+                    entity_kind=entity_kind, phone=phone, channel_tag=channel_tag,
+                    confidence_band=confidence_band, field_provenance=field_provenance,
+                    depth=depth,
+                ))
+                s.commit()
+                return True
+            except IntegrityError:
+                s.rollback()
+                return False
+
+    @staticmethod
+    def _apply_lead_filters(q, job_id=None, category=None, state=None,
+                            search=None, complete_only=False):
+        if job_id is not None:
+            q = q.filter(Lead.job_id == job_id)
+        if category:
+            q = q.filter(Domain.category_code == category)
+        if state:
+            q = q.filter(Domain.state == state)
+        if search:
+            q = q.filter(
+                or_(Lead.email.ilike(f"%{search}%"),
+                    Lead.person_name.ilike(f"%{search}%"),
+                    Lead.department.ilike(f"%{search}%"),
+                    Lead.designation.ilike(f"%{search}%"))
+            )
+        if complete_only:
+            q = q.filter(
+                Lead.person_name.isnot(None), Lead.person_name != "",
+                Lead.designation.isnot(None), Lead.designation != "",
+                Lead.department.isnot(None), Lead.department != "",
+            )
+        return q
+
+    def get_leads(self, job_id: int | None = None, category: str = None,
+                  state: str = None, search: str = None, page: int = 1,
+                  limit: int = 100, complete_only: bool = False) -> tuple[list[dict], int]:
+        with self._Session() as s:
+            q = (
+                s.query(Lead, Domain.title.label("domain_title"),
+                        Domain.category_code)
+                .outerjoin(Domain, Lead.domain_id == Domain.id)
+            )
+            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+
+            total = q.count()
+            offset = (page - 1) * limit
+            rows = q.order_by(Lead.captured_at.desc()).offset(offset).limit(limit).all()
+            return (
+                [{"id": l.id, "email": l.email, "person_name": l.person_name,
+                  "designation": l.designation, "department": l.department,
+                  "source_url": l.source_url, "source_title": l.source_title,
+                  "context_snippet": l.context_snippet,
+                  "domain_title": dt, "category_code": cc,
+                  "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
+                  "confidence_band": l.confidence_band,
+                  "field_provenance": l.field_provenance,
+                  "phone": l.phone,
+                  "depth": l.depth or 0,
+                  "captured_at": l.captured_at.isoformat() if l.captured_at else None}
+                 for l, dt, cc in rows],
+                total,
+            )
+
+    def get_lead_ids(self, job_id: int | None = None, category: str = None,
+                     state: str = None, search: str = None,
+                     complete_only: bool = False) -> list[int]:
+        with self._Session() as s:
+            q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
+            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+            return [r[0] for r in q.all()]
+
+    def get_all_leads_for_export(self, job_id: int | None = None,
+                                 category: str = None, state: str = None,
+                                 search: str = None, lead_ids: list[int] = None,
+                                 complete_only: bool = False) -> list[dict]:
+        with self._Session() as s:
+            q = (
+                s.query(Lead, Domain.title.label("domain_title"),
+                        Domain.category_code, Domain.category_title)
+                .outerjoin(Domain, Lead.domain_id == Domain.id)
+            )
+            if lead_ids:
+                q = q.filter(Lead.id.in_(lead_ids))
+            else:
+                q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+            rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
+            return [
+                {"email": l.email, "person_name": l.person_name or "",
+                 "designation": l.designation or "", "department": l.department or "",
+                 "domain_title": dt or "", "domain_state": l.domain_state or "",
+                 "domain_org_type": l.domain_org_type or "",
+                 "category_title": ct or cc or "",
+                 "source_url": l.source_url or "",
+                 "source_title": l.source_title or "",
+                 "context_snippet": l.context_snippet or "",
+                 "confidence_band": l.confidence_band or "",
+                 "field_provenance": l.field_provenance or "",
+                 "phone": l.phone or "",
+                 "depth": l.depth or 0,
+                 "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
+                for l, dt, cc, ct in rows
+            ]
+
+    def get_lead_categories(self, job_id: int | None = None) -> list[dict]:
+        with self._Session() as s:
+            q = (
+                s.query(Domain.category_code, Domain.category_title,
+                        func.count(Lead.id).label("count"))
+                .join(Lead, Lead.domain_id == Domain.id)
+            )
+            if job_id is not None:
+                q = q.filter(Lead.job_id == job_id)
+            rows = (
+                q.group_by(Domain.category_code, Domain.category_title)
+                .order_by(func.count(Lead.id).desc())
+                .all()
+            )
+            return [
+                {"code": r.category_code,
+                 "title": r.category_title or r.category_code,
+                 "count": r.count}
+                for r in rows
+            ]
+
+    def get_lead_states(self, job_id: int | None = None, category: str = None) -> list[str]:
+        with self._Session() as s:
+            q = s.query(Domain.state).join(Lead, Lead.domain_id == Domain.id).filter(Domain.state.isnot(None))
+            if job_id is not None:
+                q = q.filter(Lead.job_id == job_id)
+            if category:
+                q = q.filter(Domain.category_code == category)
+            rows = q.distinct().order_by(Domain.state).all()
+            return [r[0] for r in rows if r[0]]
+
+    _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "domain_state"})
+
+    def update_lead(self, lead_id: int, updates: dict) -> bool:
+        safe = {
+            k: (v.strip() if isinstance(v, str) and v.strip() else None)
+            for k, v in updates.items()
+            if k in self._LEAD_EDITABLE
+        }
+        if not safe:
+            return False
+        with self._Session() as s:
+            updated = s.query(Lead).filter_by(id=lead_id).update(safe)
+            s.commit()
+            return updated > 0

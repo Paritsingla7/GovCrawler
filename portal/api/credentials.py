@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import aiosmtplib
 
-from ..db.models import Database
+from ..db import Database
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────

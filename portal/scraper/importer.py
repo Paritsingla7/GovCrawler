@@ -28,7 +28,7 @@ from GovScraper.api import (
     HEADERS,
     TARGET_SUFFIXES,
 )
-from ..db.models import Database
+from ..db import Database
 
 log = logging.getLogger(__name__)
 

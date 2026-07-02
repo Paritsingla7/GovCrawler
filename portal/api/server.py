@@ -37,7 +37,7 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
 from ..crawler.engine import CrawlerEngine
-from ..db.models import Database
+from ..db import Database
 from ..scraper.importer import import_all, import_from_json, import_status
 
 log = logging.getLogger(__name__)
@@ -382,7 +382,7 @@ def create_app(config: dict, db: Database) -> FastAPI:
         # In CrawlJob, domain_ids is stored as JSON list[int].
         # Since _db.get_job doesn't include it in _job_dict, we can fetch it directly from the DB here
         with _db._Session() as s:
-            from ..db.models import CrawlJob
+            from ..db import CrawlJob
             j = s.query(CrawlJob).filter_by(id=job_id).first()
             if not j or not j.domain_ids:
                 return []

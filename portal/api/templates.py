@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from jinja2 import Environment, TemplateSyntaxError
 from pydantic import BaseModel
 
-from ..db.models import Database
+from ..db import Database
 
 
 # ── Jinja2 validation ─────────────────────────────────────────────────────────

@@ -1,4 +1,3 @@
-from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 import subprocess
@@ -9,6 +8,7 @@ import os
 import uvicorn
 
 from portal.main import load_config
+from portal.paths import BROWSER_PATH
 
 config = load_config()
 
@@ -89,23 +89,20 @@ class CrawlerLauncher:
 
     def _download_browsers_task(self):
         try:
-            # 1. Intelligently determine paths and commands based on the environment
+            # 1. Determine the launch command based on the environment
             if getattr(sys, 'frozen', False):
                 # COMPILED MODE: Running as GovCrawler.exe
-                base_dir = Path(sys.executable).parent
                 cmd = [sys.executable, "INSTALL_BROWSERS"]
             else:
                 # DEV MODE: Running as python launcher.py
-                base_dir = Path(__file__).resolve().parent
                 cmd = [sys.executable, __file__, "INSTALL_BROWSERS"]
 
             # 2. Create the browsers folder safely
-            browser_dir = base_dir / "playwright_browsers"
-            browser_dir.mkdir(parents=True, exist_ok=True)
+            BROWSER_PATH.mkdir(parents=True, exist_ok=True)
 
             # 3. Copy the current environment and inject the Playwright path
             env = os.environ.copy()
-            env["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_dir)
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(BROWSER_PATH)
 
             # 4. Trigger the background process
             subprocess.run(cmd, env=env, check=True)
@@ -135,7 +132,7 @@ class CrawlerLauncher:
 
     def _run_server_task(self):
         # Local imports ensure we don't trigger backend logic until the button is clicked
-        from portal.db.models import Database
+        from portal.db import Database
         from portal.api.server import create_app
 
         db = Database(config)

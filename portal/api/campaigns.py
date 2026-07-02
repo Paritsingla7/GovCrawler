@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Query
 from jinja2 import Template, TemplateSyntaxError
 from pydantic import BaseModel
 
-from ..db.models import Database, CampaignStatus
+from ..db import Database, CampaignStatus
 from .dispatcher import run_campaign_dispatch
 
 log = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ def register_campaign_routes(app: FastAPI, db: Database):
         # so we build a lookup from the original lead_ids query
         lead_id_by_email = {}
         with db._Session() as s:
-            from ..db.models import Lead
+            from ..db import Lead
             rows = s.query(Lead.id, Lead.email).filter(
                 Lead.id.in_(req.lead_ids)
             ).all()
@@ -373,7 +373,7 @@ def register_campaign_routes(app: FastAPI, db: Database):
         filtered_leads = [l for l in filtered_leads if l["email"] not in existing_in_campaign]
 
         with db._Session() as s:
-            from ..db.models import Lead
+            from ..db import Lead
             rows = s.query(Lead.id, Lead.email).filter(Lead.id.in_(req.lead_ids)).all()
             lead_id_by_email = {r.email: r.id for r in rows}
 

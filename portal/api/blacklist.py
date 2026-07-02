@@ -10,7 +10,7 @@ Registers routes:
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
-from ..db.models import Database
+from ..db import Database
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
