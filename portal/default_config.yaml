@@ -172,3 +172,10 @@ extraction:
       - Jr
       - Junior
     proximity_chars: 300
+lead_score:
+  weights:
+    email_high: 20
+    email_low: 10
+    person_name: 40
+    designation: 30
+    phone: 10

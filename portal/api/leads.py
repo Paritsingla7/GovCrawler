@@ -4,6 +4,7 @@ Lead browsing, export, and editing endpoints.
 Registers routes:
   GET  /api/leads                    → paginated leads for a job
   GET  /api/leads/ids                → all matching lead IDs (for select-all)
+  GET  /api/leads/score-weights      → current lead_score point weights
   GET  /api/leads/categories         → category counts for leads
   GET  /api/leads/states             → distinct states for leads
   POST /api/leads/export             → CSV download
@@ -29,7 +30,7 @@ _ALL_EXPORT_FIELDS = [
     "email", "person_name", "designation", "department",
     "domain_title", "domain_state", "domain_org_type",
     "category_title", "source_url", "source_title", "context_snippet",
-    "depth", "captured_at",
+    "lead_score", "depth", "captured_at",
 ]
 
 
@@ -39,6 +40,7 @@ class ExportLeadsRequest(BaseModel):
     state: str | None = None
     search: str | None = None
     complete_only: bool = False
+    min_score: int | None = None
     lead_ids: list[int] | None = None
     fields: list[str] | None = None
 
@@ -57,12 +59,13 @@ async def get_leads(
         state: str = Query(None),
         search: str = Query(None),
         complete_only: bool = Query(False),
+        min_score: int = Query(None, ge=0, le=100),
         page: int = Query(1, ge=1),
         limit: int = Query(100, ge=1, le=500),
         db: Database = Depends(get_db),
 ):
     leads, total = db.get_leads(job_id=job_id, category=category, state=state, search=search,
-                                complete_only=complete_only, page=page, limit=limit)
+                                complete_only=complete_only, min_score=min_score, page=page, limit=limit)
     return {
         "leads": leads,
         "total": total,
@@ -78,11 +81,17 @@ async def get_lead_ids(
         state: str = Query(None),
         search: str = Query(None),
         complete_only: bool = Query(False),
+        min_score: int = Query(None, ge=0, le=100),
         db: Database = Depends(get_db),
 ):
     ids = db.get_lead_ids(job_id=job_id, category=category, state=state, search=search,
-                          complete_only=complete_only)
+                          complete_only=complete_only, min_score=min_score)
     return {"ids": ids, "total": len(ids)}
+
+
+@router.get("/api/leads/score-weights")
+async def get_lead_score_weights(db: Database = Depends(get_db)):
+    return db.get_lead_score_weights()
 
 
 @router.get("/api/leads/categories")
@@ -104,6 +113,7 @@ async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
         search=req.search,
         lead_ids=req.lead_ids,
         complete_only=req.complete_only,
+        min_score=req.min_score,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="No leads for this job")

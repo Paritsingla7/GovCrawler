@@ -24,6 +24,7 @@ class Lead(Base):
     channel_tag = Column(String, nullable=True)
     confidence_band = Column(String, nullable=True)
     field_provenance = Column(Text, nullable=True)
+    lead_score = Column(Integer, nullable=False, default=0)
     depth = Column(Integer, nullable=False, default=0)
     captured_at = Column(DateTime, default=datetime.datetime.utcnow)
     __table_args__ = (

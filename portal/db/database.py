@@ -10,6 +10,7 @@ from .mixins.lead_mixin import LeadMixin
 from .mixins.outreach_mixin import OutreachMixin
 from .mixins.visited_mixin import VisitedUrlMixin
 from .migrations import run_migrations
+from ..services.lead_scoring import DEFAULT_WEIGHTS, compute_lead_score
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
         Base.metadata.create_all(self.engine)
         self._Session = sessionmaker(bind=self.engine)
         self._recrawl_days = config.get("crawler", {}).get("recrawl_days", 30)
+        self._lead_score_weights = config.get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)
         self._ensure_columns()
         run_migrations(uri)
         log.info(f"Database ready: {uri}")
@@ -59,6 +61,8 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
                 ("channel_tag", "VARCHAR"),
                 ("confidence_band", "VARCHAR"),
                 ("field_provenance", "TEXT"),
+                ("depth", "INTEGER NOT NULL DEFAULT 0"),
+                ("lead_score", "INTEGER NOT NULL DEFAULT 0"),
             ],
             "domains": [
                 ("external_id", "VARCHAR"),
@@ -73,7 +77,35 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
                     if col_name not in existing:
                         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
                         log.info(f"Schema: added column {table}.{col_name}")
+            if "leads" in inspector.get_table_names():
+                self._recompute_lead_scores(conn)
             conn.commit()
+
+    def _recompute_lead_scores(self, conn):
+        """Recompute lead_score for every row from current weights.
+
+        Runs on every startup (not just when the column is new) so a weight
+        change in config takes effect on existing leads without a migration.
+        Goes through compute_lead_score() itself (not a parallel SQL
+        expression) since the band/manual/phone-slice rules aren't cleanly
+        expressible in SQL without duplicating — and risking drift from —
+        the one scoring implementation.
+        """
+        rows = conn.execute(text(
+            "SELECT id, email, phone, person_name, designation, "
+            "confidence_band, channel_tag FROM leads"
+        )).fetchall()
+        for row in rows:
+            m = row._mapping
+            score = compute_lead_score(
+                {"email": m["email"], "phone": m["phone"],
+                 "person_name": m["person_name"], "designation": m["designation"]},
+                confidence_band=m["confidence_band"], channel_tag=m["channel_tag"],
+                weights=self._lead_score_weights,
+            )
+            conn.execute(text("UPDATE leads SET lead_score = :score WHERE id = :id"),
+                        {"score": score, "id": m["id"]})
+        log.info(f"Schema: recomputed lead_score for {len(rows)} leads")
 
     def close(self):
         self.engine.dispose()

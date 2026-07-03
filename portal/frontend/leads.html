@@ -43,6 +43,16 @@
                 <input id="leads-search-input" oninput="debounceLeadsSearch()" placeholder="name, email, designation…"
                        type="text">
             </div>
+            <div class="form-group">
+                <label>Min. Score</label>
+                <select id="leads-min-score-select" onchange="onLeadsFilterChange()">
+                    <option value="">Any Score</option>
+                    <option value="30">30+</option>
+                    <option value="50">50+</option>
+                    <option value="70">70+</option>
+                    <option value="90">90+</option>
+                </select>
+            </div>
             <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:4px;">
                 <input id="leads-complete-only" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
                        type="checkbox">
@@ -88,7 +98,7 @@
                 <tr>
                     <th style="width:40px"></th>
                     <th style="width:28px"></th>
-                    <th style="width:60px;text-align:center">Band</th>
+                    <th style="width:60px;text-align:center">Score</th>
                     <th>Contact</th>
                     <th>Person</th>
                     <th>Department</th>
@@ -123,6 +133,8 @@
                 Designation</label>
             <label class="export-field-row"><input checked name="export-field" type="checkbox" value="department">
                 Department</label>
+            <label class="export-field-row"><input checked name="export-field" type="checkbox" value="lead_score">
+                Score</label>
             <label class="export-field-row"><input checked name="export-field" type="checkbox" value="domain_title">
                 Domain / Org</label>
             <label class="export-field-row"><input checked name="export-field" type="checkbox" value="domain_state">

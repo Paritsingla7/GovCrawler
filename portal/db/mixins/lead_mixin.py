@@ -3,9 +3,13 @@ from sqlalchemy.exc import IntegrityError
 
 from ..tables.crawl import Domain
 from ..tables.leads import Lead
+from ...services.lead_scoring import compute_lead_score
 
 
 class LeadMixin:
+    def get_lead_score_weights(self) -> dict:
+        return self._lead_score_weights
+
     def save_lead(self, job_id: int, domain_id: int | None, email: str | None,
                   person_name: str | None, designation: str | None,
                   department: str | None, source_url: str, source_title: str | None,
@@ -27,6 +31,11 @@ class LeadMixin:
                 row = s.query(Domain.state, Domain.org_type).filter_by(id=domain_id).first()
                 if row:
                     domain_state, domain_org_type = row.state, row.org_type
+            lead_score = compute_lead_score({
+                "email": email, "phone": phone, "person_name": person_name,
+                "designation": designation,
+            }, confidence_band=confidence_band, channel_tag=channel_tag,
+                weights=self._lead_score_weights)
             try:
                 s.add(Lead(
                     job_id=job_id, domain_id=domain_id, email=email,
@@ -37,7 +46,7 @@ class LeadMixin:
                     domain_state=domain_state, domain_org_type=domain_org_type,
                     entity_kind=entity_kind, phone=phone, channel_tag=channel_tag,
                     confidence_band=confidence_band, field_provenance=field_provenance,
-                    depth=depth,
+                    lead_score=lead_score, depth=depth,
                 ))
                 s.commit()
                 return True
@@ -47,7 +56,7 @@ class LeadMixin:
 
     @staticmethod
     def _apply_lead_filters(q, job_id=None, category=None, state=None,
-                            search=None, complete_only=False):
+                            search=None, complete_only=False, min_score=None):
         if job_id is not None:
             q = q.filter(Lead.job_id == job_id)
         if category:
@@ -67,18 +76,21 @@ class LeadMixin:
                 Lead.designation.isnot(None), Lead.designation != "",
                 Lead.department.isnot(None), Lead.department != "",
             )
+        if min_score is not None:
+            q = q.filter(Lead.lead_score >= min_score)
         return q
 
     def get_leads(self, job_id: int | None = None, category: str = None,
                   state: str = None, search: str = None, page: int = 1,
-                  limit: int = 100, complete_only: bool = False) -> tuple[list[dict], int]:
+                  limit: int = 100, complete_only: bool = False,
+                  min_score: int | None = None) -> tuple[list[dict], int]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
                         Domain.category_code)
                 .outerjoin(Domain, Lead.domain_id == Domain.id)
             )
-            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
 
             total = q.count()
             offset = (page - 1) * limit
@@ -94,6 +106,7 @@ class LeadMixin:
                   "field_provenance": l.field_provenance,
                   "channel_tag": l.channel_tag,
                   "phone": l.phone,
+                  "lead_score": l.lead_score or 0,
                   "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
                  for l, dt, cc in rows],
@@ -102,16 +115,17 @@ class LeadMixin:
 
     def get_lead_ids(self, job_id: int | None = None, category: str = None,
                      state: str = None, search: str = None,
-                     complete_only: bool = False) -> list[int]:
+                     complete_only: bool = False, min_score: int | None = None) -> list[int]:
         with self._Session() as s:
             q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
-            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
             return [r[0] for r in q.all()]
 
     def get_all_leads_for_export(self, job_id: int | None = None,
                                  category: str = None, state: str = None,
                                  search: str = None, lead_ids: list[int] = None,
-                                 complete_only: bool = False) -> list[dict]:
+                                 complete_only: bool = False,
+                                 min_score: int | None = None) -> list[dict]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
@@ -121,7 +135,7 @@ class LeadMixin:
             if lead_ids:
                 q = q.filter(Lead.id.in_(lead_ids))
             else:
-                q = self._apply_lead_filters(q, job_id, category, state, search, complete_only)
+                q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
             rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",
@@ -135,6 +149,7 @@ class LeadMixin:
                  "confidence_band": l.confidence_band or "",
                  "field_provenance": l.field_provenance or "",
                  "phone": l.phone or "",
+                 "lead_score": l.lead_score or 0,
                  "depth": l.depth or 0,
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
                 for l, dt, cc, ct in rows
@@ -186,6 +201,11 @@ class LeadMixin:
                         existing.designation = row.get("designation") or existing.designation
                         existing.department = row.get("department") or existing.department
                         existing.phone = row.get("phone") or existing.phone
+                        existing.lead_score = compute_lead_score({
+                            "email": existing.email, "phone": existing.phone,
+                            "person_name": existing.person_name, "designation": existing.designation,
+                        }, confidence_band=existing.confidence_band, channel_tag=existing.channel_tag,
+                            weights=self._lead_score_weights)
                         updated += 1
                     else:
                         skipped.append({
@@ -193,12 +213,18 @@ class LeadMixin:
                             "reason": "email already exists as a crawled lead",
                         })
                     continue
+                lead_score = compute_lead_score({
+                    "email": row["email"], "phone": row.get("phone"),
+                    "person_name": row.get("name"), "designation": row.get("designation"),
+                }, confidence_band=None, channel_tag="manual",
+                    weights=self._lead_score_weights)
                 s.add(Lead(
                     job_id=job_id, domain_id=None, email=row["email"],
                     person_name=row.get("name"), designation=row.get("designation"),
                     department=row.get("department"), source_url="manual-csv-upload",
                     source_title=None, context_snippet=None,
-                    phone=row.get("phone"), channel_tag="manual", depth=0,
+                    phone=row.get("phone"), channel_tag="manual",
+                    lead_score=lead_score, depth=0,
                 ))
                 imported += 1
             s.commit()
@@ -215,6 +241,15 @@ class LeadMixin:
         if not safe:
             return False
         with self._Session() as s:
-            updated = s.query(Lead).filter_by(id=lead_id).update(safe)
+            lead = s.query(Lead).filter_by(id=lead_id).first()
+            if not lead:
+                return False
+            for k, v in safe.items():
+                setattr(lead, k, v)
+            lead.lead_score = compute_lead_score({
+                "email": lead.email, "phone": lead.phone,
+                "person_name": lead.person_name, "designation": lead.designation,
+            }, confidence_band=lead.confidence_band, channel_tag=lead.channel_tag,
+                weights=self._lead_score_weights)
             s.commit()
-            return updated > 0
+            return True

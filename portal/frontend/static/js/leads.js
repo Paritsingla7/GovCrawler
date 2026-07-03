@@ -4,6 +4,9 @@ let selectedLeadIds = new Set();
 let leadsSearchTimer = null;
 let leadsTotalMatching = 0;
 let pendingAddToCampaignId = null;
+// Fallback mirrors lead_scoring.DEFAULT_WEIGHTS so the split still renders
+// before/without the score-weights fetch; the API response overrides it.
+let scoreWeights = {email_high: 20, email_low: 10, person_name: 40, designation: 30, phone: 10};
 
 document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -15,6 +18,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setupLeadCellListeners();
     restoreLeadsSelection();
+    try {
+        const w = await apiFetch('/api/leads/score-weights');
+        if (w && typeof w === 'object') scoreWeights = w;
+    } catch (e) { /* keep built-in default weights */ }
     await loadLeadsFilters();
     loadLeads();
 });
@@ -61,6 +68,7 @@ function saveLeadsFilters() {
         state: document.getElementById('leads-state-select')?.value || '',
         search: document.getElementById('leads-search-input')?.value || '',
         completeOnly: document.getElementById('leads-complete-only')?.checked || false,
+        minScore: document.getElementById('leads-min-score-select')?.value || '',
     }));
 }
 
@@ -71,6 +79,7 @@ function clearLeadsFilters() {
     document.getElementById('leads-state-select').value = '';
     document.getElementById('leads-search-input').value = '';
     document.getElementById('leads-complete-only').checked = false;
+    document.getElementById('leads-min-score-select').value = '';
     leadsPage = 1;
     reloadLeadsStateOptions('').then(() => loadLeads());
 }
@@ -100,6 +109,7 @@ async function loadLeadsFilters() {
         if (!urlJobId && saved.job) jobSel.value = saved.job;
         if (saved.search) document.getElementById('leads-search-input').value = saved.search;
         if (saved.completeOnly) document.getElementById('leads-complete-only').checked = true;
+        if (saved.minScore) document.getElementById('leads-min-score-select').value = saved.minScore;
 
         const jobId = jobSel.value;
         const jobIdParam = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
@@ -167,12 +177,14 @@ function getLeadsFilterParams() {
     const state = document.getElementById('leads-state-select').value;
     const search = document.getElementById('leads-search-input').value.trim();
     const completeOnly = document.getElementById('leads-complete-only').checked;
+    const minScore = document.getElementById('leads-min-score-select').value;
     const params = new URLSearchParams();
     if (jobId) params.set('job_id', jobId);
     if (cat) params.set('category', cat);
     if (state) params.set('state', state);
     if (search) params.set('search', search);
     if (completeOnly) params.set('complete_only', 'true');
+    if (minScore) params.set('min_score', minScore);
     return params;
 }
 
@@ -206,6 +218,41 @@ function editableCell(leadId, field, val, tdStyle) {
         autocomplete="off"
         spellcheck="false"
     ></td>`;
+}
+
+function scoreBreakdown(l) {
+    if (l.channel_tag === 'manual') {
+        return 'Manually entered — not run through scoring.';
+    }
+    const has = (f) => !!(l[f] && String(l[f]).trim());
+    const lines = [];
+
+    const emailMax = scoreWeights.email_high;
+    const emailHigh = l.confidence_band === 'HIGH';
+    const emailPts = emailHigh ? scoreWeights.email_high : scoreWeights.email_low;
+    lines.push(`Email: ${emailPts}/${emailMax} (${emailHigh ? 'verified — mailto/microdata' : 'scraped from page text'})`);
+
+    const nameMax = scoreWeights.person_name;
+    lines.push(`Name: ${has('person_name') ? nameMax : 0}/${nameMax}${has('person_name') ? '' : ' (missing)'}`);
+
+    const desigMax = scoreWeights.designation;
+    lines.push(`Designation: ${has('designation') ? desigMax : 0}/${desigMax}${has('designation') ? '' : ' (missing)'}`);
+
+    const phoneMax = scoreWeights.phone;
+    lines.push(`Phone: ${has('phone') ? phoneMax : 0}/${phoneMax}${has('phone') ? '' : ' (missing)'}`);
+
+    const totalMax = emailMax + nameMax + desigMax + phoneMax;
+    lines.push(`Total: ${l.lead_score ?? 0}/${totalMax}`);
+    return lines.join('\n');
+}
+
+function scoreBadge(l) {
+    if (l.channel_tag === 'manual') {
+        return '<span class="badge badge-secondary" title="Manually entered — not scored">MANUAL</span>';
+    }
+    const score = l.lead_score ?? 0;
+    const tier = score >= 70 ? 'success' : score >= 40 ? 'warning' : 'secondary';
+    return `<span class="badge badge-${tier}" title="${esc(scoreBreakdown(l))}">${score}</span>`;
 }
 
 function renderLeads(leads, total) {
@@ -243,7 +290,7 @@ function renderLeads(leads, total) {
             missing.length
                 ? `<td class="warn-cell"><span class="warn-flag" title="Missing: ${esc(missing.map(f => f.replace(/_/g, ' ')).join(', '))}">⚠</span></td>`
                 : `<td></td>`,
-            `<td style="text-align:center">${l.confidence_band ? `<span class="badge badge-${l.confidence_band === 'HIGH' ? 'success' : 'secondary'}">${esc(l.confidence_band)}</span>` : ''}</td>`,
+            `<td style="text-align:center">${scoreBadge(l)}</td>`,
             `<td>
                 <a href="mailto:${esc(l.email)}" style="display:block;font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>
                 ${l.phone
@@ -418,6 +465,7 @@ async function confirmExport() {
         state: params.get('state') || null,
         search: params.get('search') || null,
         complete_only: params.get('complete_only') === 'true',
+        min_score: params.get('min_score') ? parseInt(params.get('min_score')) : null,
         fields: checkedFields,
     };
     if (selectedLeadIds.size > 0) {
