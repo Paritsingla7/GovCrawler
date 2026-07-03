@@ -108,6 +108,24 @@
 
     <!-- Main table -->
     <main>
+        <div class="dom-stats">
+            <div class="stat-box">
+                <div class="stat-val" id="stat-dom-total">0</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-dom-crawlable" style="color:var(--green)">0</div>
+                <div class="stat-label">Crawlable</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-dom-nolink" style="color:var(--red)">0</div>
+                <div class="stat-label">No Link</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-dom-duplicate" style="color:var(--yellow)">0</div>
+                <div class="stat-label">Duplicate</div>
+            </div>
+        </div>
         <div class="table-toolbar">
             <input id="select-all" onchange="toggleSelectAll(this.checked)" title="Select this page" type="checkbox">
             <span style="font-size:12px;color:var(--muted)">Select page</span>

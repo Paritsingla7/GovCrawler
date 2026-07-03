@@ -31,11 +31,18 @@ GovCrawler/
 │       │                                  # campaign_emails, blacklist tables
 │       ├── 0002_patch_campaign_fields.py  # template_id FK on campaigns
 │       ├── 0003_add_test_campaign_models.py  # test_campaigns, test_campaign_emails
-│       └── 0004_add_email_selection.py    # is_selected + missing_fields columns
+│       ├── 0004_add_email_selection.py    # is_selected + missing_fields columns
+│       ├── 0005_add_lead_depth.py         # leads.depth (branch A)
+│       ├── 0005_add_lead_grading.py       # entity_kind, phone, channel_tag,
+│       │                                  # confidence_band, field_provenance (branch B)
+│       ├── 0006_add_job_custom_urls.py    # crawl_jobs.source_type + job_custom_urls table
+│       └── 0007_add_domain_external_id.py # domains.external_id (null-url dedup key)
 │
-├── GovScraper/                     # Standalone domain-discovery library
-│   ├── __init__.py                 # Package root
-│   ├── README.md                   # GovScraper-specific documentation
+├── GovScraper/                     # Standalone domain-discovery tool (no dependency on
+│   │                               # the portal app/DB; run with GovScraper/ as CWD since
+│   │                               # its modules use bare imports, e.g. `from api import ...`)
+│   ├── __init__.py                 # Package root (empty — only GovScraper.api is a package)
+│   ├── README.md                   # GovScraper-specific documentation + CLI usage
 │   └── api/
 │       ├── __init__.py             # Re-exports: get_categories, get_organization_types,
 │       │                           # get_entries_for_category, HEADERS, TARGET_SUFFIXES,
@@ -45,11 +52,19 @@ GovCrawler/
 │       │                           # get_entries_for_category() (paginated)
 │       ├── config.py               # Constants: WEB_DIR_API URL, PAGE_SIZE, HEADERS,
 │       │                           # TARGET_SUFFIXES (.gov.in, .nic.in, .res.in, .ac.in)
-│       ├── extractor.py            # extract_from_entries() — groups raw API entries
-│       │                           # into {state → {org_type → [root_urls]}}
+│       ├── extractor.py            # extract_from_entries() — groups full entry records
+│       │                           # (title, url, contact_url, external_id) into
+│       │                           # {state → {org_type → [record, ...]}}; url is None
+│       │                           # for entries with no valid target-domain URL instead
+│       │                           # of dropping them
 │       ├── docs.md                 # API shape documentation
-│       └── runner.py               # run_all_domains(config) — standalone CLI runner;
-│                                   # returns {url: {category, state, org_type}}
+│       └── runner.py               # run_all_domains(config) → flat dict keyed by
+│                                   # external_id (npi_sanitized_id): {title, url,
+│                                   # contact_url, category, state, org_type}
+│                                   # build_gov_domains_json(config) → nested dict ready
+│                                   # to json.dump as gov_domains.json
+│                                   # main() — CLI entry point (`python runner.py [output]
+│                                   # [--category] [--org-type]`), invoked via `if __name__`
 │
 └── portal/                         # Core FastAPI application package
     │
@@ -95,7 +110,8 @@ GovCrawler/
     │   │
     │   ├── domains.py              # Domain metadata + browsing routes
     │   │                           # /api/categories, /api/states, /api/org-types,
-    │   │                           # /api/domains, /api/domains/ids
+    │   │                           # /api/domains, /api/domains/ids, /api/domains/stats,
+    │   │                           # PATCH /api/domains/{id} (set a no-URL domain's URL)
     │   │
     │   ├── config.py               # Crawler/extraction settings routes
     │   │                           # GET/POST /api/config — reads/writes config.yaml
@@ -183,9 +199,10 @@ GovCrawler/
     │   │
     │   └── mixins/                 # Database's methods, grouped by concern
     │       ├── __init__.py
-    │       ├── domain_mixin.py     # upsert_domain, get_domains, get_categories,
-    │       │                       # get_states, get_org_types, get_domain_ids,
-    │       │                       # get_domains_by_ids, clear_domains, count_domains
+    │       ├── domain_mixin.py     # upsert_domain, update_domain_url, get_domain_stats,
+    │       │                       # get_domains, get_categories, get_states, get_org_types,
+    │       │                       # get_domain_ids, get_domains_by_ids, clear_domains,
+    │       │                       # count_domains
     │       ├── job_mixin.py        # create_job, start_job, finish_job,
     │       │                       # increment_job_progress, update_job_metrics,
     │       │                       # get_job, list_jobs, _job_dict
@@ -242,11 +259,11 @@ GovCrawler/
 | `portal/crawler/engine.py`            | ~530 lines | Core async crawler implementation                          |
 | `portal/api/campaigns.py`             | ~510 lines | Campaign creation, staging, dispatch routes (APIRouter)    |
 | `portal/api/dispatcher.py`            | ~300 lines | SMTP dispatch loop for both real + test campaigns          |
-| `portal/scraper/importer.py`          | ~280 lines | JSON and live-API import                                   |
+| `portal/scraper/importer.py`          | ~330 lines | JSON and live-API import                                   |
 | `portal/db/mixins/lead_mixin.py`      | ~190 lines | Lead CRUD + shared `_apply_lead_filters` helper            |
 | `portal/api/leads.py`                 | ~140 lines | Lead browsing, export, and editing routes                  |
 | `portal/api/jobs.py`                  | ~140 lines | Crawl job routes + `_run_crawl` background task             |
-| `portal/db/mixins/domain_mixin.py`    | ~140 lines | Domain CRUD + metadata queries                              |
+| `portal/db/mixins/domain_mixin.py`    | ~215 lines | Domain CRUD, stats, and metadata queries                     |
 | `GovScraper/api/api.py`               | ~110 lines | Three HTTP functions for india.gov.in API                   |
 | `portal/api/server.py`                | ~65 lines  | Pure app wiring — lifespan + `include_router` × 10          |
 | `run.py`                              | ~230 lines | Tkinter GUI + INSTALL_BROWSERS sentinel                     |

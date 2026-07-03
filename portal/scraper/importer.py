@@ -4,7 +4,9 @@ Imports india.gov.in Web Directory into the portal database.
 Two import modes:
   1. JSON (preferred, zero API calls):
        import_from_json(db, "gov_domains.json", config)
-       Structure: {category_title: {state: {org_type_title: [url, ...]}}}
+       Structure: {category_title: {state: {org_type_title: [url_or_entry_obj, ...]}}}
+       (see import_from_json's docstring for the entry object shape used by
+       organizations with no known URL)
 
   2. Live API (for refreshing data only):
        import_all(db, config)
@@ -82,6 +84,42 @@ def _title_from_url(url: str) -> str:
 
 # ── JSON import (zero API calls) ──────────────────────────────────────────────
 
+def _resolve_json_entry(entry) -> dict:
+    """Normalize one gov_domains.json list entry to
+    {title, main_url, contact_url, external_id}.
+
+    Accepts either a plain URL string (legacy format) or an object
+    {"title", "url", "contact_url", "external_id"} — the latter allows
+    organizations with no known URL to still be imported (main_url stays
+    None) instead of being silently dropped.
+    """
+    if isinstance(entry, str):
+        raw_main, raw_contact = entry, ""
+        title, external_id = "", None
+    else:
+        raw_main = entry.get("url") or ""
+        raw_contact = entry.get("contact_url") or ""
+        title = entry.get("title") or ""
+        external_id = entry.get("external_id") or None
+
+    if _is_target(raw_main):
+        main_url = _root_url(raw_main)
+        contact_url = raw_contact if _is_target(raw_contact) else None
+    elif _is_target(raw_contact):
+        main_url = _root_url(raw_contact)
+        contact_url = None
+    else:
+        main_url = None
+        contact_url = None
+
+    return {
+        "title": title or (_title_from_url(main_url) if main_url else ""),
+        "main_url": main_url,
+        "contact_url": contact_url,
+        "external_id": external_id,
+    }
+
+
 def import_from_json(db: Database, json_path: str | Path, config: dict):
     """
     One-time import from gov_domains.json. Zero API calls.
@@ -90,12 +128,21 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
       {
         "State / UT Government": {
           "Haryana": {
-            "Departments": ["https://..."],
+            "Departments": [
+              "https://example.gov.in",
+              {"title": "Org With No URL", "url": null, "contact_url": null,
+               "external_id": "some-stable-id"}
+            ],
             "Others":      ["https://..."]
           }
         },
         ...
       }
+
+    List entries may be a plain URL string (legacy format, dropped if the
+    URL isn't a target gov domain) or an object carrying a title/external_id
+    so organizations without a known URL are still imported for later
+    manual URL entry, instead of being silently discarded.
     """
     global import_status
 
@@ -138,8 +185,13 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
 
                     import_status["total_entries"] += len(urls)
 
-                    for url in urls:
-                        if not _is_target(url):
+                    for entry in urls:
+                        resolved = _resolve_json_entry(entry)
+                        # A legacy plain-string entry carries no info beyond
+                        # its URL — skip it if that URL isn't a target gov
+                        # domain. Object entries are kept even with no URL
+                        # since they still carry a title/external_id.
+                        if isinstance(entry, str) and not resolved["main_url"]:
                             continue
 
                         db.upsert_domain(
@@ -148,9 +200,10 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
                             state=state,
                             org_type=org_code,
                             org_type_title=org_type_title,
-                            title=_title_from_url(url),  # derived from hostname
-                            main_url=_root_url(url),
-                            contact_url=None,  # discovered by crawler
+                            title=resolved["title"],
+                            main_url=resolved["main_url"],
+                            contact_url=resolved["contact_url"],
+                            external_id=resolved["external_id"],
                         )
                         import_status["inserted"] += 1
                         inserted_this_cat += 1
@@ -234,22 +287,26 @@ def import_all(db: Database, config: dict):
                 inserted_this_cat = 0
 
                 for entry in entries:
-                    main_url = entry.get("url") or ""
-                    contact_url = entry.get("url_1") or ""
+                    raw_main = entry.get("url") or ""
+                    raw_contact = entry.get("url_1") or ""
                     entry_title = entry.get("title") or ""
                     state = entry.get("stateName") or "National / Unknown"
                     org_code = entry.get("organization_type") or "UNKNOWN"
                     org_t_title = org_map.get(org_code, org_code)
+                    external_id = entry.get("npi_sanitized_id") or None
 
-                    if not (_is_target(main_url) or _is_target(contact_url)):
-                        continue
-
-                    if not _is_target(main_url) and _is_target(contact_url):
-                        main_url = _root_url(contact_url)
+                    # Entries with no crawlable URL (main or contact) are kept
+                    # with main_url=None rather than dropped — the frontend
+                    # marks them "not crawlable" and lets a user add one later.
+                    if _is_target(raw_main):
+                        main_url = _root_url(raw_main)
+                        clean_contact = raw_contact if _is_target(raw_contact) else None
+                    elif _is_target(raw_contact):
+                        main_url = _root_url(raw_contact)
+                        clean_contact = None
                     else:
-                        main_url = _root_url(main_url)
-
-                    clean_contact = contact_url if _is_target(contact_url) else None
+                        main_url = None
+                        clean_contact = None
 
                     db.upsert_domain(
                         category_code=code,
@@ -260,6 +317,7 @@ def import_all(db: Database, config: dict):
                         title=entry_title,
                         main_url=main_url,
                         contact_url=clean_contact,
+                        external_id=external_id,
                     )
                     import_status["inserted"] += 1
                     inserted_this_cat += 1

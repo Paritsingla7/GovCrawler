@@ -16,6 +16,7 @@ class Domain(Base):
     title = Column(String, index=True)
     main_url = Column(String)
     contact_url = Column(String)
+    external_id = Column(String, index=True)
     imported_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

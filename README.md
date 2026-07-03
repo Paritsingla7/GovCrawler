@@ -11,6 +11,7 @@ leads, and an email outreach system backed by SQLite or PostgreSQL.
 
 - **Centralized Portal:** FastAPI web application (`portal/`) with a browser-based UI for all workflows.
 - **Domain Discovery:** `GovScraper` extracts domains from the `india.gov.in` Web Directory API — no CAPTCHA needed.
+  Organizations with no listed URL are kept (not dropped) and marked "not crawlable" until a URL is added manually.
 - **Deep Crawler Engine:** Async crawling via HTTPX (fast path) with Playwright fallback for JavaScript-heavy sites.
 - **Data Extraction:** Configurable regex/keyword extraction for emails and key personnel (name, designation,
   department). Phone number extraction is planned but not yet implemented.
@@ -27,7 +28,8 @@ GovCrawler/
 ├── GovCrawler.spec          # PyInstaller build configuration
 ├── alembic.ini              # Alembic database migration config
 ├── alembic/versions/        # Incremental schema migration scripts
-├── GovScraper/              # Standalone domain-discovery module (india.gov.in API)
+├── GovScraper/              # Standalone domain-discovery tool (india.gov.in API); has
+│                            # its own CLI to generate gov_domains.json — see its README
 └── portal/                  # Core FastAPI application package
     ├── main.py              # CLI dispatcher and server factory
     ├── paths.py             # Path resolution + first-run bootstrap (dev + PyInstaller)
@@ -37,7 +39,7 @@ GovCrawler/
     │   ├── server.py        # App factory: lifespan, static mount, include_router × 10
     │   ├── deps.py          # Shared app state (db/config/browser) + Depends() providers
     │   ├── frontend.py      # HTML page routes + /api/logs, /api/visited-urls
-    │   ├── domains.py       # Domain metadata + browsing routes
+    │   ├── domains.py       # Domain metadata, browsing, stats, and URL-edit routes
     │   ├── config.py        # Crawler/extraction settings routes
     │   ├── imports.py       # Domain import routes + background tasks
     │   ├── jobs.py          # Crawl job routes + background crawl task
@@ -136,6 +138,11 @@ Opens the **GovCrawler Control Panel** (`CrawlerLauncher`) with four buttons:
 Import Indian government domains in one of two ways:
 
 - **JSON import (recommended):** Upload `gov_domains.json` via the Settings page or CLI. Zero API calls, instant.
+  Generate the file standalone with GovScraper's own CLI (see [`GovScraper/README.md`](GovScraper/README.md)):
+  ```bash
+  cd GovScraper && python runner.py ../gov_domains.json
+  ```
+  then import it:
   ```bash
   python -m portal import-json gov_domains.json
   ```
@@ -143,6 +150,9 @@ Import Indian government domains in one of two ways:
   ```bash
   python -m portal import
   ```
+
+Organizations with no listed URL are imported anyway (metadata preserved, `main_url: null`) instead of being
+dropped — the domain browser marks them "not crawlable" and lets you add a URL later.
 
 ### 2. Create a Crawl Job
 

@@ -2,19 +2,40 @@
 Domain metadata and browsing endpoints.
 
 Registers routes:
-  GET  /api/categories      → [{code, title, count}]
-  GET  /api/states          → state list (filtered by category if provided)
-  GET  /api/org-types       → org type list (filtered by category+state)
-  GET  /api/domains         → paginated domain list
-  GET  /api/domains/ids     → all matching domain IDs (for select-all)
+  GET   /api/categories      → [{code, title, count}]
+  GET   /api/states          → state list (filtered by category if provided)
+  GET   /api/org-types       → org type list (filtered by category+state)
+  GET   /api/domains         → paginated domain list
+  GET   /api/domains/ids     → all matching domain IDs (for select-all)
+  GET   /api/domains/stats   → total / crawlable / duplicate counts
+  PATCH /api/domains/{id}    → set/update a domain's crawlable URL
 """
 
-from fastapi import APIRouter, Depends, Query
+from urllib.parse import urlsplit
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from ..db import Database
 from .deps import get_db
 
 router = APIRouter(tags=["domains"])
+
+
+class UpdateDomainUrlRequest(BaseModel):
+    main_url: str
+    contact_url: str | None = None
+
+
+def _normalize_domain_url(raw: str) -> str:
+    candidate = raw.strip()
+    if not candidate:
+        raise HTTPException(status_code=422, detail="URL cannot be empty")
+    if "://" not in candidate:
+        candidate = "http://" + candidate
+    if not urlsplit(candidate).netloc:
+        raise HTTPException(status_code=422, detail=f"Invalid URL: {raw}")
+    return candidate
 
 
 @router.get("/api/categories")
@@ -74,3 +95,34 @@ async def get_domain_ids(
         search=search or None,
     )
     return {"ids": ids, "total": len(ids)}
+
+
+@router.get("/api/domains/stats")
+async def get_domain_stats(
+        category: str = Query(None),
+        state: str = Query(None),
+        org_type: str = Query(None),
+        search: str = Query(None),
+        db: Database = Depends(get_db),
+):
+    return db.get_domain_stats(
+        category=category or None,
+        state=state or None,
+        org_type=org_type or None,
+        search=search or None,
+    )
+
+
+@router.patch("/api/domains/{domain_id}")
+async def update_domain_url(
+        domain_id: int,
+        req: UpdateDomainUrlRequest,
+        db: Database = Depends(get_db),
+):
+    main_url = _normalize_domain_url(req.main_url)
+    contact_url = _normalize_domain_url(req.contact_url) if req.contact_url else None
+
+    updated = db.update_domain_url(domain_id, main_url=main_url, contact_url=contact_url)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Domain not found")
+    return updated

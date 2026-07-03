@@ -132,15 +132,19 @@ imports.py — asyncio.create_task(_run_json_import / _run_import)
   asyncio.to_thread(import_from_json / import_all)  ← blocking, runs off event loop
   │
   JSON mode:
-  │  Parse gov_domains.json → {category → state → org_type → [urls]}
+  │  Parse gov_domains.json → {category → state → org_type → [url_or_entry_obj]}
   │  db.clear_domains()
-  │  db.upsert_domain() × N
+  │  db.upsert_domain() × N  (external_id when the entry carries one, else main_url)
   │
   API mode:
   │  GovScraper.get_categories()
   │  For each category:
   │    GovScraper.get_entries_for_category()
-  │    db.upsert_domain() × N
+  │    db.upsert_domain() × N  (external_id = npi_sanitized_id)
+  │
+  Both modes: entries with no crawlable URL are kept with main_url=None
+  instead of being dropped — the frontend marks them "not crawlable" and
+  lets a user add a URL later via PATCH /api/domains/{id}.
   │
   import_status dict updated in-place (polled by /api/import/status)
 ```

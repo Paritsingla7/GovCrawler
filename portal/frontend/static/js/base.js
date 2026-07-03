@@ -186,21 +186,47 @@ function debounceSearch() {
 }
 
 // ── Domains ───────────────────────────────────────────────────────────────────
-async function loadDomains() {
+function _domainFilterParams() {
     const cat = document.getElementById('cat-select').value;
     const state = document.getElementById('state-select').value;
     const orgType = document.getElementById('orgtype-select').value;
     const search = document.getElementById('search-input').value.trim();
-    const params = new URLSearchParams({page: currentPage, limit: 50});
+    const params = new URLSearchParams();
     if (cat) params.set('category', cat);
     if (state) params.set('state', state);
     if (orgType) params.set('org_type', orgType);
     if (search) params.set('search', search);
+    return params;
+}
+
+async function loadDomainStats() {
+    try {
+        const s = await apiFetch(`/api/domains/stats?${_domainFilterParams()}`);
+        document.getElementById('stat-dom-total').textContent = s.total.toLocaleString();
+        document.getElementById('stat-dom-crawlable').textContent = s.crawlable.toLocaleString();
+        document.getElementById('stat-dom-nolink').textContent = s.not_crawlable.toLocaleString();
+        document.getElementById('stat-dom-duplicate').textContent = s.duplicate.toLocaleString();
+
+        // "Select all" only ever selects crawlable (URL-bearing) domains, so
+        // its count/visibility should track s.crawlable, not the raw total.
+        const btnSelectAll = document.getElementById('btn-select-all-results');
+        document.getElementById('sel-all-toolbar-n').textContent = s.crawlable.toLocaleString();
+        btnSelectAll.style.display = s.crawlable > 0 ? '' : 'none';
+    } catch (e) {
+        console.error('loadDomainStats', e);
+    }
+}
+
+async function loadDomains() {
+    const params = _domainFilterParams();
+    params.set('page', currentPage);
+    params.set('limit', 50);
     try {
         const data = await apiFetch(`/api/domains?${params}`);
         totalPages = data.pages;
         totalMatching = data.total;
         renderDomains(data.domains, data.total);
+        loadDomainStats();
     } catch (e) {
         console.error('loadDomains', e);
     }
@@ -215,11 +241,6 @@ function renderDomains(domains, total) {
         total > 0 ? `${total.toLocaleString()} matching domains` : 'No domains match filters';
     document.getElementById('btn-prev').disabled = currentPage <= 1;
     document.getElementById('btn-next').disabled = currentPage >= totalPages;
-
-    // Update "select all N" in toolbar
-    const btnSelectAll = document.getElementById('btn-select-all-results');
-    document.getElementById('sel-all-toolbar-n').textContent = total.toLocaleString();
-    btnSelectAll.style.display = total > 0 ? '' : 'none';
 
     const tbody = document.getElementById('domain-tbody');
     if (!domains.length) {
@@ -238,7 +259,7 @@ function renderDomains(domains, total) {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td style="width:40px"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleDomain(${d.id}, this.checked)"></td>
+      <td style="width:40px"><input type="checkbox" ${checked ? 'checked' : ''} ${url ? '' : 'disabled title="No URL — add one to make this seed crawlable"'} onchange="toggleDomain(${d.id}, this.checked)"></td>
       <td>
         <div class="d-name">${esc(label)}</div>
         ${d.state ? `<div class="d-state">${esc(d.state)}</div>` : ''}
@@ -246,7 +267,10 @@ function renderDomains(domains, total) {
       <td><span class="tag tag-${catCode}">${(d.category_code || '').toUpperCase()}</span></td>
       <td style="font-size:12px;color:var(--muted)">${esc(orgLabel)}</td>
       <td style="max-width:180px">
-        ${url ? `<a href="${esc(url)}" target="_blank" style="font-size:11px;font-family:monospace;color:var(--muted)" title="${esc(url)}">↗ ${esc(shortUrl)}</a>` : '<span style="color:var(--small)">—</span>'}
+        ${url
+            ? `<a href="${esc(url)}" target="_blank" style="font-size:11px;font-family:monospace;color:var(--muted)" title="${esc(url)}">↗ ${esc(shortUrl)}</a>`
+            : `<span style="font-size:10px;font-weight:600;color:var(--red)" title="No crawlable URL on record">NOT CRAWLABLE</span>
+               <a href="javascript:void(0)" onclick="promptAddDomainUrl(${d.id})" style="font-size:11px;margin-left:6px;color:var(--accent)">+ Add URL</a>`}
       </td>`;
         tbody.appendChild(tr);
     });
@@ -261,8 +285,24 @@ function toggleDomain(id, checked) {
     updateSelCount();
 }
 
+async function promptAddDomainUrl(id) {
+    const url = prompt('Enter the crawlable URL for this domain (e.g. https://example.gov.in):');
+    if (!url || !url.trim()) return;
+    try {
+        await apiFetch(`/api/domains/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({main_url: url.trim()}),
+        });
+        loadDomains();
+    } catch (e) {
+        alert(`Failed to update URL: ${e.message}`);
+    }
+}
+
 function toggleSelectAll(checked) {
-    document.querySelectorAll('#domain-tbody input[type=checkbox]').forEach(cb => {
+    // Skip disabled (no-URL) rows — they aren't valid crawl seeds.
+    document.querySelectorAll('#domain-tbody input[type=checkbox]:not(:disabled)').forEach(cb => {
         const m = cb.getAttribute('onchange').match(/\d+/);
         if (!m) return;
         const id = parseInt(m[0]);
@@ -274,19 +314,13 @@ function toggleSelectAll(checked) {
 }
 
 async function selectAllResults() {
-    const cat = document.getElementById('cat-select').value;
-    const state = document.getElementById('state-select').value;
-    const orgType = document.getElementById('orgtype-select').value;
-    const search = document.getElementById('search-input').value.trim();
-    const params = new URLSearchParams();
-    if (cat) params.set('category', cat);
-    if (state) params.set('state', state);
-    if (orgType) params.set('org_type', orgType);
-    if (search) params.set('search', search);
+    const params = _domainFilterParams();
     try {
         const data = await apiFetch(`/api/domains/ids?${params}`);
         data.ids.forEach(id => selectedIds.add(id));
-        document.querySelectorAll('#domain-tbody input[type=checkbox]').forEach(cb => cb.checked = true);
+        // /api/domains/ids only returns crawlable (URL-bearing) domains, which
+        // matches the disabled state of no-URL rows' checkboxes on this page.
+        document.querySelectorAll('#domain-tbody input[type=checkbox]:not(:disabled)').forEach(cb => cb.checked = true);
         saveSelection();
         updateSelectAll();
         updateSelCount();
@@ -314,7 +348,10 @@ function updateSelCount() {
 }
 
 function updateSelectAll() {
-    const all = document.querySelectorAll('#domain-tbody input[type=checkbox]');
+    // Only count selectable (crawlable) rows — a disabled no-URL row can
+    // never be checked, so including it would make "select page" never
+    // read as fully checked.
+    const all = document.querySelectorAll('#domain-tbody input[type=checkbox]:not(:disabled)');
     const n = Array.from(all).filter(cb => cb.checked).length;
     document.getElementById('select-all').checked = all.length > 0 && n === all.length;
     document.getElementById('select-all').indeterminate = n > 0 && n < all.length;

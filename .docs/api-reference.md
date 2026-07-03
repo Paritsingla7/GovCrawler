@@ -91,15 +91,52 @@ Paginated domain list with filters.
 
 Each domain object: `id, category_code, category_title, state, org_type, org_type_title, title, main_url, contact_url`
 
+`main_url` (and `contact_url`) may be `null` — organizations imported from the india.gov.in directory with no
+listed URL are kept rather than dropped, so metadata (title, category, state) isn't lost. The frontend marks these
+"not crawlable" until a URL is added via `PATCH /api/domains/{id}`.
+
 ---
 
 ### `GET /api/domains/ids`
 
-Returns all matching domain IDs (used by "Select All" in the UI).
+Returns matching, **crawlable** domain IDs (used by "Select All" in the UI). Domains with `main_url: null` are
+excluded — they can't be used as crawl seeds, so select-all skips them.
 
 **Query params:** same filters as `GET /api/domains` (no pagination)
 
 **Response:** `{ "ids": [1, 2, 3, ...], "total": 150 }`
+
+---
+
+### `GET /api/domains/stats`
+
+Total / crawlable / duplicate counts for domains matching the given filters — powers the stats strip above the
+domain table.
+
+**Query params:** same filters as `GET /api/domains` (no pagination). Omit all to get whole-table stats.
+
+**Response:**
+
+```json
+{ "total": 1234, "crawlable": 1100, "not_crawlable": 134, "duplicate": 42 }
+```
+
+`duplicate` counts rows sharing a `main_url` with another row in the filtered set, minus one per group (the
+redundant extra rows, not the whole group).
+
+---
+
+### `PATCH /api/domains/{id}`
+
+Set or update a domain's crawlable URL — used to fix up organizations imported with `main_url: null`.
+
+**Body:**
+```json
+{ "main_url": "https://example.gov.in", "contact_url": "https://example.gov.in/contact" }
+```
+`contact_url` is optional.
+
+**Response:** the updated domain object. `404` if the domain doesn't exist, `422` if the URL is malformed.
 
 ---
 

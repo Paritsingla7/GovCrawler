@@ -47,6 +47,9 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
                 ("confidence_band", "VARCHAR"),
                 ("field_provenance", "TEXT"),
             ],
+            "domains": [
+                ("external_id", "VARCHAR"),
+            ],
         }
         with self.engine.connect() as conn:
             for table, columns in tables_to_patch.items():

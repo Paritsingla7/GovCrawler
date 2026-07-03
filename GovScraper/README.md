@@ -29,13 +29,34 @@ pip install httpx
 
 ## Usage
 
-GovScraper is now integrated directly into GovCrawler as a module. It uses `runner.py` to programmatically retrieve
-domains and pass them to the crawler's seeder.
+GovScraper runs standalone — it has no dependency on the portal app or its database.
 
-To fetch domains within another Python script:
+### CLI: generate a `gov_domains.json`
+
+Run `runner.py` directly from inside the `GovScraper/` directory to scrape the full directory and write a
+`gov_domains.json` file in the exact format the portal's `python -m portal import-json` expects:
+
+```bash
+cd GovScraper
+python runner.py                       # writes ./gov_domains.json
+python runner.py ../gov_domains.json   # custom output path
+python runner.py --category ug         # only Union Government
+python runner.py --org-type <code>     # only a specific organization type
+```
+
+Move (or point `import-json` at) the resulting file, then seed the portal's database with zero further API calls:
+
+```bash
+python -m portal import-json gov_domains.json
+```
+
+### Library usage
+
+To fetch domains within another Python script (also run with `GovScraper/` as the working directory, since its
+modules use bare imports):
 
 ```python
-from GovScraper.runner import run_all_domains
+from runner import run_all_domains, build_gov_domains_json
 
 # Optional config for filtering
 config = {
@@ -44,13 +65,31 @@ config = {
     }
 }
 
-domains_metadata = run_all_domains(config)
-print(domains_metadata)
+domains_metadata = run_all_domains(config)   # flat dict, keyed by external_id
+gov_domains = build_gov_domains_json(config) # nested dict, ready for gov_domains.json
 ```
 
 ## Outputs
 
-The module returns a nested dictionary mapping each unique root domain to its exact classification (Category, State,
-Organization Type) extracted from the `india.gov.in` Web Directory.
+The module returns a dictionary keyed by each organization's stable `external_id` (not by URL — many organizations in
+the directory have no listed URL at all). Each value carries the full record: `title`, `url` (`None` if the
+organization has none), `contact_url`, `category`, `state`, and `org_type`.
+
+```python
+{
+    "K9LWHHUBGGphvn7wG-2q": {
+        "title": "...", "url": "https://example.gov.in", "contact_url": None,
+        "category": "Union Government", "state": "Delhi", "org_type": "Statutory Body",
+    },
+    "_9KpHHUBGGphvn7w1-XY": {
+        "title": "Agrinnovate India", "url": None, "contact_url": None,
+        "category": "Union Government", "state": None, "org_type": "Statutory Body",
+    },
+    ...
+}
+```
+
+Organizations with no URL are kept (not dropped) so nothing is lost — the portal imports them with `main_url=None`
+and marks them "not crawlable" until a URL is filled in manually.
 
 These outputs are perfect for seeding the GovCrawler, which saves the metadata for real-time lead classification.

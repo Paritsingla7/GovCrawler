@@ -398,6 +398,40 @@ main {
     overflow: hidden;
 }
 
+.dom-stats {
+    display: flex;
+    padding: 14px 16px;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.stat-box {
+    flex: 1;
+    min-width: 72px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.stat-val {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 2px;
+    color: var(--text);
+}
+
+.stat-label {
+    font-size: 10px;
+    color: var(--small);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 600;
+}
+
 .table-toolbar {
     padding: 10px 16px;
     border-bottom: 1px solid var(--border);

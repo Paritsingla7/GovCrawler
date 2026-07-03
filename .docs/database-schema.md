@@ -51,11 +51,17 @@ Seed records from the india.gov.in Web Directory.
 | `org_type`       | String     | Organization type code — indexed         |
 | `org_type_title` | String     | e.g. "Departments", "Statutory Bodies"   |
 | `title`          | String     | Organization name — indexed              |
-| `main_url`       | String     | Root URL (scheme + netloc only)          |
+| `main_url`       | String     | Root URL (scheme + netloc only); nullable |
 | `contact_url`    | String     | Direct contact/directory page (nullable) |
+| `external_id`    | String     | india.gov.in `npi_sanitized_id` — indexed, nullable |
 | `imported_at`    | DateTime   | UTC timestamp of last import             |
 
-**Upsert key:** `main_url` (existing rows are updated, not re-inserted).
+`main_url`/`contact_url` are `null` for organizations the india.gov.in directory lists with no URL at all — these
+are imported (not dropped) so their metadata isn't lost, and the frontend marks them "not crawlable" until a URL is
+added via `PATCH /api/domains/{id}`.
+
+**Upsert key:** `external_id` when present (the only stable key for entries with no `main_url`), otherwise
+`main_url`. Rows with neither are always inserted fresh. See `upsert_domain()`.
 
 ---
 
@@ -277,17 +283,19 @@ for each method call.
 
 ### Domain Methods — `portal/db/mixins/domain_mixin.py`
 
-| Method                           | Description                                  |
-|----------------------------------|----------------------------------------------|
-| `upsert_domain(...)`             | Insert or update by `main_url`; returns `id` |
-| `clear_domains()`                | Delete all domain rows                       |
-| `count_domains()`                | Total domain count                           |
-| `get_categories()`               | `[{code, title, count}]` grouped             |
-| `get_states(category)`           | Distinct state list                          |
-| `get_org_types(category, state)` | `[{code, title, count}]` grouped             |
-| `get_domains(...)`               | Paginated `(list[dict], total)`              |
-| `get_domain_ids(...)`            | All matching IDs for "select all"            |
-| `get_domains_by_ids(ids)`        | Fetch specific rows by PK list               |
+| Method                            | Description                                                     |
+|-----------------------------------|------------------------------------------------------------------|
+| `upsert_domain(...)`              | Insert or update by `external_id` (fallback `main_url`); returns `id` |
+| `update_domain_url(id, url, ...)` | Manually set `main_url`/`contact_url` on a no-URL domain          |
+| `clear_domains()`                 | Delete all domain rows                                            |
+| `count_domains()`                 | Total domain count                                                |
+| `get_domain_stats(...)`           | `{total, crawlable, not_crawlable, duplicate}`, same filters as `get_domains` |
+| `get_categories()`                | `[{code, title, count}]` grouped                                  |
+| `get_states(category)`            | Distinct state list                                               |
+| `get_org_types(category, state)`  | `[{code, title, count}]` grouped                                  |
+| `get_domains(...)`                | Paginated `(list[dict], total)`                                   |
+| `get_domain_ids(...)`             | Matching, crawlable (`main_url` set) IDs for "select all"          |
+| `get_domains_by_ids(ids)`         | Fetch specific rows by PK list                                     |
 
 ### Job Methods — `portal/db/mixins/job_mixin.py`
 
