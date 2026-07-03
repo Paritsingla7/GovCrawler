@@ -18,6 +18,8 @@ let activeJobId = null;
 let pollTimer = null;
 let impPollTimer = null;
 let searchTimer = null;
+const SEEDS_PREVIEW_LIMIT = 200;
+let jobSeedsData = [];
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -733,31 +735,43 @@ async function fetchLogs() {
     }
 }
 
-async function fetchJobSeeds() {
-    if (!activeJobId) return;
-    try {
-        const seeds = await apiFetch(`/api/jobs/${activeJobId}/seeds`);
-        const tbody = document.getElementById('seeds-tbody');
-        if (!seeds.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No seeds found for this job.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '';
-        seeds.forEach(d => {
-            const url = d.main_url || '';
-            const catCode = (d.category || 'default').toLowerCase();
-            tbody.innerHTML += `
+function seedRowHtml(d) {
+    const url = d.main_url || '';
+    const catCode = (d.category_code || 'default').toLowerCase();
+    return `
         <tr>
           <td><div class="d-name">${esc(d.title || url)}</div></td>
           <td>${d.state ? `<div class="d-state">${esc(d.state)}</div>` : '<span style="color:var(--small)">—</span>'}</td>
-          <td><span class="tag tag-${catCode}">${(d.category || '').toUpperCase()}</span></td>
+          <td><span class="tag tag-${catCode}">${(d.category_code || '').toUpperCase()}</span></td>
           <td style="max-width:180px">
             ${url ? `<a href="${esc(url)}" target="_blank" style="font-size:11px;font-family:monospace;color:var(--muted)">↗ ${esc(url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a>` : '—'}
           </td>
-        </tr>
-          `;
-        });
+        </tr>`;
+}
+
+function renderJobSeeds(showAll) {
+    const tbody = document.getElementById('seeds-tbody');
+    if (!jobSeedsData.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No seeds found for this job.</td></tr>';
+        return;
+    }
+    const rows = showAll ? jobSeedsData : jobSeedsData.slice(0, SEEDS_PREVIEW_LIMIT);
+    let html = rows.map(seedRowHtml).join('');
+    if (!showAll && jobSeedsData.length > SEEDS_PREVIEW_LIMIT) {
+        html += `<tr><td colspan="4" style="text-align:center;padding:12px">
+            <button class="btn-secondary btn-sm" onclick="renderJobSeeds(true)">Show all ${jobSeedsData.length.toLocaleString()} seeds</button>
+          </td></tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+async function fetchJobSeeds() {
+    if (!activeJobId) return;
+    try {
+        jobSeedsData = await apiFetch(`/api/jobs/${activeJobId}/seeds`);
+        renderJobSeeds(false);
     } catch (e) {
+        jobSeedsData = [];
         document.getElementById('seeds-tbody').innerHTML = `<tr><td colspan="4" class="empty-state" style="color:var(--red)">Error loading seeds.</td></tr>`;
     }
 }
