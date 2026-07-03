@@ -377,7 +377,10 @@ function triggerJsonImport() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('json-file-input').addEventListener('change', async function () {
+    const jsonFileInput = document.getElementById('json-file-input');
+    if (!jsonFileInput) return; // only present on the domains page
+
+    jsonFileInput.addEventListener('change', async function () {
         const file = this.files[0];
         if (!file) return;
         document.getElementById('json-file-label').textContent = file.name;
