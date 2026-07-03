@@ -34,7 +34,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from urllib.parse import urlparse, urlsplit
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 import httpx
 
@@ -52,12 +52,22 @@ class _QueueItem:
     depth: int = field(compare=False)
     domain_id: int | None = field(compare=False, default=None)
     is_seed: bool = field(compare=False, default=False)
+    page_hops: int = field(compare=False, default=0)
+    # Shared mutable [count] cell across every page in one pagination chain —
+    # bounds the chain's TOTAL structural fan-out (Story #9 Task B4 / AC 7).
+    # None for any page that isn't itself part of a pagination chain.
+    # repr=False: multiple in-flight items reference the SAME mutating list,
+    # so printing/logging one mid-chain would show a value that changes out
+    # from under it — confusing in debug output, not a correctness concern.
+    chain_budget: list[int] | None = field(compare=False, default=None, repr=False)
 
 
 class CrawlerEngine:
     def __init__(self, config: dict, db: Database, job_id: int, browser=None):
         self._cfg = config["crawler"]
         self._excfg = config["extraction"]
+        # Ships disabled by default; absent in older config.yaml files is safe.
+        self._pag = self._cfg.get("pagination", {})
         self._db = db
         self._job_id = job_id
         self._browser = browser
@@ -107,7 +117,8 @@ class CrawlerEngine:
             return url
 
     async def _enqueue(self, url: str, depth: int, domain_id: int | None,
-                       is_seed: bool = False):
+                       is_seed: bool = False, page_hops: int = 0,
+                       chain_budget: list[int] | None = None):
         if self._is_skippable(url) or not self._is_gov_domain(url):
             self._skipped += 1
             return
@@ -126,6 +137,8 @@ class CrawlerEngine:
             depth=depth,
             domain_id=domain_id,
             is_seed=is_seed,
+            page_hops=page_hops,
+            chain_budget=chain_budget,
         ))
 
     def _url_priority(self, url: str) -> int:
@@ -234,7 +247,7 @@ class CrawlerEngine:
                                               thread_name_prefix="parse")
 
         for url, did in seeds:
-            await self._enqueue(url, depth=0, domain_id=did, is_seed=True)
+            await self._enqueue(url, depth=0, domain_id=did, is_seed=True, page_hops=0)
 
         # One Playwright context per worker (None if disabled / no browser).
         if self._cfg.get("playwright_fallback") and self._browser:
@@ -375,7 +388,9 @@ class CrawlerEngine:
         max_depth = self._cfg.get("max_depth", 3)
         if max_depth == 0 or depth < max_depth:
             await self._enqueue_links(raw_links, url, depth, domain_id,
-                                      is_seed_page=item.is_seed)
+                                      is_seed_page=item.is_seed,
+                                      page_hops=item.page_hops,
+                                      chain_budget=item.chain_budget)
 
     # ── DB writer-pool callables (run on the single DB thread) ──────────────────
 
@@ -493,9 +508,96 @@ class CrawlerEngine:
 
     # ── Link discovery ────────────────────────────────────────────────────────
 
-    async def _enqueue_links(self, raw_links: list[tuple[str, str]],
+    @staticmethod
+    def _is_plain_int(value: str) -> bool:
+        """Strict base-10 integer check. `str.isdigit()` alone accepts
+        Unicode digit-look-alikes (e.g. superscripts) that aren't valid
+        `int()` input — `isascii()` closes that gap without loosening the
+        check to a substring/regex match."""
+        return bool(value) and value.isascii() and value.isdigit()
+
+    def _is_pagination_link(self, url: str, anchor_text: str, rel: list[str]) -> bool:
+        """Conservative pagination classifier (Story #9). Deliberately does
+        NOT check `pagination.enabled` — that gate lives at the call site in
+        `_enqueue_links` — so this stays a pure, independently-testable rule.
+
+        A paging query param, when present, is the DECIDING signal — numeric
+        value means pagination, non-numeric means NOT, full stop, regardless
+        of anchor text or rel. This is the entire firewall against session-URL
+        traps (e.g. tntenders.gov.in) that dress a non-numeric/base64 session
+        param up with a visible "Next" link — the link text lies, the query
+        value doesn't. Only when the URL carries NONE of the configured
+        paging params do we fall back to rel="next" / anchor-text signals.
+        Never loosen the numeric check to a substring or regex match.
+
+        Matching is case-insensitive on param NAMES (`?Page=2` must still
+        hit `page`) and blank values count as present-but-non-numeric
+        (`keep_blank_values=True` — a bare `?page=` must not silently fall
+        through to the rel/text fallback). If more than one configured
+        param_signal is present on the same URL, ANY non-numeric value among
+        them rejects the whole URL — fail closed rather than picking
+        whichever configured name happens to be checked first.
+        """
+        param_signals = self._pag.get("param_signals", [])
+        if isinstance(param_signals, str):
+            param_signals = [param_signals]
+        if param_signals:
+            query = parse_qs(urlparse(url).query, keep_blank_values=True)
+            query_lower = {k.lower(): v for k, v in query.items()}
+            matched_values = [
+                query_lower[p.lower()][0]
+                for p in param_signals
+                if p.lower() in query_lower
+            ]
+            if matched_values:
+                return all(self._is_plain_int(v) for v in matched_values)
+
+        if "next" in rel:
+            return True
+
+        text = (anchor_text or "").strip().lower()
+        text_signals = self._pag.get("text_signals", [])
+        if isinstance(text_signals, str):
+            text_signals = [text_signals]
+        return bool(text) and (text in text_signals or self._is_plain_int(text))
+
+    @staticmethod
+    def _safe_int(value, default: int) -> int:
+        """Defensive coercion for pagination config values — a YAML typo
+        (a string where an int belongs) must fall back safely, not crash
+        the worker's blanket except-and-swallow handler mid-crawl."""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _elect_pagination_target(self, raw_links, pagination_on: bool) -> str | None:
+        """Pick AT MOST ONE pagination link per page — prefer an explicit
+        rel="next" signal, else the first classifier-accepted link in
+        document order. Without this, a normal numbered pager bar
+        ("1 2 3 4 5 Next Last") would classify EVERY matching link as
+        pagination independently, each bypassing the per-page cap and
+        minting its own fresh chain_budget — multiplying the intended
+        amplification bound by however many links the pager shows (code
+        review finding, 2026-07-02). Real "next page" progression is one
+        hop per page, matching how `page_hops` is defined as a linear counter.
+        """
+        if not pagination_on:
+            return None
+        first_match = None
+        for absolute, text, rel in raw_links:
+            if not self._is_pagination_link(absolute, text, rel):
+                continue
+            if "next" in rel:
+                return absolute
+            if first_match is None:
+                first_match = absolute
+        return first_match
+
+    async def _enqueue_links(self, raw_links: list[tuple[str, str, list[str]]],
                              base_url: str, depth: int, domain_id: int | None,
-                             is_seed_page: bool = False):
+                             is_seed_page: bool = False, page_hops: int = 0,
+                             chain_budget: list[int] | None = None):
         depth_limits = self._cfg.get("max_links_per_page", {})
         max_links = depth_limits.get(str(depth),
                                      depth_limits.get(depth,
@@ -507,9 +609,30 @@ class CrawlerEngine:
         is_priority_page = is_seed_page or self._is_priority_url(base_url)
         links_added = 0
 
-        for absolute, text in raw_links:
-            if max_links > 0 and links_added >= max_links:
+        pagination_on = bool(self._pag.get("enabled"))
+        max_pagination_pages = self._safe_int(self._pag.get("max_pagination_pages", 50), 50)
+        max_chain_children = self._safe_int(self._pag.get("max_chain_children", 100), 100)
+        pagination_target = self._elect_pagination_target(raw_links, pagination_on)
+
+        for absolute, text, rel in raw_links:
+            is_pag = pagination_target is not None and absolute == pagination_target
+
+            # The per-page link cap only governs pages OUTSIDE a pagination
+            # chain. A page that is itself part of a chain (chain_budget is
+            # not None) has its structural fan-out governed by the shared
+            # chain budget below instead (Task B4 / AC 7) — otherwise a
+            # 50-page chain would re-apply this cap on every single page.
+            #
+            # Gated on `pagination_target is not None` (does THIS page have
+            # an elected pagination hit), NOT the global `pagination_on`
+            # flag — a page with zero pagination links must keep the exact
+            # original `break` semantics (including the `_skipped` count)
+            # even when the feature is enabled elsewhere (AC 9; code review
+            # finding, 2026-07-02).
+            if not is_pag and chain_budget is None and max_links > 0 and links_added >= max_links:
                 self._skipped += 1
+                if pagination_target is not None:
+                    continue
                 break
             if self._is_skippable(absolute):
                 self._skipped += 1
@@ -520,6 +643,33 @@ class CrawlerEngine:
             if self._url_key(absolute) in self._visited:
                 self._skipped += 1
                 continue
+
+            if is_pag:
+                # Pagination bypasses the per-page link cap and the priority-
+                # keyword filter (a "Next" anchor rarely carries a keyword) —
+                # it spends page_hops, not depth or links_added (AC 1, 2, 3).
+                #
+                # KNOWN INTERACTION (present & intentionally NOT fixed here —
+                # separate effort, Story #9 Task B5): mark_visited fires
+                # BEFORE _fetch in _process(), so a transient failure on any
+                # page mid-chain permanently strands the rest of that chain
+                # for `recrawl_days` — and because chain continuation depends
+                # entirely on parsing the current page, it also aborts the
+                # REST OF THE CURRENT crawl's discovery down this chain, not
+                # just future recrawls. Longer chains (this fix's whole
+                # point) hit that flake more often than today's depth-4
+                # chains did.
+                if page_hops >= max_pagination_pages:
+                    self._skipped += 1
+                    continue
+                # Reuse the chain's shared budget cell once mid-chain;
+                # this is the first hop into a chain otherwise, so mint one.
+                child_budget = chain_budget if chain_budget is not None else [0]
+                await self._enqueue(absolute, depth=depth, domain_id=domain_id,
+                                    page_hops=page_hops + 1,
+                                    chain_budget=child_budget)
+                continue
+
             # On a non-priority page, only follow links that look priority. With
             # no priority_keywords configured, is_priority_page is always True,
             # so this filter is disabled and every link is followed.
@@ -527,5 +677,19 @@ class CrawlerEngine:
                 self._skipped += 1
                 continue
 
-            await self._enqueue(absolute, depth=depth + 1, domain_id=domain_id)
+            if chain_budget is not None:
+                # This page is itself a chain page: its structural children
+                # draw from the shared per-chain budget, not the per-depth
+                # cap, and do NOT carry the budget further — it bounds each
+                # chain page's direct fan-out, not the whole subtree beneath it.
+                if chain_budget[0] >= max_chain_children:
+                    self._skipped += 1
+                    continue
+                chain_budget[0] += 1
+                await self._enqueue(absolute, depth=depth + 1, domain_id=domain_id,
+                                    page_hops=page_hops)
+                continue
+
+            await self._enqueue(absolute, depth=depth + 1, domain_id=domain_id,
+                                page_hops=page_hops)
             links_added += 1

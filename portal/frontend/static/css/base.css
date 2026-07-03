@@ -892,6 +892,13 @@ input[type="checkbox"] {
 .info-icon::after {
     content: attr(data-tip);
     position: absolute;
+    /* Default: pop out to the LEFT of the icon. Correct for #config-panel,
+       the right-side drawer in base.html — popping left keeps the tooltip
+       away from the screen's right edge. Pages built on the `.layout` +
+       left `<aside>` sidebar pattern (settings.html, index.html, etc.) need
+       the OPPOSITE direction — see the `.layout .info-icon::after` override
+       below — otherwise an icon near the content area's left edge pops its
+       tooltip behind the sidebar and it gets clipped. */
     right: calc(100% + 8px);
     top: 50%;
     transform: translateY(-50%);
@@ -909,6 +916,13 @@ input[type="checkbox"] {
     z-index: 1000;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     white-space: normal;
+}
+
+/* Pages with a left sidebar (.layout > aside): pop tooltips RIGHT into the
+   content pane instead, so they don't get clipped behind the sidebar. */
+.layout .info-icon::after {
+    right: auto;
+    left: calc(100% + 8px);
 }
 
 .info-icon:hover::after {

@@ -52,6 +52,15 @@ async def get_config(c: dict = Depends(get_app_config)):
         "js_indicators": "\n".join(c["crawler"].get("js_indicators", [])),
         "email_regex": c["extraction"]["email"].get("regex", ""),
         "email_obfuscation": yaml.dump(c["extraction"]["email"].get("obfuscation", []), default_flow_style=False),
+
+        # Pagination (Story #9) — enabled + the two numeric caps are editable
+        # via POST /api/config below. text_signals/param_signals stay
+        # display-only here; edit config.yaml directly to change those lists.
+        "pagination_enabled": c["crawler"].get("pagination", {}).get("enabled", False),
+        "pagination_max_pages": c["crawler"].get("pagination", {}).get("max_pagination_pages", 50),
+        "pagination_max_chain_children": c["crawler"].get("pagination", {}).get("max_chain_children", 100),
+        "pagination_text_signals": "\n".join(c["crawler"].get("pagination", {}).get("text_signals", [])),
+        "pagination_param_signals": "\n".join(c["crawler"].get("pagination", {}).get("param_signals", [])),
     }
 
 
@@ -108,6 +117,16 @@ async def save_config(body: dict, c: dict = Depends(get_app_config), config_path
         max_links[2] = int(body["max_links_per_page_2"])
     if "max_links_per_page_default" in body:
         max_links["default"] = int(body["max_links_per_page_default"])
+
+    # Pagination (Story #9) — enabled + the two numeric caps are editable;
+    # text_signals/param_signals stay config.yaml-only (display-only in the UI).
+    pagination = cfg["crawler"].setdefault("pagination", {})
+    if "pagination_enabled" in body:
+        pagination["enabled"] = bool(body["pagination_enabled"])
+    if "pagination_max_pages" in body:
+        pagination["max_pagination_pages"] = int(body["pagination_max_pages"])
+    if "pagination_max_chain_children" in body:
+        pagination["max_chain_children"] = int(body["pagination_max_chain_children"])
 
     c.update(cfg)
 

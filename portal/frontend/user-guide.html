@@ -724,6 +724,22 @@
                 <p>GovCrawler tracks every URL it visits. By default, any URL visited in the last 30 days (across all
                     jobs) is skipped on re-runs. To force a full re-crawl, go to Settings and click <strong>Clear
                         Cache</strong> under Maintenance, or set <strong>Recrawl Days</strong> to 0.</p>
+
+                <h3>Pagination-Aware Crawling</h3>
+                <p>Long listings — a 30-page staff directory, a multi-page "Who's Who" — normally get cut off early:
+                    every link, including "Next page →", counts against <strong>Max Depth</strong> the same as any
+                    other link, so the crawler runs out of depth budget long before it reaches the last page.</p>
+                <p>With pagination-aware crawling <strong>on</strong> (Settings → <strong>Advanced</strong>, enabled by
+                    default), a genuine "Next page" link — a numbered page link, <code>rel="next"</code>, or text like
+                    "Next" / "»" / "Last" — advances a separate counter instead of Max Depth, so the crawler follows
+                    the whole chain to completion. A page is only recognized as pagination if it's clearly one: the
+                    detector is deliberately conservative so it can't be tricked by a site whose "Next" link actually
+                    leads into an endless loop of session/tracking URLs — those still get bounded by Max Depth exactly
+                    as before, no matter how many pages the crawler follows via pagination.</p>
+                <p><strong>Max Pages per Chain</strong> is the backstop even if a chain is misjudged: it hard-stops
+                    after that many "Next" hops regardless. <strong>Max Children per Chain</strong> caps how many
+                    ordinary (non-"Next") links the WHOLE chain may pull in combined, so a 50-page chain can't enqueue
+                    50× a single page's usual link budget.</p>
             </div>
 
 
@@ -1321,6 +1337,55 @@ Regards,
                         <td>Per-page link budget at each depth level (0 / 1 / 2 / default). Seed pages (depth 0) get 100
                             because home pages have many navigation links. Deeper levels get fewer since subpages are
                             more focused. Tighter limits reduce runtime.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span class="cfg-name">Enable Pagination-Aware Crawling</span><span
+                                class="cfg-key">crawler.pagination.enabled</span><span
+                                class="cfg-default">Default: <strong>true</strong></span></td>
+                        <td>Lets a genuine "Next page" link advance without spending Max Depth, so long paginated
+                            directories are crawled to completion. See <a href="#running-a-crawl">Pagination-Aware
+                                Crawling</a> above for how the safety detector works. Editable in Settings →
+                            <strong>Advanced</strong>.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span class="cfg-name">Max Pages per Chain</span><span
+                                class="cfg-key">crawler.pagination.max_pagination_pages</span><span
+                                class="cfg-default">Default: <strong>50</strong></span></td>
+                        <td>Hard cap on how many "Next page" hops a single chain may follow, regardless of how many
+                            pages the site claims to have — the backstop if a chain is ever misjudged. Editable in
+                            Settings → <strong>Advanced</strong>.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span class="cfg-name">Max Children per Chain</span><span
+                                class="cfg-key">crawler.pagination.max_chain_children</span><span
+                                class="cfg-default">Default: <strong>100</strong></span></td>
+                        <td>Total ordinary (non-pagination) links the crawler will follow out of an ENTIRE chain,
+                            shared across all its pages combined — not per page. Prevents a 50-page chain from
+                            enqueuing 50× the usual per-page link budget. Editable in Settings →
+                            <strong>Advanced</strong>.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span class="cfg-name">Anchor Text Signals</span><span
+                                class="cfg-key">crawler.pagination.text_signals</span><span
+                                class="cfg-default">Default: <strong>next, », ›, more, last</strong></span></td>
+                        <td>Link text treated as a pagination cue when the link carries no numbered page parameter to
+                            check instead. Shown read-only in Settings → Advanced; edit <code>config.yaml</code>
+                            directly to change this list.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><span class="cfg-name">Paging Query Params</span><span
+                                class="cfg-key">crawler.pagination.param_signals</span><span
+                                class="cfg-default">Default: <strong>page, pageno, start, offset, p</strong></span></td>
+                        <td>Query parameter names checked for a page number (e.g. <code>?page=2</code>). A recognized
+                            param with a non-numeric value (session tokens, junk) is treated as NOT pagination
+                            regardless of link text — this is the actual firewall against a disguised infinite-loop
+                            link. Shown read-only in Settings → Advanced; edit <code>config.yaml</code> directly to
+                            change this list.
                         </td>
                     </tr>
                     </tbody>

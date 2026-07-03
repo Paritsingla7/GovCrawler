@@ -76,8 +76,23 @@ crawler:
     - Please enable JavaScript
     - You need to enable JavaScript
     - This page requires JavaScript
-  user_agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)
-    Chrome/124.0.0.0 Safari/537.36
+  user_agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
+  pagination:
+    enabled: true
+    max_pagination_pages: 50
+    max_chain_children: 100
+    text_signals:
+      - next
+      - "»"
+      - "›"
+      - more
+      - last
+    param_signals:
+      - page
+      - pageno
+      - start
+      - offset
+      - p
 extraction:
   email:
     enabled: true

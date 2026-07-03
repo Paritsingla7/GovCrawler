@@ -109,8 +109,10 @@ def parse_for_engine(html: str, url: str, excfg: dict) -> tuple[list[Lead], list
     """
     Thread-pool target for CrawlerEngine. Builds ONE soup and returns:
       (leads, raw_links)
-    raw_links is a list of (absolute_url, anchor_text) — filtering happens on
-    the event-loop thread (cheap string ops with access to the visited set).
+    raw_links is a list of (absolute_url, anchor_text, rel) — filtering happens
+    on the event-loop thread (cheap string ops with access to the visited set).
+    `rel` is the anchor's rel attribute normalised to a lowercased list of
+    tokens (e.g. ["next"]), or [] when absent — used for pagination detection.
 
     Anchors are harvested BEFORE extract_leads runs, because extract_leads
     decomposes <script>/<style>/<noscript> from the tree.
@@ -124,18 +126,19 @@ def parse_for_engine(html: str, url: str, excfg: dict) -> tuple[list[Lead], list
         log.warning(f"parse_for_engine: soup parse failed for {url}: {e}")
         return [], []
 
-    raw_links: list[tuple[str, str]] = []
+    raw_links: list[tuple[str, str, list[str]]] = []
     try:
         for a in soup.find_all("a", href=True):
             href = a["href"].strip()
             if not href:
                 continue
             text = (a.get_text() or "").strip().lower()[:100]
+            rel = [r.lower() for r in (a.get("rel") or [])]
             try:
                 absolute = urljoin(url, href)
             except Exception:
                 continue
-            raw_links.append((absolute, text))
+            raw_links.append((absolute, text, rel))
     except Exception as e:
         log.warning(f"parse_for_engine: link extraction failed for {url}: {e}")
         raw_links = []

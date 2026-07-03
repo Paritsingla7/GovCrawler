@@ -6,6 +6,7 @@ const CFG_DEFAULTS = {
     playwright_timeout: 45, js_settle_time: 3.0,
     email_enabled: true, email_context_chars: 200,
     person_enabled: true, person_proximity_chars: 300,
+    pagination_enabled: true, pagination_max_pages: 50, pagination_max_chain_children: 100,
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -937,6 +938,12 @@ async function loadConfig() {
     setVal('cfg-js-indicators', c.js_indicators || '');
     setVal('cfg-email-obfuscation', c.email_obfuscation || '');
 
+    setCheck('cfg-pagination-enabled', c.pagination_enabled);
+    setVal('cfg-pagination-max-pages', c.pagination_max_pages);
+    setVal('cfg-pagination-max-chain-children', c.pagination_max_chain_children);
+    setVal('cfg-pagination-text-signals', c.pagination_text_signals || '');
+    setVal('cfg-pagination-param-signals', c.pagination_param_signals || '');
+
     checkConfigWarnings();
 }
 
@@ -1001,6 +1008,10 @@ async function saveConfig() {
     addIf('cfg-target-suffixes', 'target_suffixes', String);
     addIf('cfg-priority-keywords', 'priority_keywords', String);
     addIf('cfg-skip-extensions', 'skip_extensions', String);
+
+    addCheckIf('cfg-pagination-enabled', 'pagination_enabled');
+    addIf('cfg-pagination-max-pages', 'pagination_max_pages', parseInt);
+    addIf('cfg-pagination-max-chain-children', 'pagination_max_chain_children', parseInt);
 
     try {
         await apiFetch('/api/config', {

@@ -19,6 +19,7 @@
                 <li class="active" id="nav-crawler-depth" onclick="switchTab('crawler-depth')">Depth & Limits</li>
                 <li id="nav-crawler-filtering" onclick="switchTab('crawler-filtering')">Filtering & Domains</li>
                 <li id="nav-crawler-extraction" onclick="switchTab('crawler-extraction')">Extraction Rules</li>
+                <li id="nav-crawler-advanced" onclick="switchTab('crawler-advanced')">Pagination</li>
                 <li id="nav-crawler-system" onclick="switchTab('crawler-system')">System Configs</li>
             </ul>
             <div class="section-label" style="margin-top: 24px;">Outreach Settings</div>
@@ -278,6 +279,60 @@
                                       style="background:#0d1117; color:#8b949e; font-family:monospace; width:100%"></textarea>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crawler Tab: Advanced (Pagination) -->
+        <div class="settings-tab" id="tab-crawler-advanced" style="display:none;">
+            <div class="tab-header" style="margin-bottom: 24px;">
+                <h2>Pagination</h2>
+                <div style="font-size:13px; color:var(--muted)">Pagination-aware crawling — lets long directories
+                    with "Next page" links be crawled in full instead of stopping at Max Depth.
+                </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:24px; max-width:800px;">
+                <div class="cfg-section" style="border: 1px solid var(--border); padding: 16px; border-radius: 6px;">
+                    <div style="display:grid; gap: 16px;">
+                        <div class="cfg-row">
+                            <label class="cfg-label">Enable Pagination-Aware Crawling <span
+                                    class="info-icon"
+                                    data-tip="When a page has a genuine 'Next page' link (numbered pages, rel=next, or Next/»/Last text), the crawler follows it without spending Max Depth. A separate, independently-bounded counter (Max Pages per Chain) limits how far one chain can go, so this can't turn into an endless crawl.">ⓘ</span></label>
+                            <label class="cfg-toggle">
+                                <input id="cfg-pagination-enabled" type="checkbox">
+                                <div class="cfg-toggle-track"></div>
+                            </label>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Pages per Chain <span
+                                    class="info-icon"
+                                    data-tip="Hard cap on how many pages a single 'Next page' chain may follow (e.g. page 1 -> 2 -> 3 -> ...). Once a chain reaches this many hops, the crawler stops following it further, no matter how many pages the site claims to have. This is the safety backstop against a site whose pagination never actually ends.">ⓘ</span></label>
+                            <input class="cfg-input" id="cfg-pagination-max-pages" min="1" style="width:160px" type="number">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Max Children per Chain <span
+                                    class="info-icon"
+                                    data-tip="Total number of ordinary (non-pagination) links the crawler will follow OUT of an entire pagination chain, shared across all its pages combined — not per page. Without this, a 50-page chain could otherwise enqueue 50x the usual per-page link limit.">ⓘ</span></label>
+                            <input class="cfg-input" id="cfg-pagination-max-chain-children" min="1" style="width:160px" type="number">
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Anchor Text Signals <span
+                                    class="info-icon"
+                                    data-tip="Link text treated as a pagination cue when the link has no numbered page parameter to check instead (e.g. a 'Next' link with no query string). Read-only here; edit config.yaml directly to change this list.">ⓘ</span></label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-pagination-text-signals" readonly rows="2"
+                                      style="background:#0d1117; color:#8b949e; width:100%"></textarea>
+                        </div>
+                        <div class="cfg-row" style="flex-direction:column; align-items:flex-start;">
+                            <label class="cfg-label" style="margin-bottom:4px">Paging Query Params <span
+                                    class="info-icon"
+                                    data-tip="Query parameter names checked for a page number (e.g. ?page=2). A recognized param with a NON-numeric value (session junk, tokens) is treated as NOT pagination, regardless of link text - this is the safety check that keeps a disguised trap link from being followed indefinitely. Read-only here; edit config.yaml directly to change this list.">ⓘ</span></label>
+                            <textarea class="cfg-input cfg-input-full" id="cfg-pagination-param-signals" readonly rows="2"
+                                      style="background:#0d1117; color:#8b949e; width:100%"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 16px;">
+                    <button class="btn-primary" onclick="saveConfig()">Save Settings</button>
                 </div>
             </div>
         </div>
