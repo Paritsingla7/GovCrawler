@@ -18,8 +18,9 @@ let activeJobId = null;
 let pollTimer = null;
 let impPollTimer = null;
 let searchTimer = null;
-const SEEDS_PREVIEW_LIMIT = 200;
 let jobSeedsData = [];
+let seedsPage = 1;
+const SEEDS_PAGE_SIZE = 100;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ async function loadDomainStats() {
 async function loadDomains() {
     const params = _domainFilterParams();
     params.set('page', currentPage);
-    params.set('limit', 50);
+    params.set('limit', 100);
     try {
         const data = await apiFetch(`/api/domains?${params}`);
         totalPages = data.pages;
@@ -749,27 +750,46 @@ function seedRowHtml(d) {
         </tr>`;
 }
 
-function renderJobSeeds(showAll) {
+function renderJobSeeds() {
     const tbody = document.getElementById('seeds-tbody');
+    const pagerEl = document.getElementById('seeds-pager');
     if (!jobSeedsData.length) {
         tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No seeds found for this job.</td></tr>';
+        if (pagerEl) pagerEl.style.display = 'none';
         return;
     }
-    const rows = showAll ? jobSeedsData : jobSeedsData.slice(0, SEEDS_PREVIEW_LIMIT);
-    let html = rows.map(seedRowHtml).join('');
-    if (!showAll && jobSeedsData.length > SEEDS_PREVIEW_LIMIT) {
-        html += `<tr><td colspan="4" style="text-align:center;padding:12px">
-            <button class="btn-secondary btn-sm" onclick="renderJobSeeds(true)">Show all ${jobSeedsData.length.toLocaleString()} seeds</button>
-          </td></tr>`;
+    const totalPgs = Math.max(1, Math.ceil(jobSeedsData.length / SEEDS_PAGE_SIZE));
+    seedsPage = Math.min(Math.max(1, seedsPage), totalPgs);
+    const start = (seedsPage - 1) * SEEDS_PAGE_SIZE;
+    const rows = jobSeedsData.slice(start, start + SEEDS_PAGE_SIZE);
+    tbody.innerHTML = rows.map(seedRowHtml).join('');
+    if (pagerEl) {
+        pagerEl.style.display = jobSeedsData.length > SEEDS_PAGE_SIZE ? 'flex' : 'none';
+        document.getElementById('seeds-page-info').textContent = `Page ${seedsPage} of ${totalPgs}`;
     }
-    tbody.innerHTML = html;
+}
+
+function seedsPrevPage() {
+    if (seedsPage > 1) {
+        seedsPage--;
+        renderJobSeeds();
+    }
+}
+
+function seedsNextPage() {
+    const totalPgs = Math.max(1, Math.ceil(jobSeedsData.length / SEEDS_PAGE_SIZE));
+    if (seedsPage < totalPgs) {
+        seedsPage++;
+        renderJobSeeds();
+    }
 }
 
 async function fetchJobSeeds() {
     if (!activeJobId) return;
     try {
         jobSeedsData = await apiFetch(`/api/jobs/${activeJobId}/seeds`);
-        renderJobSeeds(false);
+        seedsPage = 1;
+        renderJobSeeds();
     } catch (e) {
         jobSeedsData = [];
         document.getElementById('seeds-tbody').innerHTML = `<tr><td colspan="4" class="empty-state" style="color:var(--red)">Error loading seeds.</td></tr>`;

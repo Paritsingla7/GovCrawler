@@ -7,6 +7,7 @@ Registers routes:
   GET  /api/leads/score-weights      → current lead_score point weights
   GET  /api/leads/categories         → category counts for leads
   GET  /api/leads/states             → distinct states for leads
+  GET  /api/leads/org-types          → organization-type counts for leads
   POST /api/leads/export             → CSV download
   POST /api/leads/import-csv         → bulk-create/update manual leads from CSV
   GET  /api/leads/import-csv/template→ downloadable CSV template
@@ -41,6 +42,11 @@ class ExportLeadsRequest(BaseModel):
     search: str | None = None
     complete_only: bool = False
     min_score: int | None = None
+    org_type: str | None = None
+    show_manual: bool = True
+    require_name: bool = False
+    require_designation: bool = False
+    require_phone: bool = False
     lead_ids: list[int] | None = None
     fields: list[str] | None = None
 
@@ -60,12 +66,23 @@ async def get_leads(
         search: str = Query(None),
         complete_only: bool = Query(False),
         min_score: int = Query(None, ge=0, le=100),
+        org_type: str = Query(None),
+        show_manual: bool = Query(True),
+        require_name: bool = Query(False),
+        require_designation: bool = Query(False),
+        require_phone: bool = Query(False),
+        sort_by: str = Query(None),
+        sort_dir: str = Query("desc"),
         page: int = Query(1, ge=1),
         limit: int = Query(100, ge=1, le=500),
         db: Database = Depends(get_db),
 ):
     leads, total = db.get_leads(job_id=job_id, category=category, state=state, search=search,
-                                complete_only=complete_only, min_score=min_score, page=page, limit=limit)
+                                complete_only=complete_only, min_score=min_score,
+                                org_type=org_type, show_manual=show_manual,
+                                require_name=require_name, require_designation=require_designation,
+                                require_phone=require_phone, sort_by=sort_by, sort_dir=sort_dir,
+                                page=page, limit=limit)
     return {
         "leads": leads,
         "total": total,
@@ -82,10 +99,18 @@ async def get_lead_ids(
         search: str = Query(None),
         complete_only: bool = Query(False),
         min_score: int = Query(None, ge=0, le=100),
+        org_type: str = Query(None),
+        show_manual: bool = Query(True),
+        require_name: bool = Query(False),
+        require_designation: bool = Query(False),
+        require_phone: bool = Query(False),
         db: Database = Depends(get_db),
 ):
     ids = db.get_lead_ids(job_id=job_id, category=category, state=state, search=search,
-                          complete_only=complete_only, min_score=min_score)
+                          complete_only=complete_only, min_score=min_score,
+                          org_type=org_type, show_manual=show_manual,
+                          require_name=require_name, require_designation=require_designation,
+                          require_phone=require_phone)
     return {"ids": ids, "total": len(ids)}
 
 
@@ -104,6 +129,11 @@ async def get_lead_states(job_id: int = Query(None), category: str = Query(None)
     return db.get_lead_states(job_id=job_id, category=category)
 
 
+@router.get("/api/leads/org-types")
+async def get_lead_org_types(job_id: int = Query(None), db: Database = Depends(get_db)):
+    return db.get_lead_org_types(job_id=job_id)
+
+
 @router.post("/api/leads/export")
 async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
     rows = db.get_all_leads_for_export(
@@ -114,6 +144,11 @@ async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
         lead_ids=req.lead_ids,
         complete_only=req.complete_only,
         min_score=req.min_score,
+        org_type=req.org_type,
+        show_manual=req.show_manual,
+        require_name=req.require_name,
+        require_designation=req.require_designation,
+        require_phone=req.require_phone,
     )
     if not rows:
         raise HTTPException(status_code=404, detail="No leads for this job")

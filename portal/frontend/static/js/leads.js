@@ -4,6 +4,8 @@ let selectedLeadIds = new Set();
 let leadsSearchTimer = null;
 let leadsTotalMatching = 0;
 let pendingAddToCampaignId = null;
+let leadsSortBy = '';
+let leadsSortDir = 'desc';
 // Fallback mirrors lead_scoring.DEFAULT_WEIGHTS so the split still renders
 // before/without the score-weights fetch; the API response overrides it.
 let scoreWeights = {email_high: 20, email_low: 10, person_name: 40, designation: 30, phone: 10};
@@ -68,7 +70,13 @@ function saveLeadsFilters() {
         state: document.getElementById('leads-state-select')?.value || '',
         search: document.getElementById('leads-search-input')?.value || '',
         completeOnly: document.getElementById('leads-complete-only')?.checked || false,
-        minScore: document.getElementById('leads-min-score-select')?.value || '',
+        org: document.getElementById('leads-org-select')?.value || '',
+        showManual: document.getElementById('leads-show-manual')?.checked ?? true,
+        reqName: document.getElementById('leads-require-name')?.checked || false,
+        reqDesig: document.getElementById('leads-require-designation')?.checked || false,
+        reqPhone: document.getElementById('leads-require-phone')?.checked || false,
+        sortBy: leadsSortBy,
+        sortDir: leadsSortDir,
     }));
 }
 
@@ -79,7 +87,14 @@ function clearLeadsFilters() {
     document.getElementById('leads-state-select').value = '';
     document.getElementById('leads-search-input').value = '';
     document.getElementById('leads-complete-only').checked = false;
-    document.getElementById('leads-min-score-select').value = '';
+    document.getElementById('leads-org-select').value = '';
+    document.getElementById('leads-show-manual').checked = true;
+    document.getElementById('leads-require-name').checked = false;
+    document.getElementById('leads-require-designation').checked = false;
+    document.getElementById('leads-require-phone').checked = false;
+    leadsSortBy = '';
+    leadsSortDir = 'desc';
+    updateLeadsSortHeaders();
     leadsPage = 1;
     reloadLeadsStateOptions('').then(() => loadLeads());
 }
@@ -109,7 +124,13 @@ async function loadLeadsFilters() {
         if (!urlJobId && saved.job) jobSel.value = saved.job;
         if (saved.search) document.getElementById('leads-search-input').value = saved.search;
         if (saved.completeOnly) document.getElementById('leads-complete-only').checked = true;
-        if (saved.minScore) document.getElementById('leads-min-score-select').value = saved.minScore;
+        if (saved.showManual === false) document.getElementById('leads-show-manual').checked = false;
+        if (saved.reqName) document.getElementById('leads-require-name').checked = true;
+        if (saved.reqDesig) document.getElementById('leads-require-designation').checked = true;
+        if (saved.reqPhone) document.getElementById('leads-require-phone').checked = true;
+        leadsSortBy = saved.sortBy || '';
+        leadsSortDir = saved.sortDir || 'desc';
+        updateLeadsSortHeaders();
 
         const jobId = jobSel.value;
         const jobIdParam = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
@@ -126,6 +147,19 @@ async function loadLeadsFilters() {
 
         await reloadLeadsStateOptions(catSel.value);
         if (saved.state) document.getElementById('leads-state-select').value = saved.state;
+
+        try {
+            const orgs = await apiFetch(`/api/leads/org-types${jobIdParam}`);
+            const orgSel = document.getElementById('leads-org-select');
+            orgs.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.code;
+                opt.textContent = `${o.title} (${o.count.toLocaleString()})`;
+                orgSel.appendChild(opt);
+            });
+            if (saved.org) orgSel.value = saved.org;
+        } catch (e) {
+        }
     } catch (e) {
     }
 }
@@ -171,20 +205,59 @@ function debounceLeadsSearch() {
     }, 380);
 }
 
+// ── Column-header sorting (Score / Contact / Name only) ────────────────────────
+function setLeadsSort(key) {
+    if (leadsSortBy !== key) {
+        leadsSortBy = key;
+        leadsSortDir = 'desc';
+    } else if (leadsSortDir === 'desc') {
+        leadsSortDir = 'asc';
+    } else {
+        leadsSortBy = '';
+        leadsSortDir = 'desc';
+    }
+    updateLeadsSortHeaders();
+    leadsPage = 1;
+    saveLeadsFilters();
+    loadLeads();
+}
+
+function updateLeadsSortHeaders() {
+    document.querySelectorAll('.leads-sort-header').forEach(th => {
+        const arrow = th.querySelector('.sort-arrow');
+        if (!arrow) return;
+        arrow.textContent = th.dataset.sortKey === leadsSortBy
+            ? (leadsSortDir === 'desc' ? '▼' : '▲')
+            : '';
+    });
+}
+
 function getLeadsFilterParams() {
     const jobId = document.getElementById('leads-job-select').value;
     const cat = document.getElementById('leads-cat-select').value;
     const state = document.getElementById('leads-state-select').value;
     const search = document.getElementById('leads-search-input').value.trim();
     const completeOnly = document.getElementById('leads-complete-only').checked;
-    const minScore = document.getElementById('leads-min-score-select').value;
+    const orgType = document.getElementById('leads-org-select').value;
+    const showManual = document.getElementById('leads-show-manual').checked;
+    const reqName = document.getElementById('leads-require-name').checked;
+    const reqDesig = document.getElementById('leads-require-designation').checked;
+    const reqPhone = document.getElementById('leads-require-phone').checked;
     const params = new URLSearchParams();
     if (jobId) params.set('job_id', jobId);
     if (cat) params.set('category', cat);
     if (state) params.set('state', state);
     if (search) params.set('search', search);
     if (completeOnly) params.set('complete_only', 'true');
-    if (minScore) params.set('min_score', minScore);
+    if (orgType) params.set('org_type', orgType);
+    params.set('show_manual', showManual ? 'true' : 'false');
+    if (reqName) params.set('require_name', 'true');
+    if (reqDesig) params.set('require_designation', 'true');
+    if (reqPhone) params.set('require_phone', 'true');
+    if (leadsSortBy) {
+        params.set('sort_by', leadsSortBy);
+        params.set('sort_dir', leadsSortDir);
+    }
     return params;
 }
 
@@ -465,7 +538,11 @@ async function confirmExport() {
         state: params.get('state') || null,
         search: params.get('search') || null,
         complete_only: params.get('complete_only') === 'true',
-        min_score: params.get('min_score') ? parseInt(params.get('min_score')) : null,
+        org_type: params.get('org_type') || null,
+        show_manual: params.get('show_manual') !== 'false',
+        require_name: params.get('require_name') === 'true',
+        require_designation: params.get('require_designation') === 'true',
+        require_phone: params.get('require_phone') === 'true',
         fields: checkedFields,
     };
     if (selectedLeadIds.size > 0) {

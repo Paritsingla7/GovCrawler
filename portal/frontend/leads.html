@@ -39,26 +39,55 @@
                 </select>
             </div>
             <div class="form-group">
+                <label>Organization</label>
+                <select id="leads-org-select" onchange="onLeadsFilterChange()">
+                    <option value="">All Organizations</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>Search</label>
                 <input id="leads-search-input" oninput="debounceLeadsSearch()" placeholder="name, email, designation…"
                        type="text">
             </div>
-            <div class="form-group">
-                <label>Min. Score</label>
-                <select id="leads-min-score-select" onchange="onLeadsFilterChange()">
-                    <option value="">Any Score</option>
-                    <option value="30">30+</option>
-                    <option value="50">50+</option>
-                    <option value="70">70+</option>
-                    <option value="90">90+</option>
-                </select>
-            </div>
             <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:4px;">
-                <input id="leads-complete-only" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                <input checked id="leads-show-manual" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
                        type="checkbox">
-                <label for="leads-complete-only"
-                       style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Complete
-                    data only</label>
+                <label for="leads-show-manual"
+                       style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Show
+                    manual leads</label>
+            </div>
+            <div class="form-group">
+                <label>Data Competency</label>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input id="leads-complete-only" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                               type="checkbox">
+                        <label for="leads-complete-only"
+                               style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Complete
+                            data only</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input id="leads-require-name" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                               type="checkbox">
+                        <label for="leads-require-name"
+                               style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Has
+                            name</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input id="leads-require-designation" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                               type="checkbox">
+                        <label for="leads-require-designation"
+                               style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Has
+                            designation</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input id="leads-require-phone" onchange="onLeadsFilterChange()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
+                               type="checkbox">
+                        <label for="leads-require-phone"
+                               style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Has
+                            phone</label>
+                    </div>
+                </div>
             </div>
             <div id="leads-count-label" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
             <button onclick="clearLeadsFilters()"
@@ -98,9 +127,13 @@
                 <tr>
                     <th style="width:40px"></th>
                     <th style="width:28px"></th>
-                    <th style="width:60px;text-align:center">Score</th>
-                    <th>Contact</th>
-                    <th>Person</th>
+                    <th class="leads-sort-header" data-sort-key="score" onclick="setLeadsSort('score')"
+                        style="width:60px;text-align:center;cursor:pointer;user-select:none">Score <span
+                            class="sort-arrow"></span></th>
+                    <th class="leads-sort-header" data-sort-key="contact" onclick="setLeadsSort('contact')"
+                        style="cursor:pointer;user-select:none">Contact <span class="sort-arrow"></span></th>
+                    <th class="leads-sort-header" data-sort-key="name" onclick="setLeadsSort('name')"
+                        style="cursor:pointer;user-select:none">Person <span class="sort-arrow"></span></th>
                     <th>Department</th>
                     <th style="text-align:center">State / Cat</th>
                     <th>Domain</th>

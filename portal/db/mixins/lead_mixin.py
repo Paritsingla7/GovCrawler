@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from ..tables.crawl import Domain
@@ -56,13 +56,22 @@ class LeadMixin:
 
     @staticmethod
     def _apply_lead_filters(q, job_id=None, category=None, state=None,
-                            search=None, complete_only=False, min_score=None):
+                            search=None, complete_only=False, min_score=None,
+                            org_type=None, show_manual=True, require_name=False,
+                            require_designation=False, require_phone=False):
+        is_manual = Lead.channel_tag == "manual"
         if job_id is not None:
             q = q.filter(Lead.job_id == job_id)
+        if not show_manual:
+            q = q.filter(or_(Lead.channel_tag.is_(None), Lead.channel_tag != "manual"))
+        # Domain-derived filters: manual leads have no domain, so they bypass
+        # these rather than being structurally excluded from every filtered view.
         if category:
-            q = q.filter(Domain.category_code == category)
+            q = q.filter(or_(is_manual, Domain.category_code == category))
         if state:
-            q = q.filter(Domain.state == state)
+            q = q.filter(or_(is_manual, Domain.state == state))
+        if org_type:
+            q = q.filter(or_(is_manual, Lead.domain_org_type == org_type))
         if search:
             q = q.filter(
                 or_(Lead.email.ilike(f"%{search}%"),
@@ -76,25 +85,51 @@ class LeadMixin:
                 Lead.designation.isnot(None), Lead.designation != "",
                 Lead.department.isnot(None), Lead.department != "",
             )
+        if require_name:
+            q = q.filter(Lead.person_name.isnot(None), Lead.person_name != "")
+        if require_designation:
+            q = q.filter(Lead.designation.isnot(None), Lead.designation != "")
+        if require_phone:
+            q = q.filter(Lead.phone.isnot(None), Lead.phone != "")
         if min_score is not None:
-            q = q.filter(Lead.lead_score >= min_score)
+            # Manual leads are always score 0 by design; the points threshold
+            # applies only to extracted leads, never to manual visibility.
+            q = q.filter(or_(is_manual, Lead.lead_score >= min_score))
         return q
+
+    @staticmethod
+    def _apply_lead_sort(q, sort_by=None, sort_dir="desc"):
+        ascending = sort_dir == "asc"
+        has_phone = case((and_(Lead.phone.isnot(None), Lead.phone != ""), 1), else_=0)
+        has_name = case((and_(Lead.person_name.isnot(None), Lead.person_name != ""), 1), else_=0)
+        column = {"score": Lead.lead_score, "contact": has_phone, "name": has_name}.get(sort_by)
+        if column is None:
+            return q.order_by(Lead.captured_at.desc())
+        return q.order_by(column.asc() if ascending else column.desc(), Lead.captured_at.desc())
 
     def get_leads(self, job_id: int | None = None, category: str = None,
                   state: str = None, search: str = None, page: int = 1,
                   limit: int = 100, complete_only: bool = False,
-                  min_score: int | None = None) -> tuple[list[dict], int]:
+                  min_score: int | None = None, org_type: str = None,
+                  show_manual: bool = True, require_name: bool = False,
+                  require_designation: bool = False, require_phone: bool = False,
+                  sort_by: str = None, sort_dir: str = "desc") -> tuple[list[dict], int]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
                         Domain.category_code)
                 .outerjoin(Domain, Lead.domain_id == Domain.id)
             )
-            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
+            q = self._apply_lead_filters(
+                q, job_id, category, state, search, complete_only, min_score,
+                org_type=org_type, show_manual=show_manual, require_name=require_name,
+                require_designation=require_designation, require_phone=require_phone,
+            )
 
             total = q.count()
             offset = (page - 1) * limit
-            rows = q.order_by(Lead.captured_at.desc()).offset(offset).limit(limit).all()
+            q = self._apply_lead_sort(q, sort_by, sort_dir)
+            rows = q.offset(offset).limit(limit).all()
             return (
                 [{"id": l.id, "email": l.email, "person_name": l.person_name,
                   "designation": l.designation, "department": l.department,
@@ -115,17 +150,27 @@ class LeadMixin:
 
     def get_lead_ids(self, job_id: int | None = None, category: str = None,
                      state: str = None, search: str = None,
-                     complete_only: bool = False, min_score: int | None = None) -> list[int]:
+                     complete_only: bool = False, min_score: int | None = None,
+                     org_type: str = None, show_manual: bool = True,
+                     require_name: bool = False, require_designation: bool = False,
+                     require_phone: bool = False) -> list[int]:
         with self._Session() as s:
             q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
-            q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
+            q = self._apply_lead_filters(
+                q, job_id, category, state, search, complete_only, min_score,
+                org_type=org_type, show_manual=show_manual, require_name=require_name,
+                require_designation=require_designation, require_phone=require_phone,
+            )
             return [r[0] for r in q.all()]
 
     def get_all_leads_for_export(self, job_id: int | None = None,
                                  category: str = None, state: str = None,
                                  search: str = None, lead_ids: list[int] = None,
                                  complete_only: bool = False,
-                                 min_score: int | None = None) -> list[dict]:
+                                 min_score: int | None = None, org_type: str = None,
+                                 show_manual: bool = True, require_name: bool = False,
+                                 require_designation: bool = False,
+                                 require_phone: bool = False) -> list[dict]:
         with self._Session() as s:
             q = (
                 s.query(Lead, Domain.title.label("domain_title"),
@@ -135,7 +180,11 @@ class LeadMixin:
             if lead_ids:
                 q = q.filter(Lead.id.in_(lead_ids))
             else:
-                q = self._apply_lead_filters(q, job_id, category, state, search, complete_only, min_score)
+                q = self._apply_lead_filters(
+                    q, job_id, category, state, search, complete_only, min_score,
+                    org_type=org_type, show_manual=show_manual, require_name=require_name,
+                    require_designation=require_designation, require_phone=require_phone,
+                )
             rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",
@@ -172,6 +221,28 @@ class LeadMixin:
             return [
                 {"code": r.category_code,
                  "title": r.category_title or r.category_code,
+                 "count": r.count}
+                for r in rows
+            ]
+
+    def get_lead_org_types(self, job_id: int | None = None) -> list[dict]:
+        with self._Session() as s:
+            q = (
+                s.query(Domain.org_type, Domain.org_type_title,
+                        func.count(Lead.id).label("count"))
+                .join(Lead, Lead.domain_id == Domain.id)
+                .filter(Domain.org_type.isnot(None))
+            )
+            if job_id is not None:
+                q = q.filter(Lead.job_id == job_id)
+            rows = (
+                q.group_by(Domain.org_type, Domain.org_type_title)
+                .order_by(func.count(Lead.id).desc())
+                .all()
+            )
+            return [
+                {"code": r.org_type,
+                 "title": r.org_type_title or r.org_type,
                  "count": r.count}
                 for r in rows
             ]
