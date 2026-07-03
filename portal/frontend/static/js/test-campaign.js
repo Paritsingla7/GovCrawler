@@ -22,35 +22,36 @@ async function loadTemplates() {
 }
 
 async function loadCredentials() {
+    const tbody = document.getElementById('test-credentials-list');
     try {
         const res = await fetch('/api/credentials');
         const data = await res.json();
-        const select = document.getElementById('test-credential');
-        select.innerHTML = '<option value="">-- Select Credential --</option>';
-        data.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = `${c.username} (${c.host})`;
-            select.appendChild(opt);
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td class="empty-state">No SMTP credentials configured yet.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '';
+        data.forEach((c, i) => {
+            const limit = c.daily_send_limit ? `${c.sent_today}/${c.daily_send_limit} today` : `${c.sent_today} sent today`;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="width:24px;"><input type="radio" name="test-credential-radio" class="test-cred-radio" value="${c.id}" ${i === 0 ? 'checked' : ''}></td>
+                <td>${c.username} (${c.host})</td>
+                <td style="font-size:12px; color:var(--muted);">${limit}</td>
+            `;
+            tbody.appendChild(tr);
         });
     } catch (e) {
         console.error("Failed to load credentials", e);
-        document.getElementById('test-credential').innerHTML = '<option value="">Error loading credentials</option>';
+        tbody.innerHTML = '<tr><td class="empty-state">Failed to load credentials.</td></tr>';
     }
 }
 
 function toggleCredentialSelect() {
     const isRoundRobin = document.getElementById('test-round-robin').checked;
-    const credGroup = document.getElementById('credential-select-group');
-    const credSelect = document.getElementById('test-credential');
-
-    if (isRoundRobin) {
-        credGroup.style.display = 'none';
-        credSelect.removeAttribute('required');
-    } else {
-        credGroup.style.display = 'block';
-        credSelect.setAttribute('required', 'true');
-    }
+    document.getElementById('credential-select-group').style.display = isRoundRobin ? 'none' : 'block';
 }
 
 let leadCount = 1;
@@ -142,7 +143,15 @@ async function submitTestCampaign(e) {
     btn.textContent = "Creating...";
 
     const isRoundRobin = document.getElementById('test-round-robin').checked;
-    const credId = isRoundRobin ? null : document.getElementById('test-credential').value;
+    const checkedRadio = document.querySelector('.test-cred-radio:checked');
+    const credId = isRoundRobin ? null : (checkedRadio ? checkedRadio.value : null);
+
+    if (!isRoundRobin && !credId) {
+        alert("Select an SMTP credential, or use round robin.");
+        btn.disabled = false;
+        btn.textContent = "Create & Dispatch Test";
+        return;
+    }
 
     const dummyDetails = [];
     document.querySelectorAll('.dummy-lead-entry').forEach(entry => {

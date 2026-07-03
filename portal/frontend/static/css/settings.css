@@ -64,3 +64,18 @@ textarea:focus {
     outline: none;
     border-color: var(--primary);
 }
+
+.cred-limit-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 4px 8px;
+    font-size: 13px;
+    font-family: var(--font);
+    outline: none;
+}
+
+.cred-limit-input:focus {
+    border-color: var(--accent);
+}

@@ -21,7 +21,7 @@ async function loadCredentials() {
         tbody.innerHTML = '';
 
         if (creds.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No credentials configured.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No credentials configured.</td></tr>`;
             return;
         }
 
@@ -43,6 +43,12 @@ async function loadCredentials() {
                 <td>${c.username}</td>
                 <td>${status}</td>
                 <td>${cooldown}</td>
+                <td><input type="number" min="1" class="cred-limit-input" value="${c.daily_send_limit ?? ''}"
+                           placeholder="Unlimited" style="width:80px"
+                           onchange="updateCredentialLimit(${c.id}, this.value)"></td>
+                <td>${c.sent_today}</td>
+                <td>${c.sent_total}</td>
+                <td>${c.failed_total}</td>
                 <td>
                     <button class="btn-secondary btn-sm" onclick="testCredential(${c.id}, this)">Test</button>
                     <button class="btn-secondary btn-sm" onclick="deleteCredential(${c.id})" style="color:var(--danger)">Del</button>
@@ -60,6 +66,7 @@ function openCredentialModal() {
     document.getElementById('cred-port').value = '';
     document.getElementById('cred-user').value = '';
     document.getElementById('cred-pass').value = '';
+    document.getElementById('cred-daily-limit').value = '';
     document.getElementById('modal-credential').style.display = 'flex';
 }
 
@@ -67,12 +74,28 @@ function closeCredentialModal() {
     document.getElementById('modal-credential').style.display = 'none';
 }
 
+async function updateCredentialLimit(id, value) {
+    const limit = parseInt(value, 10);
+    if (!limit || limit < 1) return;
+    try {
+        await fetch(`/api/credentials/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({daily_send_limit: limit})
+        });
+    } catch (e) {
+        console.error("Failed to update daily limit", e);
+    }
+}
+
 async function saveCredential() {
+    const dailyLimit = parseInt(document.getElementById('cred-daily-limit').value, 10);
     const payload = {
         host: document.getElementById('cred-host').value,
         port: parseInt(document.getElementById('cred-port').value) || 0,
         username: document.getElementById('cred-user').value,
-        password: document.getElementById('cred-pass').value
+        password: document.getElementById('cred-pass').value,
+        daily_send_limit: Number.isNaN(dailyLimit) ? null : dailyLimit
     };
 
     try {

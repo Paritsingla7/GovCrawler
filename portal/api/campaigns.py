@@ -21,7 +21,7 @@ from ..db import Database, CampaignStatus, Lead
 from ..services.campaign_service import render_draft_emails, render_template_string
 from ..services.csv_import import parse_contacts_csv
 from .deps import get_db
-from .dispatcher import run_campaign_dispatch, run_test_campaign_dispatch
+from .dispatcher import resolve_credential_pool, run_campaign_dispatch, run_test_campaign_dispatch
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +36,11 @@ class CampaignCreate(BaseModel):
     name: str
     template_id: int
     lead_ids: list[int]
+    credential_ids: list[int] = []
+
+
+class CampaignCredentialsUpdate(BaseModel):
+    credential_ids: list[int]
 
 
 class CampaignStatusUpdate(BaseModel):
@@ -48,6 +53,10 @@ class CampaignEmailUpdate(BaseModel):
 
 
 class EmailSelectionUpdate(BaseModel):
+    is_selected: bool
+
+
+class BulkEmailSelectionUpdate(BaseModel):
     is_selected: bool
 
 
@@ -123,6 +132,10 @@ async def create_campaign(req: CampaignCreate, db: Database = Depends(get_db)):
     # 7. Bulk insert staged drafts
     staged_count = db.bulk_create_campaign_emails(campaign_id, email_dicts)
 
+    # 8. Restrict which SMTP credentials this campaign may dispatch through (empty = all active)
+    if req.credential_ids:
+        db.set_campaign_credentials(campaign_id, req.credential_ids)
+
     log.info(
         f"Campaign {campaign_id} created: {staged_count} drafts staged, "
         f"{blacklisted_count} blacklisted"
@@ -145,10 +158,10 @@ async def dispatch_campaign(campaign_id: int, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     stats = db.get_campaign_stats(campaign_id)
-    # draft count is now only selected drafts; skipped are deselected
-    if stats.get("draft", 0) == 0:
+    # draft count is only selected drafts; queued covers leftovers from a paused run
+    if stats.get("draft", 0) == 0 and stats.get("queued", 0) == 0:
         raise HTTPException(status_code=400,
-                            detail="No selected DRAFT emails to dispatch. Select at least one email first.")
+                            detail="No selected draft or queued emails to dispatch. Select at least one email first.")
 
     # 2. Reject if already running
     if campaign["status"] == CampaignStatus.RUNNING.value and campaign_id in _active_campaign_tasks:
@@ -156,10 +169,20 @@ async def dispatch_campaign(campaign_id: int, db: Database = Depends(get_db)):
         if not task.done():
             raise HTTPException(status_code=409, detail="Campaign is already running")
 
-    # 3. Verify at least 1 active SMTP credential
-    active_creds = db.get_active_credentials()
-    if not active_creds:
-        raise HTTPException(status_code=400, detail="No active SMTP credentials available")
+    # 3. Verify at least 1 usable SMTP credential (assigned set if any, else any active
+    # credential), applying the same active/cooldown/daily-cap filter the dispatcher
+    # itself uses, so a capped-out credential is caught here with a clear message
+    # instead of silently auto-pausing the campaign seconds after it starts.
+    assigned_ids = db.get_campaign_credential_ids(campaign_id)
+    raw_creds = db.get_credentials_by_ids(assigned_ids) if assigned_ids else db.get_active_credentials()
+    usable_creds = resolve_credential_pool(db, assigned_ids)
+    if not usable_creds:
+        if not raw_creds:
+            detail = "No active SMTP credentials available for this campaign. Add or activate one in Settings."
+        else:
+            detail = ("All SMTP credentials assigned to this campaign have hit their daily send limit, "
+                      "are cooling down, or are disabled. Try again later, or adjust the limit in Settings.")
+        raise HTTPException(status_code=400, detail=detail)
 
     # 4. Start background task
     # Make sure campaign status is RUNNING
@@ -208,7 +231,26 @@ async def get_campaign(campaign_id: int, db: Database = Depends(get_db)):
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     campaign["stats"] = db.get_campaign_stats(campaign_id)
+    campaign["credential_ids"] = db.get_campaign_credential_ids(campaign_id)
     return campaign
+
+
+@router.put("/api/campaigns/{campaign_id}/credentials")
+async def update_campaign_credentials(campaign_id: int, req: CampaignCredentialsUpdate,
+                                      db: Database = Depends(get_db)):
+    """Change which SMTP credentials a campaign may dispatch through, any time after
+    drafting (PAUSED or RUNNING). The dispatcher re-reads this assignment on every
+    send, so a change to a RUNNING campaign takes effect on its next send without
+    needing to pause first. Blocked only once the campaign is CANCELLED/COMPLETED."""
+    campaign = db.get_campaign(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign["status"] in (CampaignStatus.CANCELLED.value, CampaignStatus.COMPLETED.value):
+        raise HTTPException(status_code=400,
+                            detail="Cannot change SMTP credentials on a cancelled or completed campaign")
+
+    db.set_campaign_credentials(campaign_id, req.credential_ids)
+    return {"message": "Campaign credentials updated"}
 
 
 @router.patch("/api/campaigns/{campaign_id}")
@@ -239,6 +281,7 @@ async def get_campaign_stats(campaign_id: int, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Campaign not found")
     stats = db.get_campaign_stats(campaign_id)
     stats["campaign_status"] = campaign["status"]
+    stats["pause_reason"] = campaign.get("pause_reason")
     return stats
 
 
@@ -287,15 +330,29 @@ async def update_campaign_email(campaign_id: int, email_id: int,
 @router.patch("/api/campaigns/{campaign_id}/emails/{email_id}/selection")
 async def toggle_email_selection(campaign_id: int, email_id: int,
                                  req: EmailSelectionUpdate, db: Database = Depends(get_db)):
-    """Select or deselect a DRAFT email for the next dispatch."""
+    """Select or deselect a DRAFT or QUEUED email. Deselecting a QUEUED email pulls
+    it back to DRAFT so it's excluded from the next dispatch."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign["status"] == CampaignStatus.CANCELLED.value:
         raise HTTPException(status_code=400, detail="Cannot modify emails in a cancelled campaign")
     if not db.set_email_selection(email_id, req.is_selected):
-        raise HTTPException(status_code=404, detail="Email not found or not in DRAFT status")
+        raise HTTPException(status_code=404, detail="Email not found or not in an editable status")
     return {"message": "Selection updated"}
+
+
+@router.patch("/api/campaigns/{campaign_id}/emails/selection-all")
+async def bulk_toggle_email_selection(campaign_id: int, req: BulkEmailSelectionUpdate,
+                                      db: Database = Depends(get_db)):
+    """Select or deselect every DRAFT email in the campaign, regardless of pagination."""
+    campaign = db.get_campaign(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if campaign["status"] == CampaignStatus.CANCELLED.value:
+        raise HTTPException(status_code=400, detail="Cannot modify emails in a cancelled campaign")
+    updated = db.set_all_email_selection(campaign_id, req.is_selected)
+    return {"message": f"Updated selection for {updated} email(s)", "updated": updated}
 
 
 @router.delete("/api/campaigns/{campaign_id}/emails/{email_id}", status_code=200)
@@ -442,6 +499,7 @@ async def get_test_campaign_stats(campaign_id: int, db: Database = Depends(get_d
         raise HTTPException(status_code=404, detail="Test Campaign not found")
     stats = db.get_test_campaign_stats(campaign_id)
     stats["campaign_status"] = campaign["status"]
+    stats["pause_reason"] = campaign.get("pause_reason")
     return stats
 
 
@@ -489,15 +547,29 @@ async def update_test_campaign_email(campaign_id: int, email_id: int,
 @router.patch("/api/test-campaigns/{campaign_id}/emails/{email_id}/selection")
 async def toggle_test_email_selection(campaign_id: int, email_id: int,
                                       req: EmailSelectionUpdate, db: Database = Depends(get_db)):
-    """Select or deselect a DRAFT test email for the next dispatch."""
+    """Select or deselect a DRAFT or QUEUED test email. Deselecting a QUEUED email
+    pulls it back to DRAFT so it's excluded from the next dispatch."""
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test Campaign not found")
     if campaign["status"] == CampaignStatus.CANCELLED.value:
         raise HTTPException(status_code=400, detail="Cannot modify emails in a cancelled campaign")
     if not db.set_test_email_selection(email_id, req.is_selected):
-        raise HTTPException(status_code=404, detail="Email not found or not in DRAFT status")
+        raise HTTPException(status_code=404, detail="Email not found or not in an editable status")
     return {"message": "Selection updated"}
+
+
+@router.patch("/api/test-campaigns/{campaign_id}/emails/selection-all")
+async def bulk_toggle_test_email_selection(campaign_id: int, req: BulkEmailSelectionUpdate,
+                                           db: Database = Depends(get_db)):
+    """Select or deselect every DRAFT test email in the campaign, regardless of pagination."""
+    campaign = db.get_test_campaign(campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Test Campaign not found")
+    if campaign["status"] == CampaignStatus.CANCELLED.value:
+        raise HTTPException(status_code=400, detail="Cannot modify emails in a cancelled campaign")
+    updated = db.set_all_test_email_selection(campaign_id, req.is_selected)
+    return {"message": f"Updated selection for {updated} email(s)", "updated": updated}
 
 
 @router.delete("/api/test-campaigns/{campaign_id}/emails/{email_id}", status_code=200)

@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SqlEnum
 
 from ..base import Base
@@ -14,6 +14,7 @@ class Campaign(Base):
     template_id = Column(Integer, ForeignKey("email_templates.id"), nullable=True)
     status = Column(SqlEnum(CampaignStatus), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    pause_reason = Column(String, nullable=True)  # set when the dispatcher auto-pauses; cleared on any status change
 
 
 class EmailTemplate(Base):
@@ -33,6 +34,18 @@ class SMTPCredential(Base):
     password = Column(String, nullable=False)  # plain‑text password
     is_active = Column(Boolean, default=True, nullable=False)
     cooldown_until = Column(DateTime, nullable=True)
+    daily_send_limit = Column(Integer, nullable=True)  # None = unlimited
+
+
+class CampaignCredential(Base):
+    """Many-to-many: which SMTP credentials a campaign is allowed to send through."""
+    __tablename__ = "campaign_credentials"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=False, index=True)
+    credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=False)
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "credential_id", name="uq_campaign_credential"),
+    )
 
 
 class CampaignEmail(Base):
@@ -48,6 +61,7 @@ class CampaignEmail(Base):
     missing_fields = Column(String, nullable=True)  # comma-separated list of missing template vars
     error_message = Column(String, nullable=True)
     sent_at = Column(DateTime, nullable=True)
+    credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=True)
 
 
 class Blacklist(Base):
@@ -66,6 +80,7 @@ class TestCampaign(Base):
     test_credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=True)
     status = Column(SqlEnum(CampaignStatus), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    pause_reason = Column(String, nullable=True)
 
 
 class TestCampaignEmail(Base):
@@ -80,3 +95,4 @@ class TestCampaignEmail(Base):
     missing_fields = Column(String, nullable=True)
     error_message = Column(String, nullable=True)
     sent_at = Column(DateTime, nullable=True)
+    credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=True)

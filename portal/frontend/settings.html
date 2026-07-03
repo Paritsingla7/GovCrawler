@@ -63,12 +63,16 @@
                         <th>Username</th>
                         <th>Status</th>
                         <th>Cooldown</th>
+                        <th>Daily Limit</th>
+                        <th>Sent Today</th>
+                        <th>Sent (Total)</th>
+                        <th>Failed (Total)</th>
                         <th>Actions</th>
                     </tr>
                     </thead>
                     <tbody id="credentials-tbody">
                     <tr>
-                        <td class="empty-state" colspan="6">Loading credentials...</td>
+                        <td class="empty-state" colspan="11">Loading credentials...</td>
                     </tr>
                     </tbody>
                 </table>
@@ -358,6 +362,10 @@
         <div class="form-group">
             <label>Password</label>
             <input id="cred-pass" placeholder="App Password" type="password">
+        </div>
+        <div class="form-group">
+            <label>Daily Send Limit (optional)</label>
+            <input id="cred-daily-limit" min="1" placeholder="Leave blank for unlimited" type="number">
         </div>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeCredentialModal()">Cancel</button>

@@ -188,6 +188,23 @@
             </select>
         </div>
 
+        <div class="form-group checkbox-group">
+            <input checked id="camp-round-robin" onchange="toggleCampaignCredentialSelect()" type="checkbox">
+            <label for="camp-round-robin" style="margin: 0;">Use all active credentials (round robin)</label>
+        </div>
+        <div class="form-group" id="camp-credential-select-group" style="display: none;">
+            <label>Select SMTP Credentials to Use</label>
+            <div class="credential-picker-wrap">
+                <table>
+                    <tbody id="camp-credentials-list">
+                    <tr>
+                        <td class="empty-state">Loading credentials...</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeCampaignModal()">Cancel</button>
             <button class="btn-primary" id="btn-camp-submit" onclick="submitCampaign()">Generate Drafts</button>

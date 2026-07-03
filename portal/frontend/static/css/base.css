@@ -1057,3 +1057,37 @@ input[type="checkbox"] {
     border-color: var(--accent);
     color: var(--accent);
 }
+
+/* ── Inline checkbox/radio form rows (round-robin toggles, etc.) ── */
+.form-group.checkbox-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-group.checkbox-group input {
+    width: auto;
+}
+
+/* ── Credential picker (create/edit campaign, test campaign) ── */
+.credential-picker-wrap {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.credential-picker-wrap table {
+    width: 100%;
+}
+
+.credential-picker-wrap td {
+    font-size: 13px;
+}
+
+.credential-picker-wrap input[type="radio"] {
+    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+}

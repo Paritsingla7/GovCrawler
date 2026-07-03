@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..enums import CampaignStatus, EmailStatus
 from ..tables.outreach import (
-    Blacklist, Campaign, CampaignEmail, EmailTemplate, SMTPCredential,
+    Blacklist, Campaign, CampaignCredential, CampaignEmail, EmailTemplate, SMTPCredential,
     TestCampaign, TestCampaignEmail,
 )
 
@@ -104,7 +104,7 @@ class OutreachMixin:
             if not c:
                 return None
             return {"id": c.id, "name": c.name, "template_id": c.template_id,
-                    "status": c.status.value,
+                    "status": c.status.value, "pause_reason": c.pause_reason,
                     "created_at": c.created_at.isoformat() if c.created_at else None}
 
     def list_campaigns(self, page: int = 1, limit: int = 20, include_test: bool = True) -> tuple[list[dict], int]:
@@ -144,14 +144,52 @@ class OutreachMixin:
                 total,
             )
 
-    def update_campaign_status(self, campaign_id: int,
-                               new_status: CampaignStatus) -> bool:
+    def update_campaign_status(self, campaign_id: int, new_status: CampaignStatus,
+                               reason: str | None = None) -> bool:
+        """reason is stored as pause_reason — pass it when auto-pausing for a
+        specific, user-facing cause (e.g. no usable credentials). Any status
+        change without a reason clears it, since a stale reason from a prior
+        pause is no longer relevant once the status has moved on."""
         with self._Session() as s:
             updated = s.query(Campaign).filter_by(id=campaign_id).update(
-                {"status": new_status}
+                {"status": new_status, "pause_reason": reason}
             )
             s.commit()
             return updated > 0
+
+    # ── Campaign ↔ SMTPCredential assignment ─────────────────────────────────
+
+    def set_campaign_credentials(self, campaign_id: int, credential_ids: list[int]) -> None:
+        """Replace the set of credentials a campaign is allowed to send through.
+        Empty list means no explicit restriction (dispatcher falls back to all active credentials)."""
+        with self._Session() as s:
+            s.query(CampaignCredential).filter_by(campaign_id=campaign_id).delete()
+            s.add_all([
+                CampaignCredential(campaign_id=campaign_id, credential_id=cid)
+                for cid in credential_ids
+            ])
+            s.commit()
+
+    def get_campaign_credential_ids(self, campaign_id: int) -> list[int]:
+        with self._Session() as s:
+            rows = s.query(CampaignCredential.credential_id).filter_by(campaign_id=campaign_id).all()
+            return [r.credential_id for r in rows]
+
+    def get_credentials_by_ids(self, credential_ids: list[int]) -> list[dict]:
+        """Active, non-cooling credentials among the given ids. Used to resolve a
+        campaign's (or test campaign's) explicit credential assignment to a send pool."""
+        if not credential_ids:
+            return []
+        now = datetime.datetime.utcnow()
+        with self._Session() as s:
+            rows = s.query(SMTPCredential).filter(
+                SMTPCredential.id.in_(credential_ids),
+                SMTPCredential.is_active == True,
+                or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now),
+            ).all()
+            return [{"id": c.id, "host": c.host, "port": c.port,
+                     "username": c.username, "password": c.password,
+                     "daily_send_limit": c.daily_send_limit} for c in rows]
 
     # ── CampaignEmail ─────────────────────────────────────────────────────────
 
@@ -236,13 +274,34 @@ class OutreachMixin:
             return stats
 
     def set_email_selection(self, email_id: int, is_selected: bool) -> bool:
-        """Toggle selection on a DRAFT email."""
+        """Toggle selection on a DRAFT email. Deselecting a QUEUED email (e.g. one
+        left over from a paused run) pulls it back to DRAFT so it's excluded from
+        the next dispatch instead of still being sent."""
+        with self._Session() as s:
+            email = s.query(CampaignEmail).filter_by(id=email_id).first()
+            if not email or email.status not in (EmailStatus.DRAFT, EmailStatus.QUEUED):
+                return False
+            updates = {"is_selected": is_selected}
+            if email.status == EmailStatus.QUEUED and not is_selected:
+                updates["status"] = EmailStatus.DRAFT
+            s.query(CampaignEmail).filter_by(id=email_id).update(updates)
+            s.commit()
+            return True
+
+    def set_all_email_selection(self, campaign_id: int, is_selected: bool) -> int:
+        """Bulk select/deselect every DRAFT email in a campaign, across all pages.
+        When deselecting, also pulls any QUEUED leftovers back to DRAFT (see
+        set_email_selection)."""
         with self._Session() as s:
             updated = s.query(CampaignEmail).filter_by(
-                id=email_id, status=EmailStatus.DRAFT
+                campaign_id=campaign_id, status=EmailStatus.DRAFT
             ).update({"is_selected": is_selected})
+            if not is_selected:
+                updated += s.query(CampaignEmail).filter_by(
+                    campaign_id=campaign_id, status=EmailStatus.QUEUED
+                ).update({"status": EmailStatus.DRAFT, "is_selected": False})
             s.commit()
-            return updated > 0
+            return updated
 
     def delete_campaign_email(self, email_id: int) -> bool:
         """Remove a DRAFT email from a campaign entirely."""
@@ -283,21 +342,23 @@ class OutreachMixin:
                     "recipient_email": e.recipient_email, "subject": e.subject,
                     "body": e.body}
 
-    def mark_email_sent(self, email_id: int) -> None:
+    def mark_email_sent(self, email_id: int, credential_id: int | None = None) -> None:
         """Mark as SENT with current timestamp."""
         with self._Session() as s:
             s.query(CampaignEmail).filter_by(id=email_id).update({
                 "status": EmailStatus.SENT,
-                "sent_at": datetime.datetime.utcnow()
+                "sent_at": datetime.datetime.utcnow(),
+                "credential_id": credential_id,
             })
             s.commit()
 
-    def mark_email_failed(self, email_id: int, error_message: str) -> None:
+    def mark_email_failed(self, email_id: int, error_message: str, credential_id: int | None = None) -> None:
         """Mark as FAILED with the error reason."""
         with self._Session() as s:
             s.query(CampaignEmail).filter_by(id=email_id).update({
                 "status": EmailStatus.FAILED,
-                "error_message": error_message
+                "error_message": error_message,
+                "credential_id": credential_id,
             })
             s.commit()
 
@@ -339,11 +400,15 @@ class OutreachMixin:
             if not c: return None
             return {"id": c.id, "name": c.name, "template_id": c.template_id,
                     "test_credential_id": c.test_credential_id, "status": c.status.value, "is_test": True,
+                    "pause_reason": c.pause_reason,
                     "created_at": c.created_at.isoformat() if c.created_at else None}
 
-    def update_test_campaign_status(self, campaign_id: int, new_status: CampaignStatus) -> bool:
+    def update_test_campaign_status(self, campaign_id: int, new_status: CampaignStatus,
+                                    reason: str | None = None) -> bool:
         with self._Session() as s:
-            updated = s.query(TestCampaign).filter_by(id=campaign_id).update({"status": new_status})
+            updated = s.query(TestCampaign).filter_by(id=campaign_id).update(
+                {"status": new_status, "pause_reason": reason}
+            )
             s.commit()
             return updated > 0
 
@@ -398,13 +463,32 @@ class OutreachMixin:
             return updated > 0
 
     def set_test_email_selection(self, email_id: int, is_selected: bool) -> bool:
-        """Toggle selection on a DRAFT test email."""
+        """Toggle selection on a DRAFT test email. Deselecting a QUEUED test email
+        pulls it back to DRAFT, mirroring set_email_selection."""
+        with self._Session() as s:
+            email = s.query(TestCampaignEmail).filter_by(id=email_id).first()
+            if not email or email.status not in (EmailStatus.DRAFT, EmailStatus.QUEUED):
+                return False
+            updates = {"is_selected": is_selected}
+            if email.status == EmailStatus.QUEUED and not is_selected:
+                updates["status"] = EmailStatus.DRAFT
+            s.query(TestCampaignEmail).filter_by(id=email_id).update(updates)
+            s.commit()
+            return True
+
+    def set_all_test_email_selection(self, campaign_id: int, is_selected: bool) -> int:
+        """Bulk select/deselect every DRAFT test email in a campaign, across all
+        pages. When deselecting, also pulls any QUEUED leftovers back to DRAFT."""
         with self._Session() as s:
             updated = s.query(TestCampaignEmail).filter_by(
-                id=email_id, status=EmailStatus.DRAFT
+                test_campaign_id=campaign_id, status=EmailStatus.DRAFT
             ).update({"is_selected": is_selected})
+            if not is_selected:
+                updated += s.query(TestCampaignEmail).filter_by(
+                    test_campaign_id=campaign_id, status=EmailStatus.QUEUED
+                ).update({"status": EmailStatus.DRAFT, "is_selected": False})
             s.commit()
-            return updated > 0
+            return updated
 
     def delete_test_campaign_email(self, email_id: int) -> bool:
         """Remove a DRAFT test email from a test campaign."""
@@ -415,16 +499,18 @@ class OutreachMixin:
             s.commit()
             return deleted > 0
 
-    def mark_test_email_sent(self, email_id: int) -> None:
+    def mark_test_email_sent(self, email_id: int, credential_id: int | None = None) -> None:
         with self._Session() as s:
             s.query(TestCampaignEmail).filter_by(id=email_id).update(
-                {"status": EmailStatus.SENT, "sent_at": datetime.datetime.utcnow()})
+                {"status": EmailStatus.SENT, "sent_at": datetime.datetime.utcnow(),
+                 "credential_id": credential_id})
             s.commit()
 
-    def mark_test_email_failed(self, email_id: int, error_message: str) -> None:
+    def mark_test_email_failed(self, email_id: int, error_message: str, credential_id: int | None = None) -> None:
         with self._Session() as s:
             s.query(TestCampaignEmail).filter_by(id=email_id).update(
-                {"status": EmailStatus.FAILED, "error_message": error_message})
+                {"status": EmailStatus.FAILED, "error_message": error_message,
+                 "credential_id": credential_id})
             s.commit()
 
     def cancel_remaining_queued_test(self, campaign_id: int) -> int:
@@ -437,9 +523,11 @@ class OutreachMixin:
 
     # ── SMTP Credential operations ────────────────────────────────────────────
 
-    def create_credential(self, host: str, port: int, username: str, password: str) -> int:
+    def create_credential(self, host: str, port: int, username: str, password: str,
+                          daily_send_limit: int | None = None) -> int:
         with self._Session() as s:
-            c = SMTPCredential(host=host, port=port, username=username, password=password)
+            c = SMTPCredential(host=host, port=port, username=username, password=password,
+                               daily_send_limit=daily_send_limit)
             s.add(c)
             s.commit()
             return c.id
@@ -452,15 +540,20 @@ class OutreachMixin:
             return {"id": c.id, "host": c.host, "port": c.port,
                     "username": c.username, "password": c.password,
                     "is_active": c.is_active,
-                    "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None}
+                    "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
+                    "daily_send_limit": c.daily_send_limit}
 
     def list_credentials(self) -> list[dict]:
         with self._Session() as s:
             rows = s.query(SMTPCredential).order_by(SMTPCredential.id).all()
-            return [{"id": c.id, "host": c.host, "port": c.port,
-                     "username": c.username, "is_active": c.is_active,
-                     "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None}
-                    for c in rows]
+            creds = [{"id": c.id, "host": c.host, "port": c.port,
+                      "username": c.username, "is_active": c.is_active,
+                      "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
+                      "daily_send_limit": c.daily_send_limit}
+                     for c in rows]
+        for c in creds:
+            c.update(self.get_credential_health(c["id"]))
+        return creds
 
     def update_credential(self, credential_id: int, **kwargs) -> bool:
         with self._Session() as s:
@@ -485,7 +578,8 @@ class OutreachMixin:
                 or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now)
             ).all()
             return [{"id": c.id, "host": c.host, "port": c.port,
-                     "username": c.username, "password": c.password} for c in rows]
+                     "username": c.username, "password": c.password,
+                     "daily_send_limit": c.daily_send_limit} for c in rows]
 
     def disable_credential(self, credential_id: int) -> None:
         """Permanently disable (auth failure)."""
@@ -498,3 +592,46 @@ class OutreachMixin:
         with self._Session() as s:
             s.query(SMTPCredential).filter_by(id=credential_id).update({"cooldown_until": until})
             s.commit()
+
+    def get_credential_sent_count_today(self, credential_id: int) -> int:
+        """Count of emails successfully sent via this credential since 00:00 UTC today."""
+        today_start = datetime.datetime.combine(datetime.datetime.utcnow().date(), datetime.time.min)
+        with self._Session() as s:
+            n1 = s.query(CampaignEmail).filter(
+                CampaignEmail.credential_id == credential_id,
+                CampaignEmail.status == EmailStatus.SENT,
+                CampaignEmail.sent_at >= today_start,
+            ).count()
+            n2 = s.query(TestCampaignEmail).filter(
+                TestCampaignEmail.credential_id == credential_id,
+                TestCampaignEmail.status == EmailStatus.SENT,
+                TestCampaignEmail.sent_at >= today_start,
+            ).count()
+            return n1 + n2
+
+    def get_credential_health(self, credential_id: int) -> dict:
+        """Send/failure counts for a credential, all-time and today. Used to surface
+        per-mailbox health in the UI before it gets rate-limited or blacklisted by a provider."""
+        today_start = datetime.datetime.combine(datetime.datetime.utcnow().date(), datetime.time.min)
+        with self._Session() as s:
+            sent_total = 0
+            failed_total = 0
+            sent_today = 0
+            for model in (CampaignEmail, TestCampaignEmail):
+                rows = (
+                    s.query(model.status, func.count(model.id))
+                    .filter(model.credential_id == credential_id)
+                    .group_by(model.status)
+                    .all()
+                )
+                for status_val, count in rows:
+                    if status_val == EmailStatus.SENT:
+                        sent_total += count
+                    elif status_val == EmailStatus.FAILED:
+                        failed_total += count
+                sent_today += s.query(model).filter(
+                    model.credential_id == credential_id,
+                    model.status == EmailStatus.SENT,
+                    model.sent_at >= today_start,
+                ).count()
+            return {"sent_total": sent_total, "failed_total": failed_total, "sent_today": sent_today}

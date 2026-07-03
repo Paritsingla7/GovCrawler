@@ -47,16 +47,6 @@
         margin: 0;
         color: var(--text);
     }
-
-    .checkbox-group {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .checkbox-group input {
-        width: auto;
-    }
 </style>
 {% endblock %}
 
@@ -90,9 +80,15 @@
 
             <div class="form-group" id="credential-select-group" style="display: none;">
                 <label>Select Specific SMTP Credential</label>
-                <select id="test-credential">
-                    <option value="">Loading credentials...</option>
-                </select>
+                <div class="credential-picker-wrap">
+                    <table>
+                        <tbody id="test-credentials-list">
+                        <tr>
+                            <td>Loading credentials...</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <hr style="border: 0; border-top: 1px solid var(--border); margin: 24px 0;">

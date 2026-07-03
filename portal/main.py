@@ -48,6 +48,12 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# httpx (and its transport, httpcore) log an INFO line for every single request —
+# the crawler's HTTPX-first fetches and the launcher's activity polling would
+# otherwise flood the log file with one line per page/poll.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 def load_config() -> dict:
     # Always read from the LIVE config next to the .exe

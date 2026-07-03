@@ -5,6 +5,7 @@ Async background dispatcher for SMTP campaigns.
 import asyncio
 import logging
 import random
+import time
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
@@ -14,6 +15,17 @@ from ..db import Database, CampaignStatus
 
 log = logging.getLogger(__name__)
 
+NO_USABLE_CREDENTIALS_REASON = (
+    "Paused: no usable SMTP credentials — every assigned credential is disabled, "
+    "cooling down, or has hit its daily send limit."
+)
+
+# Cross-campaign send pacing: keyed by credential id, shared by every dispatch task
+# in this process (single event loop, per the app's threading model) so two campaigns
+# sharing a credential can't both fire through it within the same jitter window.
+_credential_locks: dict[int, asyncio.Lock] = {}
+_credential_last_sent: dict[int, float] = {}
+
 
 def _get_next_credential(active_creds: list[dict], index: int) -> tuple[dict, int]:
     """Simple round-robin with wraparound. Returns (credential, next_index)."""
@@ -21,6 +33,31 @@ def _get_next_credential(active_creds: list[dict], index: int) -> tuple[dict, in
         return None, 0
     cred = active_creds[index % len(active_creds)]
     return cred, (index + 1) % len(active_creds)
+
+
+def resolve_credential_pool(db: Database, assigned_ids: list[int] | None) -> list[dict]:
+    """Credentials this campaign may send through: its explicit assignment if any,
+    otherwise every active credential (unchanged legacy behavior). Excludes any
+    credential that has already hit its daily_send_limit today."""
+    creds = db.get_credentials_by_ids(assigned_ids) if assigned_ids else db.get_active_credentials()
+    return [
+        c for c in creds
+        if not (c.get("daily_send_limit") and db.get_credential_sent_count_today(c["id"]) >= c["daily_send_limit"])
+    ]
+
+
+async def _wait_for_credential_slot(cred_id: int) -> None:
+    """Block until at least a 30-90s gap has passed since the last send through this
+    credential, regardless of which campaign task is sending."""
+    lock = _credential_locks.setdefault(cred_id, asyncio.Lock())
+    async with lock:
+        last = _credential_last_sent.get(cred_id)
+        if last is not None:
+            gap = random.uniform(30, 90)
+            remaining = gap - (time.monotonic() - last)
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+        _credential_last_sent[cred_id] = time.monotonic()
 
 
 async def _send_one_email(credential: dict, recipient: str, subject: str, body: str) -> None:
@@ -52,20 +89,22 @@ async def _send_one_email(credential: dict, recipient: str, subject: str, body: 
 async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
     log.info(f"Campaign {campaign_id} dispatch started")
 
-    # 1. Flip DRAFT → QUEUED
+    # 1. Flip any newly-selected DRAFT → QUEUED. Emails left QUEUED from a previous
+    # paused run are already queued and don't need re-flipping, so "nothing new
+    # queued" alone doesn't mean "nothing to send" — check for a leftover queue too.
     queued_count = db.queue_campaign_emails(campaign_id)
     log.info(f"Campaign {campaign_id}: {queued_count} drafts moved to QUEUED")
 
-    if queued_count == 0:
+    if queued_count == 0 and not db.get_next_queued_email(campaign_id):
         db.update_campaign_status(campaign_id, CampaignStatus.COMPLETED)
         log.info(f"Campaign {campaign_id} completed: No emails to send.")
         return
 
-    # 2. Load active credentials
-    active_creds = db.get_active_credentials()
+    # 2. Load assigned/active credentials
+    active_creds = resolve_credential_pool(db, db.get_campaign_credential_ids(campaign_id))
     if not active_creds:
-        db.update_campaign_status(campaign_id, CampaignStatus.PAUSED)
-        log.warning(f"Campaign {campaign_id} paused: No active credentials.")
+        db.update_campaign_status(campaign_id, CampaignStatus.PAUSED, reason=NO_USABLE_CREDENTIALS_REASON)
+        log.warning(f"Campaign {campaign_id} paused: No usable SMTP credentials.")
         return
 
     cred_index = 0
@@ -102,13 +141,15 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
                 log.info(f"Campaign {campaign_id} completed.")
             break
 
-        # d. Get next credential
-        active_creds = db.get_active_credentials()  # reload in case they changed
+        # d. Get next credential — re-read the campaign's assignment fresh every
+        # iteration so a live PUT .../credentials edit takes effect immediately,
+        # even while this campaign is RUNNING.
+        active_creds = resolve_credential_pool(db, db.get_campaign_credential_ids(campaign_id))
         cred, cred_index = _get_next_credential(active_creds, cred_index)
 
         if not cred:
-            db.update_campaign_status(campaign_id, CampaignStatus.PAUSED)
-            log.warning(f"Campaign {campaign_id} paused: All credentials disabled or cooling.")
+            db.update_campaign_status(campaign_id, CampaignStatus.PAUSED, reason=NO_USABLE_CREDENTIALS_REASON)
+            log.warning(f"Campaign {campaign_id} paused: All credentials disabled, cooling, or capped.")
             break
 
         email_id = email["id"]
@@ -116,9 +157,10 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
 
         # e. Try send via aiosmtplib
         try:
+            await _wait_for_credential_slot(cred["id"])
             log.info(f"Sending email {email_id} to {recipient} via {cred['username']}")
             await _send_one_email(cred, recipient, email["subject"], email["body"])
-            db.mark_email_sent(email_id)
+            db.mark_email_sent(email_id, cred["id"])
             log.info(f"Email {email_id} sent successfully.")
 
         except aiosmtplib.SMTPAuthenticationError as e:
@@ -132,7 +174,7 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
             if e.code in (550, 553):
                 domain = recipient.split("@")[1] if "@" in recipient else ""
                 db.add_to_blacklist(recipient, domain, reason=f"{e.code}: {e.message}")
-                db.mark_email_failed(email_id, f"{e.code}: {e.message}")
+                db.mark_email_failed(email_id, f"{e.code}: {e.message}", cred["id"])
                 log.warning(f"Hard bounce {e.code} for {recipient}. Blacklisted and marked FAILED.")
             # 421 / 450 / 451 - Rate limited / Temporary
             elif e.code in (421, 450, 451):
@@ -141,7 +183,7 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
                 log.warning(f"Credential {cred['username']} rate limited ({e.code}). Cooled down for 1 hour.")
                 continue  # Retry email
             else:
-                db.mark_email_failed(email_id, f"{e.code}: {e.message}")
+                db.mark_email_failed(email_id, f"{e.code}: {e.message}", cred["id"])
                 log.error(f"SMTPResponseException {e.code}: {e.message} for {recipient}")
 
         except aiosmtplib.SMTPRecipientsRefused as e:
@@ -156,11 +198,11 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
             if err_code in (550, 553):
                 domain = recipient.split("@")[1] if "@" in recipient else ""
                 db.add_to_blacklist(recipient, domain, reason=f"{err_code}: {err_msg}")
-                db.mark_email_failed(email_id, f"{err_code}: {err_msg}")
+                db.mark_email_failed(email_id, f"{err_code}: {err_msg}", cred["id"])
                 log.warning(
                     f"Hard bounce (RecipientsRefused) {err_code} for {recipient}. Blacklisted and marked FAILED.")
             else:
-                db.mark_email_failed(email_id, f"{err_code}: {err_msg}")
+                db.mark_email_failed(email_id, f"{err_code}: {err_msg}", cred["id"])
                 log.error(f"SMTPRecipientsRefused {err_code}: {err_msg} for {recipient}")
 
         except (aiosmtplib.SMTPConnectError, OSError, TimeoutError) as e:
@@ -172,13 +214,8 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
 
         except Exception as e:
             # Unexpected
-            db.mark_email_failed(email_id, str(e))
+            db.mark_email_failed(email_id, str(e), cred["id"])
             log.error(f"Unexpected error sending email {email_id} to {recipient}: {e}", exc_info=True)
-
-        # g. asyncio.sleep(random.uniform(30, 90))
-        jitter = random.uniform(30, 90)
-        log.debug(f"Sleeping for {jitter:.2f}s before next send...")
-        await asyncio.sleep(jitter)
 
 
 async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
@@ -187,7 +224,7 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
     queued_count = db.queue_test_campaign_emails(campaign_id)
     log.info(f"Test Campaign {campaign_id}: {queued_count} drafts moved to QUEUED")
 
-    if queued_count == 0:
+    if queued_count == 0 and not db.get_next_queued_test_email(campaign_id):
         db.update_test_campaign_status(campaign_id, CampaignStatus.COMPLETED)
         log.info(f"Test Campaign {campaign_id} completed: No emails to send.")
         return
@@ -222,27 +259,22 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
             log.info(f"Test Campaign {campaign_id} completed.")
             break
 
-        if test_credential_id:
-            cred = db.get_credential(test_credential_id)
-            if not cred or not cred["is_active"]:
-                db.update_test_campaign_status(campaign_id, CampaignStatus.PAUSED)
-                log.warning(f"Test Campaign {campaign_id} paused: Selected credential inactive or not found.")
-                break
-        else:
-            active_creds = db.get_active_credentials()
-            cred, cred_index = _get_next_credential(active_creds, cred_index)
-            if not cred:
-                db.update_test_campaign_status(campaign_id, CampaignStatus.PAUSED)
-                log.warning(f"Test Campaign {campaign_id} paused: All credentials disabled or cooling.")
-                break
+        assigned_ids = [test_credential_id] if test_credential_id else None
+        active_creds = resolve_credential_pool(db, assigned_ids)
+        cred, cred_index = _get_next_credential(active_creds, cred_index)
+        if not cred:
+            db.update_test_campaign_status(campaign_id, CampaignStatus.PAUSED, reason=NO_USABLE_CREDENTIALS_REASON)
+            log.warning(f"Test Campaign {campaign_id} paused: No usable SMTP credentials.")
+            break
 
         email_id = email["id"]
         recipient = email["recipient_email"]
 
         try:
+            await _wait_for_credential_slot(cred["id"])
             log.info(f"Sending test email {email_id} to {recipient} via {cred['username']}")
             await _send_one_email(cred, recipient, email["subject"], email["body"])
-            db.mark_test_email_sent(email_id)
+            db.mark_test_email_sent(email_id, cred["id"])
             log.info(f"Test Email {email_id} sent successfully.")
 
         except aiosmtplib.SMTPAuthenticationError as e:
@@ -254,7 +286,7 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
             if e.code in (550, 553):
                 domain = recipient.split("@")[1] if "@" in recipient else ""
                 db.add_to_blacklist(recipient, domain, reason=f"{e.code}: {e.message}")
-                db.mark_test_email_failed(email_id, f"{e.code}: {e.message}")
+                db.mark_test_email_failed(email_id, f"{e.code}: {e.message}", cred["id"])
                 log.warning(f"Hard bounce {e.code} for {recipient}. Blacklisted and marked FAILED.")
             elif e.code in (421, 450, 451):
                 cooldown_until = datetime.utcnow() + timedelta(hours=1)
@@ -262,7 +294,7 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
                 log.warning(f"Credential {cred['username']} rate limited ({e.code}). Cooled down for 1 hour.")
                 continue
             else:
-                db.mark_test_email_failed(email_id, f"{e.code}: {e.message}")
+                db.mark_test_email_failed(email_id, f"{e.code}: {e.message}", cred["id"])
                 log.error(f"SMTPResponseException {e.code}: {e.message} for {recipient}")
 
         except aiosmtplib.SMTPRecipientsRefused as e:
@@ -276,11 +308,11 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
             if err_code in (550, 553):
                 domain = recipient.split("@")[1] if "@" in recipient else ""
                 db.add_to_blacklist(recipient, domain, reason=f"{err_code}: {err_msg}")
-                db.mark_test_email_failed(email_id, f"{err_code}: {err_msg}")
+                db.mark_test_email_failed(email_id, f"{err_code}: {err_msg}", cred["id"])
                 log.warning(
                     f"Hard bounce (RecipientsRefused) {err_code} for {recipient}. Blacklisted and marked FAILED.")
             else:
-                db.mark_test_email_failed(email_id, f"{err_code}: {err_msg}")
+                db.mark_test_email_failed(email_id, f"{err_code}: {err_msg}", cred["id"])
                 log.error(f"SMTPRecipientsRefused {err_code}: {err_msg} for {recipient}")
 
         except (aiosmtplib.SMTPConnectError, OSError, TimeoutError) as e:
@@ -290,9 +322,5 @@ async def run_test_campaign_dispatch(campaign_id: int, db: Database) -> None:
             continue
 
         except Exception as e:
-            db.mark_test_email_failed(email_id, str(e))
+            db.mark_test_email_failed(email_id, str(e), cred["id"])
             log.error(f"Unexpected error sending test email {email_id} to {recipient}: {e}", exc_info=True)
-
-        jitter = random.uniform(30, 90)
-        log.debug(f"Sleeping for {jitter:.2f}s before next send...")
-        await asyncio.sleep(jitter)

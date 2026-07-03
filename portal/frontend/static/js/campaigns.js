@@ -119,10 +119,50 @@ async function loadCampaignDetail() {
 
         updateStatsUI(c.stats);
         updateButtonsUI(c);
+        renderPauseReason(c.pause_reason);
+
+        if (!currentCampaignIsTest) {
+            await renderCredentialsSummary(c.credential_ids || []);
+        } else {
+            document.getElementById('cd-credentials-row').style.display = 'none';
+        }
 
         loadEmails();
     } catch (e) {
         console.error(e);
+    }
+}
+
+function renderPauseReason(reason) {
+    const row = document.getElementById('cd-pause-reason');
+    if (reason) {
+        document.getElementById('cd-pause-reason-text').textContent = reason;
+        row.style.display = 'block';
+    } else {
+        row.style.display = 'none';
+    }
+}
+
+async function renderCredentialsSummary(credentialIds) {
+    const row = document.getElementById('cd-credentials-row');
+    row.style.display = 'block';
+    const summaryEl = document.getElementById('cd-credentials-summary');
+
+    if (credentialIds.length === 0) {
+        summaryEl.textContent = 'All active credentials (round robin)';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/credentials');
+        const creds = await res.json();
+        const names = credentialIds
+            .map(id => creds.find(c => c.id === id))
+            .filter(Boolean)
+            .map(c => `${c.username} (${c.host})`);
+        summaryEl.textContent = names.length ? names.join(', ') : `${credentialIds.length} credential(s)`;
+    } catch (e) {
+        summaryEl.textContent = `${credentialIds.length} credential(s)`;
     }
 }
 
@@ -134,6 +174,7 @@ async function pollCampaignStats() {
         if (res.ok) {
             const stats = await res.json();
             updateStatsUI(stats);
+            renderPauseReason(stats.pause_reason);
             if (stats.campaign_status) {
                 currentCampaignStatus = stats.campaign_status;
                 document.getElementById('cd-status').textContent = stats.campaign_status;
@@ -175,12 +216,14 @@ function updateButtonsUI(c) {
     const btnDispatch = document.getElementById('btn-dispatch');
     const btnCancel = document.getElementById('btn-cancel');
     const btnAddLeads = document.getElementById('btn-add-leads');
+    const btnEditCredentials = document.getElementById('btn-edit-credentials');
     const toolbar = document.getElementById('email-toolbar');
 
     btnPause.style.display = 'none';
     btnDispatch.style.display = 'none';
     btnCancel.style.display = 'none';
     btnAddLeads.style.display = 'none';
+    btnEditCredentials.style.display = 'none';
     toolbar.style.display = 'none';
 
     if (c.status === 'PAUSED') {
@@ -191,9 +234,11 @@ function updateButtonsUI(c) {
             btnCancel.style.display = 'inline-block';
         }
         toolbar.style.display = 'flex';
+        if (!currentCampaignIsTest) btnEditCredentials.style.display = 'inline-block';
     } else if (c.status === 'RUNNING') {
         btnPause.style.display = 'inline-block';
         btnCancel.style.display = 'inline-block';
+        if (!currentCampaignIsTest) btnEditCredentials.style.display = 'inline-block';
     }
 
     // "Add Leads" available whenever the campaign is not RUNNING or CANCELLED (prod only)
@@ -227,15 +272,18 @@ async function loadEmails() {
 
         data.emails.forEach(e => {
             const isDraft = e.status === 'DRAFT';
+            const isQueued = e.status === 'QUEUED';
+            const isPending = isDraft || isQueued;
             const isSent = e.status === 'SENT';
             const isCancelled = currentCampaignStatus === 'CANCELLED';
 
-            if (isDraft) totalDraft++;
-            if (isDraft && e.is_selected) selectedCount++;
+            if (isPending) totalDraft++;
+            if (isPending && e.is_selected) selectedCount++;
 
-            // Checkbox cell — only DRAFT emails get a usable checkbox
+            // Checkbox cell — DRAFT and QUEUED emails are both still deselectable.
+            // Unchecking a QUEUED email pulls it back to DRAFT (excluded from dispatch).
             let checkboxCell = '<td></td>';
-            if (isDraft) {
+            if (isPending) {
                 const checked = e.is_selected ? 'checked' : '';
                 checkboxCell = `<td><input type="checkbox" class="email-select-cb" ${checked} onchange="toggleEmailSelection(${e.id}, this.checked)" title="Include in next dispatch"></td>`;
             }
@@ -293,7 +341,7 @@ async function loadEmails() {
 
 function updateToolbarInfo(selectedCount, totalDraft) {
     const el = document.getElementById('toolbar-selection-info');
-    if (el) el.textContent = totalDraft > 0 ? `${selectedCount} of ${totalDraft} drafts selected` : '';
+    if (el) el.textContent = totalDraft > 0 ? `${selectedCount} of ${totalDraft} pending emails selected` : '';
 }
 
 function prevEmailPage() {
@@ -313,12 +361,13 @@ function nextEmailPage() {
 
 function triggerDispatch() {
     const draftCount = parseInt(document.getElementById('stat-draft').textContent) || 0;
-    if (draftCount === 0) {
-        alert("No selected draft emails to dispatch. Select at least one email using the checkboxes.");
+    const queuedCount = parseInt(document.getElementById('stat-queued').textContent) || 0;
+    if (draftCount === 0 && queuedCount === 0) {
+        alert("No selected draft or queued emails to dispatch. Select at least one email using the checkboxes.");
         return;
     }
 
-    document.getElementById('dispatch-draft-count').textContent = draftCount;
+    document.getElementById('dispatch-draft-count').textContent = draftCount + queuedCount;
     document.getElementById('modal-dispatch').style.display = 'flex';
 }
 
@@ -399,14 +448,23 @@ async function toggleEmailSelection(emailId, isSelected) {
 }
 
 async function selectAllEmails(selected) {
-    // Toggle all DRAFT checkboxes on the current page
-    const checkboxes = document.querySelectorAll('.email-select-cb');
-    for (const cb of checkboxes) {
-        if (cb.checked !== selected) {
-            cb.checked = selected;
-            const emailId = parseInt(cb.getAttribute('onchange').match(/\d+/)[0]);
-            await toggleEmailSelection(emailId, selected);
+    // Applies to every DRAFT email in the campaign, not just the current page
+    const apiPath = currentCampaignIsTest ? 'test-campaigns' : 'campaigns';
+    try {
+        const res = await fetch(`/api/${apiPath}/${currentCampaignId}/emails/selection-all`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_selected: selected})
+        });
+        if (res.ok) {
+            loadEmails();
+            pollCampaignStats();
+        } else {
+            const err = await res.json();
+            alert("Could not update selection: " + err.detail);
         }
+    } catch (e) {
+        alert("Network error.");
     }
 }
 
@@ -535,4 +593,88 @@ function closeAddLeadsModal() {
 }
 
 async function confirmAddLeads() {
+}
+
+// ── Edit Campaign Credentials Modal ──────────────────────────────────────────
+
+function toggleEditCredentialSelect() {
+    const isRoundRobin = document.getElementById('ecc-round-robin').checked;
+    document.getElementById('ecc-credential-select-group').style.display = isRoundRobin ? 'none' : 'block';
+}
+
+async function openEditCampaignCredentialsModal() {
+    if (!currentCampaignId) return;
+
+    let assignedIds = [];
+    try {
+        const res = await fetch(`/api/campaigns/${currentCampaignId}`);
+        const c = await res.json();
+        assignedIds = c.credential_ids || [];
+    } catch (e) {
+        alert("Failed to load current credential assignment.");
+        return;
+    }
+
+    document.getElementById('ecc-round-robin').checked = assignedIds.length === 0;
+    toggleEditCredentialSelect();
+
+    const tbody = document.getElementById('ecc-credentials-list');
+    try {
+        const res = await fetch('/api/credentials');
+        const creds = await res.json();
+
+        if (creds.length === 0) {
+            tbody.innerHTML = '<tr><td class="empty-state">No SMTP credentials configured yet.</td></tr>';
+        } else {
+            tbody.innerHTML = '';
+            creds.forEach(c => {
+                const checked = assignedIds.includes(c.id) ? 'checked' : '';
+                const limit = c.daily_send_limit ? `${c.sent_today}/${c.daily_send_limit} today` : `${c.sent_today} sent today`;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="width:24px;"><input type="checkbox" class="ecc-cred-checkbox" value="${c.id}" ${checked}></td>
+                    <td>${c.username} (${c.host})</td>
+                    <td style="font-size:12px; color:var(--muted);">${limit}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td class="empty-state">Failed to load credentials.</td></tr>';
+    }
+
+    document.getElementById('modal-campaign-credentials').style.display = 'flex';
+}
+
+function closeEditCampaignCredentialsModal() {
+    document.getElementById('modal-campaign-credentials').style.display = 'none';
+}
+
+async function saveCampaignCredentials() {
+    const isRoundRobin = document.getElementById('ecc-round-robin').checked;
+    const credentialIds = isRoundRobin
+        ? []
+        : Array.from(document.querySelectorAll('.ecc-cred-checkbox:checked')).map(cb => parseInt(cb.value, 10));
+
+    if (!isRoundRobin && credentialIds.length === 0) {
+        alert("Select at least one SMTP credential, or use round robin.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/campaigns/${currentCampaignId}/credentials`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({credential_ids: credentialIds})
+        });
+        if (res.ok) {
+            closeEditCampaignCredentialsModal();
+            loadCampaignDetail();
+        } else {
+            const err = await res.json();
+            alert("Failed to update credentials: " + err.detail);
+        }
+    } catch (e) {
+        alert("Network error.");
+    }
 }

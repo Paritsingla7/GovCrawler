@@ -542,6 +542,8 @@ async function confirmImport() {
 async function openCampaignModal() {
     document.getElementById('camp-leads-count').textContent = selectedLeadIds.size;
     document.getElementById('camp-name').value = '';
+    document.getElementById('camp-round-robin').checked = true;
+    toggleCampaignCredentialSelect();
 
     // Load templates
     try {
@@ -560,11 +562,45 @@ async function openCampaignModal() {
         console.error("Failed to load templates", e);
     }
 
+    loadCampaignCredentialOptions();
+
     document.getElementById('modal-create-campaign').style.display = 'flex';
 }
 
 function closeCampaignModal() {
     document.getElementById('modal-create-campaign').style.display = 'none';
+}
+
+function toggleCampaignCredentialSelect() {
+    const isRoundRobin = document.getElementById('camp-round-robin').checked;
+    document.getElementById('camp-credential-select-group').style.display = isRoundRobin ? 'none' : 'block';
+}
+
+async function loadCampaignCredentialOptions() {
+    const tbody = document.getElementById('camp-credentials-list');
+    try {
+        const res = await fetch('/api/credentials');
+        const creds = await res.json();
+
+        if (creds.length === 0) {
+            tbody.innerHTML = '<tr><td class="empty-state">No SMTP credentials configured yet.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = '';
+        creds.forEach(c => {
+            const limit = c.daily_send_limit ? `${c.sent_today}/${c.daily_send_limit} today` : `${c.sent_today} sent today`;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="width:24px;"><input type="checkbox" class="camp-cred-checkbox" value="${c.id}"></td>
+                <td>${c.username} (${c.host})</td>
+                <td style="font-size:12px; color:var(--muted);">${limit}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {
+        tbody.innerHTML = '<tr><td class="empty-state">Failed to load credentials.</td></tr>';
+    }
 }
 
 async function submitCampaign() {
@@ -585,11 +621,24 @@ async function submitCampaign() {
     btn.disabled = true;
     btn.textContent = "Creating...";
 
+    const isRoundRobin = document.getElementById('camp-round-robin').checked;
+    const credentialIds = isRoundRobin
+        ? []
+        : Array.from(document.querySelectorAll('.camp-cred-checkbox:checked')).map(cb => parseInt(cb.value, 10));
+
+    if (!isRoundRobin && credentialIds.length === 0) {
+        alert("Select at least one SMTP credential, or use round robin.");
+        btn.disabled = false;
+        btn.textContent = "Generate Drafts";
+        return;
+    }
+
     try {
         const payload = {
             name: name,
             template_id: templateId,
-            lead_ids: Array.from(selectedLeadIds)
+            lead_ids: Array.from(selectedLeadIds),
+            credential_ids: credentialIds
         };
 
         const res = await fetch('/api/campaigns', {

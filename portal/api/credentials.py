@@ -26,6 +26,7 @@ class CredentialCreate(BaseModel):
     port: int
     username: str
     password: str
+    daily_send_limit: int | None = None
 
 
 class CredentialUpdate(BaseModel):
@@ -34,6 +35,7 @@ class CredentialUpdate(BaseModel):
     username: str | None = None
     password: str | None = None
     is_active: bool | None = None
+    daily_send_limit: int | None = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -54,6 +56,7 @@ async def create_credential(req: CredentialCreate, db: Database = Depends(get_db
         port=req.port,
         username=req.username,
         password=req.password,
+        daily_send_limit=req.daily_send_limit,
     )
     return {"id": cid, "message": "Credential created"}
 

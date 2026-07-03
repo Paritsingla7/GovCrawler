@@ -30,10 +30,21 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
             "campaign_emails": [
                 ("is_selected", "BOOLEAN NOT NULL DEFAULT 1"),
                 ("missing_fields", "VARCHAR"),
+                ("credential_id", "INTEGER"),
             ],
             "test_campaign_emails": [
                 ("is_selected", "BOOLEAN NOT NULL DEFAULT 1"),
                 ("missing_fields", "VARCHAR"),
+                ("credential_id", "INTEGER"),
+            ],
+            "smtp_credentials": [
+                ("daily_send_limit", "INTEGER"),
+            ],
+            "campaigns": [
+                ("pause_reason", "VARCHAR"),
+            ],
+            "test_campaigns": [
+                ("pause_reason", "VARCHAR"),
             ],
             "crawl_jobs": [
                 ("current_depth", "INTEGER NOT NULL DEFAULT 0"),
