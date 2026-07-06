@@ -58,6 +58,8 @@ async def get_domains(
         state: str = Query(None),
         org_type: str = Query(None),
         search: str = Query(None),
+        sort_by: str = Query(None),
+        sort_dir: str = Query("desc"),
         page: int = Query(1, ge=1),
         limit: int = Query(50, ge=1, le=200),
         db: Database = Depends(get_db),
@@ -67,6 +69,8 @@ async def get_domains(
         state=state or None,
         org_type=org_type or None,
         search=search or None,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         page=page,
         limit=limit,
     )

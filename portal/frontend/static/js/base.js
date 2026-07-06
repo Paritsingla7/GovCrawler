@@ -21,6 +21,8 @@ let searchTimer = null;
 let jobSeedsData = [];
 let seedsPage = 1;
 const SEEDS_PAGE_SIZE = 100;
+let domainsSortBy = '';
+let domainsSortDir = 'desc';
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -75,6 +77,8 @@ function saveDashboardFilters() {
         state: document.getElementById('state-select')?.value || '',
         orgType: document.getElementById('orgtype-select')?.value || '',
         search: document.getElementById('search-input')?.value || '',
+        sortBy: domainsSortBy,
+        sortDir: domainsSortDir,
     }));
 }
 
@@ -88,8 +92,38 @@ function clearDashboardFilters() {
     if (stateSel) stateSel.value = '';
     if (orgSel) orgSel.value = '';
     if (searchEl) searchEl.value = '';
+    domainsSortBy = '';
+    domainsSortDir = 'desc';
+    updateDomainsSortHeaders();
     currentPage = 1;
     reloadStateOptions('').then(() => reloadOrgTypeOptions('', '')).then(() => loadDomains());
+}
+
+// ── Column-header sorting (URL / crawlable) ─────────────────────────────────────
+function setDomainsSort(key) {
+    if (domainsSortBy !== key) {
+        domainsSortBy = key;
+        domainsSortDir = 'desc';
+    } else if (domainsSortDir === 'desc') {
+        domainsSortDir = 'asc';
+    } else {
+        domainsSortBy = '';
+        domainsSortDir = 'desc';
+    }
+    updateDomainsSortHeaders();
+    currentPage = 1;
+    saveDashboardFilters();
+    loadDomains();
+}
+
+function updateDomainsSortHeaders() {
+    document.querySelectorAll('.domains-sort-header').forEach(th => {
+        const arrow = th.querySelector('.sort-arrow');
+        if (!arrow) return;
+        arrow.textContent = th.dataset.sortKey === domainsSortBy
+            ? (domainsSortDir === 'desc' ? '▼' : '▲')
+            : '';
+    });
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -113,6 +147,10 @@ async function loadFilters() {
 
         await reloadOrgTypeOptions(catSel.value, document.getElementById('state-select').value);
         if (saved.orgType) document.getElementById('orgtype-select').value = saved.orgType;
+
+        domainsSortBy = saved.sortBy || '';
+        domainsSortDir = saved.sortDir || 'desc';
+        updateDomainsSortHeaders();
     } catch (e) {
         console.error('loadFilters', e);
     }
@@ -200,6 +238,10 @@ function _domainFilterParams() {
     if (state) params.set('state', state);
     if (orgType) params.set('org_type', orgType);
     if (search) params.set('search', search);
+    if (domainsSortBy) {
+        params.set('sort_by', domainsSortBy);
+        params.set('sort_dir', domainsSortDir);
+    }
     return params;
 }
 

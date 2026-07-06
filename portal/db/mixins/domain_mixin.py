@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 
 from ..tables.crawl import Domain
 
@@ -158,7 +158,8 @@ class DomainMixin:
 
     def get_domains(self, category: str = None, state: str = None,
                     org_type: str = None, search: str = None,
-                    page: int = 1, limit: int = 50) -> tuple[list[dict], int]:
+                    page: int = 1, limit: int = 50,
+                    sort_by: str = None, sort_dir: str = "desc") -> tuple[list[dict], int]:
         with self._Session() as s:
             q = s.query(Domain)
             if category:
@@ -175,7 +176,13 @@ class DomainMixin:
                 )
             total = q.count()
             offset = (page - 1) * limit
-            rows = q.order_by(Domain.state, Domain.main_url).offset(offset).limit(limit).all()
+            if sort_by == "crawlable":
+                is_crawlable = case((Domain.main_url.isnot(None), 1), else_=0)
+                order = is_crawlable.asc() if sort_dir == "asc" else is_crawlable.desc()
+                q = q.order_by(order, Domain.state, Domain.main_url)
+            else:
+                q = q.order_by(Domain.state, Domain.main_url)
+            rows = q.offset(offset).limit(limit).all()
             return (
                 [{"id": d.id, "category_code": d.category_code,
                   "category_title": d.category_title, "state": d.state,

@@ -41,6 +41,124 @@ function showAddToCampaignBanner() {
     if (toolbar) toolbar.insertAdjacentElement('beforebegin', banner);
 }
 
+// ── Multi-select checkbox dropdown widget ──────────────────────────────────────
+function createMsDropdown(containerId, {allLabel = 'All', onChange = null} = {}) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = `
+        <button type="button" class="ms-dropdown-toggle">
+            <span class="ms-dropdown-label">${allLabel}</span>
+            <span class="ms-caret">▾</span>
+        </button>
+        <div class="ms-dropdown-panel"></div>
+    `;
+    container._allLabel = allLabel;
+    container._selected = new Set();
+    container._options = [];
+    container._onChange = onChange;
+    container.querySelector('.ms-dropdown-panel').addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    container.querySelector('.ms-dropdown-toggle').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = container.classList.contains('open');
+        document.querySelectorAll('.ms-dropdown.open').forEach(el => el.classList.remove('open'));
+        if (!isOpen) container.classList.add('open');
+    });
+}
+
+document.addEventListener('click', () => {
+    document.querySelectorAll('.ms-dropdown.open').forEach(el => el.classList.remove('open'));
+});
+
+function setMsDropdownOptions(containerId, options) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container._options = options;
+    const panel = container.querySelector('.ms-dropdown-panel');
+    panel.innerHTML = '';
+
+    // "All" row — checked whenever nothing specific is selected; checking it
+    // clears every individual selection (equivalent to "no filter").
+    const allRow = document.createElement('div');
+    allRow.className = 'ms-dropdown-option';
+    const allCb = document.createElement('input');
+    allCb.type = 'checkbox';
+    allCb.dataset.msAll = 'true';
+    allCb.checked = container._selected.size === 0;
+    const allSpan = document.createElement('span');
+    allSpan.textContent = container._allLabel;
+    allRow.appendChild(allCb);
+    allRow.appendChild(allSpan);
+    panel.appendChild(allRow);
+    allCb.addEventListener('change', () => {
+        if (allCb.checked) {
+            container._selected.clear();
+            panel.querySelectorAll('input[type=checkbox]:not([data-ms-all])').forEach(cb => cb.checked = false);
+        } else if (container._selected.size === 0) {
+            allCb.checked = true; // can't uncheck "All" with nothing else selected
+        }
+        updateMsDropdownLabel(containerId);
+        if (container._onChange) container._onChange();
+    });
+
+    options.forEach(opt => {
+        const row = document.createElement('div');
+        row.className = 'ms-dropdown-option';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = String(opt.value);
+        cb.checked = container._selected.has(String(opt.value));
+        cb.addEventListener('change', () => {
+            if (cb.checked) container._selected.add(String(opt.value));
+            else container._selected.delete(String(opt.value));
+            allCb.checked = container._selected.size === 0;
+            updateMsDropdownLabel(containerId);
+            if (container._onChange) container._onChange();
+        });
+        const span = document.createElement('span');
+        span.textContent = opt.label;
+        row.appendChild(cb);
+        row.appendChild(span);
+        panel.appendChild(row);
+    });
+    updateMsDropdownLabel(containerId);
+}
+
+function updateMsDropdownLabel(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const label = container.querySelector('.ms-dropdown-label');
+    const n = container._selected.size;
+    if (n === 0) {
+        label.textContent = container._allLabel;
+    } else if (n === 1) {
+        const val = [...container._selected][0];
+        const opt = container._options.find(o => String(o.value) === val);
+        label.textContent = opt ? opt.label : '1 selected';
+    } else {
+        label.textContent = `${n} selected`;
+    }
+}
+
+function getMsDropdownValues(containerId) {
+    const container = document.getElementById(containerId);
+    return container ? [...container._selected] : [];
+}
+
+function setMsDropdownValues(containerId, values) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container._selected = new Set((values || []).map(String));
+    const panel = container.querySelector('.ms-dropdown-panel');
+    panel.querySelectorAll('input[type=checkbox]:not([data-ms-all])').forEach(cb => {
+        cb.checked = container._selected.has(cb.value);
+    });
+    const allCb = panel.querySelector('input[data-ms-all]');
+    if (allCb) allCb.checked = container._selected.size === 0;
+    updateMsDropdownLabel(containerId);
+}
+
 // ── Selection Persistence ─────────────────────────────────────────────────────
 function saveLeadsSelection() {
     sessionStorage.setItem('leads_selection', JSON.stringify([...selectedLeadIds]));
@@ -66,13 +184,13 @@ function getLeadsFilters() {
 
 function saveLeadsFilters() {
     sessionStorage.setItem('leads_filters', JSON.stringify({
-        job: document.getElementById('leads-job-select')?.value || '',
-        cat: document.getElementById('leads-cat-select')?.value || '',
-        state: document.getElementById('leads-state-select')?.value || '',
+        jobs: getMsDropdownValues('leads-job-msdropdown'),
+        cats: getMsDropdownValues('leads-cat-msdropdown'),
+        states: getMsDropdownValues('leads-state-msdropdown'),
         search: document.getElementById('leads-search-input')?.value || '',
         completeOnly: document.getElementById('leads-complete-only')?.checked || false,
-        org: document.getElementById('leads-org-select')?.value || '',
-        showManual: document.getElementById('leads-show-manual')?.checked ?? true,
+        orgs: getMsDropdownValues('leads-org-msdropdown'),
+        entryType: document.getElementById('leads-entry-type-select')?.value || 'both',
         reqName: document.getElementById('leads-require-name')?.checked || false,
         reqDesig: document.getElementById('leads-require-designation')?.checked || false,
         reqPhone: document.getElementById('leads-require-phone')?.checked || false,
@@ -83,13 +201,13 @@ function saveLeadsFilters() {
 
 function clearLeadsFilters() {
     sessionStorage.removeItem('leads_filters');
-    document.getElementById('leads-job-select').value = '';
-    document.getElementById('leads-cat-select').value = '';
-    document.getElementById('leads-state-select').value = '';
+    setMsDropdownValues('leads-job-msdropdown', []);
+    setMsDropdownValues('leads-cat-msdropdown', []);
+    setMsDropdownValues('leads-state-msdropdown', []);
+    setMsDropdownValues('leads-org-msdropdown', []);
     document.getElementById('leads-search-input').value = '';
     document.getElementById('leads-complete-only').checked = false;
-    document.getElementById('leads-org-select').value = '';
-    document.getElementById('leads-show-manual').checked = true;
+    document.getElementById('leads-entry-type-select').value = 'both';
     document.getElementById('leads-require-name').checked = false;
     document.getElementById('leads-require-designation').checked = false;
     document.getElementById('leads-require-phone').checked = false;
@@ -97,7 +215,7 @@ function clearLeadsFilters() {
     leadsSortDir = 'desc';
     updateLeadsSortHeaders();
     leadsPage = 1;
-    reloadLeadsStateOptions('').then(() => loadLeads());
+    reloadLeadsStateOptions([]).then(() => loadLeads());
 }
 
 async function loadLeadsFilters() {
@@ -106,26 +224,31 @@ async function loadLeadsFilters() {
         const urlParams = new URLSearchParams(window.location.search);
         const urlJobId = urlParams.get('job_id') || '';
 
-        // Populate Job dropdown
-        const jobSel = document.getElementById('leads-job-select');
+        // Populate Job multi-select dropdown
+        createMsDropdown('leads-job-msdropdown', {allLabel: 'All Jobs', onChange: onLeadsFilterChange});
         try {
             const jobs = await apiFetch('/api/jobs?limit=100');
-            jobs.forEach(j => {
-                const o = document.createElement('option');
-                o.value = j.id;
+            const options = jobs.map(j => {
                 const date = j.created_at ? j.created_at.slice(0, 10) : '';
-                o.textContent = `Job #${j.id} — ${j.status}${date ? ' · ' + date : ''}`;
-                if (String(j.id) === urlJobId) o.selected = true;
-                jobSel.appendChild(o);
+                const leadCount = (j.leads_found ?? 0).toLocaleString();
+                return {
+                    value: j.id,
+                    label: `Job #${j.id} — ${j.status}${date ? ' · ' + date : ''} · ${leadCount} lead${j.leads_found === 1 ? '' : 's'}`,
+                };
             });
+            setMsDropdownOptions('leads-job-msdropdown', options);
+            // URL param takes priority over session-saved filter
+            if (urlJobId) {
+                setMsDropdownValues('leads-job-msdropdown', [urlJobId]);
+            } else if (saved.jobs && saved.jobs.length) {
+                setMsDropdownValues('leads-job-msdropdown', saved.jobs);
+            }
         } catch (e) {
         }
 
-        // URL param takes priority over session-saved filter
-        if (!urlJobId && saved.job) jobSel.value = saved.job;
         if (saved.search) document.getElementById('leads-search-input').value = saved.search;
         if (saved.completeOnly) document.getElementById('leads-complete-only').checked = true;
-        if (saved.showManual === false) document.getElementById('leads-show-manual').checked = false;
+        document.getElementById('leads-entry-type-select').value = saved.entryType || 'both';
         if (saved.reqName) document.getElementById('leads-require-name').checked = true;
         if (saved.reqDesig) document.getElementById('leads-require-designation').checked = true;
         if (saved.reqPhone) document.getElementById('leads-require-phone').checked = true;
@@ -133,66 +256,53 @@ async function loadLeadsFilters() {
         leadsSortDir = saved.sortDir || 'desc';
         updateLeadsSortHeaders();
 
-        const jobId = jobSel.value;
-        const jobIdParam = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+        const jobIdParams = new URLSearchParams();
+        getMsDropdownValues('leads-job-msdropdown').forEach(id => jobIdParams.append('job_id', id));
+        const jobIdParam = jobIdParams.toString() ? `?${jobIdParams.toString()}` : '';
 
+        createMsDropdown('leads-cat-msdropdown', {allLabel: 'All Categories', onChange: onLeadsFilterChange});
         const cats = await apiFetch(`/api/leads/categories${jobIdParam}`);
-        const catSel = document.getElementById('leads-cat-select');
-        cats.forEach(c => {
-            const o = document.createElement('option');
-            o.value = c.code;
-            o.textContent = `${c.title} (${c.count.toLocaleString()})`;
-            catSel.appendChild(o);
-        });
-        if (saved.cat) catSel.value = saved.cat;
+        setMsDropdownOptions('leads-cat-msdropdown', cats.map(c => (
+            {value: c.code, label: `${c.title} (${c.count.toLocaleString()})`}
+        )));
+        if (saved.cats && saved.cats.length) setMsDropdownValues('leads-cat-msdropdown', saved.cats);
 
-        await reloadLeadsStateOptions(catSel.value);
-        if (saved.state) document.getElementById('leads-state-select').value = saved.state;
+        createMsDropdown('leads-state-msdropdown', {allLabel: 'All States', onChange: onLeadsFilterChange});
+        await reloadLeadsStateOptions(getMsDropdownValues('leads-cat-msdropdown'));
+        if (saved.states && saved.states.length) setMsDropdownValues('leads-state-msdropdown', saved.states);
 
         try {
+            createMsDropdown('leads-org-msdropdown', {allLabel: 'All Organizations', onChange: onLeadsFilterChange});
             const orgs = await apiFetch(`/api/leads/org-types${jobIdParam}`);
-            const orgSel = document.getElementById('leads-org-select');
-            orgs.forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.code;
-                opt.textContent = `${o.title} (${o.count.toLocaleString()})`;
-                orgSel.appendChild(opt);
-            });
-            if (saved.org) orgSel.value = saved.org;
+            setMsDropdownOptions('leads-org-msdropdown', orgs.map(o => (
+                {value: o.code, label: `${o.title} (${o.count.toLocaleString()})`}
+            )));
+            if (saved.orgs && saved.orgs.length) setMsDropdownValues('leads-org-msdropdown', saved.orgs);
         } catch (e) {
         }
     } catch (e) {
     }
 }
 
-async function reloadLeadsStateOptions(cat) {
-    const stateSel = document.getElementById('leads-state-select');
-    if (!stateSel) return;
-    const prev = stateSel.value;
-    stateSel.innerHTML = '<option value="">All States</option>';
+async function reloadLeadsStateOptions(cats) {
     try {
-        const jobId = document.getElementById('leads-job-select').value;
+        const prev = getMsDropdownValues('leads-state-msdropdown');
         const params = new URLSearchParams();
-        if (jobId) params.set('job_id', jobId);
-        if (cat) params.set('category', cat);
+        getMsDropdownValues('leads-job-msdropdown').forEach(id => params.append('job_id', id));
+        (cats || []).forEach(c => params.append('category', c));
 
         const qs = params.toString() ? `?${params.toString()}` : '';
         const states = await apiFetch(`/api/leads/states${qs}`);
-        states.forEach(s => {
-            const o = document.createElement('option');
-            o.value = s;
-            o.textContent = s;
-            if (s === prev) o.selected = true;
-            stateSel.appendChild(o);
-        });
+        setMsDropdownOptions('leads-state-msdropdown', states.map(s => ({value: s, label: s})));
+        // Drop any previously-selected states no longer valid for the current category filter
+        setMsDropdownValues('leads-state-msdropdown', prev.filter(s => states.includes(s)));
     } catch (e) {
     }
 }
 
 async function onLeadsFilterChange() {
     leadsPage = 1;
-    const cat = document.getElementById('leads-cat-select').value;
-    await reloadLeadsStateOptions(cat);
+    await reloadLeadsStateOptions(getMsDropdownValues('leads-cat-msdropdown'));
     saveLeadsFilters();
     await loadLeads();
 }
@@ -234,24 +344,24 @@ function updateLeadsSortHeaders() {
 }
 
 function getLeadsFilterParams() {
-    const jobId = document.getElementById('leads-job-select').value;
-    const cat = document.getElementById('leads-cat-select').value;
-    const state = document.getElementById('leads-state-select').value;
+    const jobIds = getMsDropdownValues('leads-job-msdropdown');
+    const cats = getMsDropdownValues('leads-cat-msdropdown');
+    const states = getMsDropdownValues('leads-state-msdropdown');
     const search = document.getElementById('leads-search-input').value.trim();
     const completeOnly = document.getElementById('leads-complete-only').checked;
-    const orgType = document.getElementById('leads-org-select').value;
-    const showManual = document.getElementById('leads-show-manual').checked;
+    const orgTypes = getMsDropdownValues('leads-org-msdropdown');
+    const entryType = document.getElementById('leads-entry-type-select').value;
     const reqName = document.getElementById('leads-require-name').checked;
     const reqDesig = document.getElementById('leads-require-designation').checked;
     const reqPhone = document.getElementById('leads-require-phone').checked;
     const params = new URLSearchParams();
-    if (jobId) params.set('job_id', jobId);
-    if (cat) params.set('category', cat);
-    if (state) params.set('state', state);
+    jobIds.forEach(id => params.append('job_id', id));
+    cats.forEach(c => params.append('category', c));
+    states.forEach(s => params.append('state', s));
     if (search) params.set('search', search);
     if (completeOnly) params.set('complete_only', 'true');
-    if (orgType) params.set('org_type', orgType);
-    params.set('show_manual', showManual ? 'true' : 'false');
+    orgTypes.forEach(o => params.append('org_type', o));
+    params.set('entry_type', entryType);
     if (reqName) params.set('require_name', 'true');
     if (reqDesig) params.set('require_designation', 'true');
     if (reqPhone) params.set('require_phone', 'true');
@@ -533,14 +643,18 @@ async function confirmExport() {
     ).map(cb => cb.value);
 
     const params = getLeadsFilterParams();
+    const jobIds = params.getAll('job_id').map(id => parseInt(id));
+    const categories = params.getAll('category');
+    const states = params.getAll('state');
+    const orgTypes = params.getAll('org_type');
     const body = {
-        job_id: params.get('job_id') ? parseInt(params.get('job_id')) : null,
-        category: params.get('category') || null,
-        state: params.get('state') || null,
+        job_ids: jobIds.length ? jobIds : null,
+        categories: categories.length ? categories : null,
+        states: states.length ? states : null,
         search: params.get('search') || null,
         complete_only: params.get('complete_only') === 'true',
-        org_type: params.get('org_type') || null,
-        show_manual: params.get('show_manual') !== 'false',
+        org_types: orgTypes.length ? orgTypes : null,
+        entry_type: params.get('entry_type') || 'both',
         require_name: params.get('require_name') === 'true',
         require_designation: params.get('require_designation') === 'true',
         require_phone: params.get('require_phone') === 'true',

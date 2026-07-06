@@ -22,40 +22,32 @@
             <div class="section-label">Filters</div>
             <div class="form-group">
                 <label>Job</label>
-                <select id="leads-job-select" onchange="onLeadsFilterChange()">
-                    <option value="">All Jobs</option>
-                </select>
+                <div class="ms-dropdown" id="leads-job-msdropdown"></div>
             </div>
             <div class="form-group">
                 <label>Category</label>
-                <select id="leads-cat-select" onchange="onLeadsFilterChange()">
-                    <option value="">All Categories</option>
-                </select>
+                <div class="ms-dropdown" id="leads-cat-msdropdown"></div>
             </div>
             <div class="form-group">
                 <label>State</label>
-                <select id="leads-state-select" onchange="onLeadsFilterChange()">
-                    <option value="">All States</option>
-                </select>
+                <div class="ms-dropdown" id="leads-state-msdropdown"></div>
             </div>
             <div class="form-group">
                 <label>Organization</label>
-                <select id="leads-org-select" onchange="onLeadsFilterChange()">
-                    <option value="">All Organizations</option>
-                </select>
+                <div class="ms-dropdown" id="leads-org-msdropdown"></div>
             </div>
             <div class="form-group">
                 <label>Search</label>
                 <input id="leads-search-input" oninput="debounceLeadsSearch()" placeholder="name, email, designation…"
                        type="text">
             </div>
-            <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:4px;">
-                <input checked id="leads-show-manual" onchange="onLeadsFilterChange()"
-                       style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);"
-                       type="checkbox">
-                <label for="leads-show-manual"
-                       style="margin-bottom:0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:normal;color:var(--text)">Show
-                    manual leads</label>
+            <div class="form-group">
+                <label>Entries</label>
+                <select id="leads-entry-type-select" onchange="onLeadsFilterChange()">
+                    <option value="both">Show both extracted and manual</option>
+                    <option value="extracted">Show only extracted</option>
+                    <option value="manual">Show only manual entries</option>
+                </select>
             </div>
             <div class="form-group">
                 <label>Data Competency</label>

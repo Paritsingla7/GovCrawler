@@ -55,23 +55,25 @@ class LeadMixin:
                 return False
 
     @staticmethod
-    def _apply_lead_filters(q, job_id=None, category=None, state=None,
+    def _apply_lead_filters(q, job_ids=None, categories=None, states=None,
                             search=None, complete_only=False, min_score=None,
-                            org_type=None, show_manual=True, require_name=False,
+                            org_types=None, entry_type="both", require_name=False,
                             require_designation=False, require_phone=False):
         is_manual = Lead.channel_tag == "manual"
-        if job_id is not None:
-            q = q.filter(Lead.job_id == job_id)
-        if not show_manual:
+        if job_ids:
+            q = q.filter(Lead.job_id.in_(job_ids))
+        if entry_type == "manual":
+            q = q.filter(Lead.channel_tag == "manual")
+        elif entry_type == "extracted":
             q = q.filter(or_(Lead.channel_tag.is_(None), Lead.channel_tag != "manual"))
         # Domain-derived filters: manual leads have no domain, so they bypass
         # these rather than being structurally excluded from every filtered view.
-        if category:
-            q = q.filter(or_(is_manual, Domain.category_code == category))
-        if state:
-            q = q.filter(or_(is_manual, Domain.state == state))
-        if org_type:
-            q = q.filter(or_(is_manual, Lead.domain_org_type == org_type))
+        if categories:
+            q = q.filter(or_(is_manual, Domain.category_code.in_(categories)))
+        if states:
+            q = q.filter(or_(is_manual, Domain.state.in_(states)))
+        if org_types:
+            q = q.filter(or_(is_manual, Lead.domain_org_type.in_(org_types)))
         if search:
             q = q.filter(
                 or_(Lead.email.ilike(f"%{search}%"),
@@ -107,11 +109,11 @@ class LeadMixin:
             return q.order_by(Lead.captured_at.desc())
         return q.order_by(column.asc() if ascending else column.desc(), Lead.captured_at.desc())
 
-    def get_leads(self, job_id: int | None = None, category: str = None,
-                  state: str = None, search: str = None, page: int = 1,
+    def get_leads(self, job_ids: list[int] | None = None, categories: list[str] = None,
+                  states: list[str] = None, search: str = None, page: int = 1,
                   limit: int = 100, complete_only: bool = False,
-                  min_score: int | None = None, org_type: str = None,
-                  show_manual: bool = True, require_name: bool = False,
+                  min_score: int | None = None, org_types: list[str] = None,
+                  entry_type: str = "both", require_name: bool = False,
                   require_designation: bool = False, require_phone: bool = False,
                   sort_by: str = None, sort_dir: str = "desc") -> tuple[list[dict], int]:
         with self._Session() as s:
@@ -121,8 +123,8 @@ class LeadMixin:
                 .outerjoin(Domain, Lead.domain_id == Domain.id)
             )
             q = self._apply_lead_filters(
-                q, job_id, category, state, search, complete_only, min_score,
-                org_type=org_type, show_manual=show_manual, require_name=require_name,
+                q, job_ids, categories, states, search, complete_only, min_score,
+                org_types=org_types, entry_type=entry_type, require_name=require_name,
                 require_designation=require_designation, require_phone=require_phone,
             )
 
@@ -148,27 +150,27 @@ class LeadMixin:
                 total,
             )
 
-    def get_lead_ids(self, job_id: int | None = None, category: str = None,
-                     state: str = None, search: str = None,
+    def get_lead_ids(self, job_ids: list[int] | None = None, categories: list[str] = None,
+                     states: list[str] = None, search: str = None,
                      complete_only: bool = False, min_score: int | None = None,
-                     org_type: str = None, show_manual: bool = True,
+                     org_types: list[str] = None, entry_type: str = "both",
                      require_name: bool = False, require_designation: bool = False,
                      require_phone: bool = False) -> list[int]:
         with self._Session() as s:
             q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
             q = self._apply_lead_filters(
-                q, job_id, category, state, search, complete_only, min_score,
-                org_type=org_type, show_manual=show_manual, require_name=require_name,
+                q, job_ids, categories, states, search, complete_only, min_score,
+                org_types=org_types, entry_type=entry_type, require_name=require_name,
                 require_designation=require_designation, require_phone=require_phone,
             )
             return [r[0] for r in q.all()]
 
-    def get_all_leads_for_export(self, job_id: int | None = None,
-                                 category: str = None, state: str = None,
+    def get_all_leads_for_export(self, job_ids: list[int] | None = None,
+                                 categories: list[str] = None, states: list[str] = None,
                                  search: str = None, lead_ids: list[int] = None,
                                  complete_only: bool = False,
-                                 min_score: int | None = None, org_type: str = None,
-                                 show_manual: bool = True, require_name: bool = False,
+                                 min_score: int | None = None, org_types: list[str] = None,
+                                 entry_type: str = "both", require_name: bool = False,
                                  require_designation: bool = False,
                                  require_phone: bool = False) -> list[dict]:
         with self._Session() as s:
@@ -181,8 +183,8 @@ class LeadMixin:
                 q = q.filter(Lead.id.in_(lead_ids))
             else:
                 q = self._apply_lead_filters(
-                    q, job_id, category, state, search, complete_only, min_score,
-                    org_type=org_type, show_manual=show_manual, require_name=require_name,
+                    q, job_ids, categories, states, search, complete_only, min_score,
+                    org_types=org_types, entry_type=entry_type, require_name=require_name,
                     require_designation=require_designation, require_phone=require_phone,
                 )
             rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
@@ -204,15 +206,15 @@ class LeadMixin:
                 for l, dt, cc, ct in rows
             ]
 
-    def get_lead_categories(self, job_id: int | None = None) -> list[dict]:
+    def get_lead_categories(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
             q = (
                 s.query(Domain.category_code, Domain.category_title,
                         func.count(Lead.id).label("count"))
                 .join(Lead, Lead.domain_id == Domain.id)
             )
-            if job_id is not None:
-                q = q.filter(Lead.job_id == job_id)
+            if job_ids:
+                q = q.filter(Lead.job_id.in_(job_ids))
             rows = (
                 q.group_by(Domain.category_code, Domain.category_title)
                 .order_by(func.count(Lead.id).desc())
@@ -225,7 +227,7 @@ class LeadMixin:
                 for r in rows
             ]
 
-    def get_lead_org_types(self, job_id: int | None = None) -> list[dict]:
+    def get_lead_org_types(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
             q = (
                 s.query(Domain.org_type, Domain.org_type_title,
@@ -233,8 +235,8 @@ class LeadMixin:
                 .join(Lead, Lead.domain_id == Domain.id)
                 .filter(Domain.org_type.isnot(None))
             )
-            if job_id is not None:
-                q = q.filter(Lead.job_id == job_id)
+            if job_ids:
+                q = q.filter(Lead.job_id.in_(job_ids))
             rows = (
                 q.group_by(Domain.org_type, Domain.org_type_title)
                 .order_by(func.count(Lead.id).desc())
@@ -247,13 +249,13 @@ class LeadMixin:
                 for r in rows
             ]
 
-    def get_lead_states(self, job_id: int | None = None, category: str = None) -> list[str]:
+    def get_lead_states(self, job_ids: list[int] | None = None, categories: list[str] = None) -> list[str]:
         with self._Session() as s:
             q = s.query(Domain.state).join(Lead, Lead.domain_id == Domain.id).filter(Domain.state.isnot(None))
-            if job_id is not None:
-                q = q.filter(Lead.job_id == job_id)
-            if category:
-                q = q.filter(Domain.category_code == category)
+            if job_ids:
+                q = q.filter(Lead.job_id.in_(job_ids))
+            if categories:
+                q = q.filter(Domain.category_code.in_(categories))
             rows = q.distinct().order_by(Domain.state).all()
             return [r[0] for r in rows if r[0]]
 

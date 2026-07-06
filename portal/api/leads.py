@@ -35,14 +35,14 @@ _ALL_EXPORT_FIELDS = [
 
 
 class ExportLeadsRequest(BaseModel):
-    job_id: int | None = None
-    category: str | None = None
-    state: str | None = None
+    job_ids: list[int] | None = None
+    categories: list[str] | None = None
+    states: list[str] | None = None
     search: str | None = None
     complete_only: bool = False
     min_score: int | None = None
-    org_type: str | None = None
-    show_manual: bool = True
+    org_types: list[str] | None = None
+    entry_type: str = "both"
     require_name: bool = False
     require_designation: bool = False
     require_phone: bool = False
@@ -59,14 +59,14 @@ class LeadUpdate(BaseModel):
 
 @router.get("/api/leads")
 async def get_leads(
-        job_id: int = Query(None),
-        category: str = Query(None),
-        state: str = Query(None),
+        job_id: list[int] = Query(None),
+        category: list[str] = Query(None),
+        state: list[str] = Query(None),
         search: str = Query(None),
         complete_only: bool = Query(False),
         min_score: int = Query(None, ge=0, le=100),
-        org_type: str = Query(None),
-        show_manual: bool = Query(True),
+        org_type: list[str] = Query(None),
+        entry_type: str = Query("both"),
         require_name: bool = Query(False),
         require_designation: bool = Query(False),
         require_phone: bool = Query(False),
@@ -76,9 +76,9 @@ async def get_leads(
         limit: int = Query(100, ge=1, le=500),
         db: Database = Depends(get_db),
 ):
-    leads, total = db.get_leads(job_id=job_id, category=category, state=state, search=search,
+    leads, total = db.get_leads(job_ids=job_id, categories=category, states=state, search=search,
                                 complete_only=complete_only, min_score=min_score,
-                                org_type=org_type, show_manual=show_manual,
+                                org_types=org_type, entry_type=entry_type,
                                 require_name=require_name, require_designation=require_designation,
                                 require_phone=require_phone, sort_by=sort_by, sort_dir=sort_dir,
                                 page=page, limit=limit)
@@ -92,22 +92,22 @@ async def get_leads(
 
 @router.get("/api/leads/ids")
 async def get_lead_ids(
-        job_id: int = Query(None),
-        category: str = Query(None),
-        state: str = Query(None),
+        job_id: list[int] = Query(None),
+        category: list[str] = Query(None),
+        state: list[str] = Query(None),
         search: str = Query(None),
         complete_only: bool = Query(False),
         min_score: int = Query(None, ge=0, le=100),
-        org_type: str = Query(None),
-        show_manual: bool = Query(True),
+        org_type: list[str] = Query(None),
+        entry_type: str = Query("both"),
         require_name: bool = Query(False),
         require_designation: bool = Query(False),
         require_phone: bool = Query(False),
         db: Database = Depends(get_db),
 ):
-    ids = db.get_lead_ids(job_id=job_id, category=category, state=state, search=search,
+    ids = db.get_lead_ids(job_ids=job_id, categories=category, states=state, search=search,
                           complete_only=complete_only, min_score=min_score,
-                          org_type=org_type, show_manual=show_manual,
+                          org_types=org_type, entry_type=entry_type,
                           require_name=require_name, require_designation=require_designation,
                           require_phone=require_phone)
     return {"ids": ids, "total": len(ids)}
@@ -119,32 +119,32 @@ async def get_lead_score_weights(db: Database = Depends(get_db)):
 
 
 @router.get("/api/leads/categories")
-async def get_lead_categories(job_id: int = Query(None), db: Database = Depends(get_db)):
-    return db.get_lead_categories(job_id=job_id)
+async def get_lead_categories(job_id: list[int] = Query(None), db: Database = Depends(get_db)):
+    return db.get_lead_categories(job_ids=job_id)
 
 
 @router.get("/api/leads/states")
-async def get_lead_states(job_id: int = Query(None), category: str = Query(None), db: Database = Depends(get_db)):
-    return db.get_lead_states(job_id=job_id, category=category)
+async def get_lead_states(job_id: list[int] = Query(None), category: list[str] = Query(None), db: Database = Depends(get_db)):
+    return db.get_lead_states(job_ids=job_id, categories=category)
 
 
 @router.get("/api/leads/org-types")
-async def get_lead_org_types(job_id: int = Query(None), db: Database = Depends(get_db)):
-    return db.get_lead_org_types(job_id=job_id)
+async def get_lead_org_types(job_id: list[int] = Query(None), db: Database = Depends(get_db)):
+    return db.get_lead_org_types(job_ids=job_id)
 
 
 @router.post("/api/leads/export")
 async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
     rows = db.get_all_leads_for_export(
-        job_id=req.job_id,
-        category=req.category,
-        state=req.state,
+        job_ids=req.job_ids,
+        categories=req.categories,
+        states=req.states,
         search=req.search,
         lead_ids=req.lead_ids,
         complete_only=req.complete_only,
         min_score=req.min_score,
-        org_type=req.org_type,
-        show_manual=req.show_manual,
+        org_types=req.org_types,
+        entry_type=req.entry_type,
         require_name=req.require_name,
         require_designation=req.require_designation,
         require_phone=req.require_phone,
