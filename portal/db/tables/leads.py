@@ -9,6 +9,7 @@ class Lead(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("crawl_jobs.id"), nullable=False, index=True)
     domain_id = Column(Integer, ForeignKey("domains.id"))
+    snapshot_id = Column(Integer, ForeignKey("crawl_snapshots.id"))
     email = Column(String, nullable=False, index=True)
     person_name = Column(String)
     designation = Column(String)

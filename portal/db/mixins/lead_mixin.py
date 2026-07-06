@@ -1,7 +1,7 @@
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
 
-from ..tables.crawl import Domain
+from ..tables.crawl import CrawlSnapshot
 from ..tables.leads import Lead
 from ...services.lead_scoring import compute_lead_score
 
@@ -10,7 +10,7 @@ class LeadMixin:
     def get_lead_score_weights(self) -> dict:
         return self._lead_score_weights
 
-    def save_lead(self, job_id: int, domain_id: int | None, email: str | None,
+    def save_lead(self, job_id: int, snapshot_id: int | None, email: str | None,
                   person_name: str | None, designation: str | None,
                   department: str | None, source_url: str, source_title: str | None,
                   context_snippet: str, entity_kind: str | None = None,
@@ -25,12 +25,20 @@ class LeadMixin:
             if existing:
                 return False
 
+            # Freeze state/org_type and recover the soft catalog link from the
+            # per-crawl snapshot (immune to later domains-catalog rebuilds).
+            domain_id = None
             domain_state = None
             domain_org_type = None
-            if domain_id:
-                row = s.query(Domain.state, Domain.org_type).filter_by(id=domain_id).first()
-                if row:
-                    domain_state, domain_org_type = row.state, row.org_type
+            if snapshot_id:
+                snap = (
+                    s.query(CrawlSnapshot.source_domain_id, CrawlSnapshot.state,
+                            CrawlSnapshot.org_type)
+                    .filter_by(id=snapshot_id).first()
+                )
+                if snap:
+                    domain_id = snap.source_domain_id
+                    domain_state, domain_org_type = snap.state, snap.org_type
             lead_score = compute_lead_score({
                 "email": email, "phone": phone, "person_name": person_name,
                 "designation": designation,
@@ -38,7 +46,8 @@ class LeadMixin:
                 weights=self._lead_score_weights)
             try:
                 s.add(Lead(
-                    job_id=job_id, domain_id=domain_id, email=email,
+                    job_id=job_id, domain_id=domain_id, snapshot_id=snapshot_id,
+                    email=email,
                     person_name=person_name, designation=designation,
                     department=department, source_url=source_url,
                     source_title=source_title,
@@ -66,14 +75,14 @@ class LeadMixin:
             q = q.filter(Lead.channel_tag == "manual")
         elif entry_type == "extracted":
             q = q.filter(or_(Lead.channel_tag.is_(None), Lead.channel_tag != "manual"))
-        # Domain-derived filters: manual leads have no domain, so they bypass
+        # Snapshot-derived filters: manual leads have no snapshot, so they bypass
         # these rather than being structurally excluded from every filtered view.
         if categories:
-            q = q.filter(or_(is_manual, Domain.category_code.in_(categories)))
+            q = q.filter(or_(is_manual, CrawlSnapshot.category_code.in_(categories)))
         if states:
-            q = q.filter(or_(is_manual, Domain.state.in_(states)))
+            q = q.filter(or_(is_manual, CrawlSnapshot.state.in_(states)))
         if org_types:
-            q = q.filter(or_(is_manual, Lead.domain_org_type.in_(org_types)))
+            q = q.filter(or_(is_manual, CrawlSnapshot.domain_org_type.in_(org_types)))
         if search:
             q = q.filter(
                 or_(Lead.email.ilike(f"%{search}%"),
@@ -118,9 +127,9 @@ class LeadMixin:
                   sort_by: str = None, sort_dir: str = "desc") -> tuple[list[dict], int]:
         with self._Session() as s:
             q = (
-                s.query(Lead, Domain.title.label("domain_title"),
-                        Domain.category_code)
-                .outerjoin(Domain, Lead.domain_id == Domain.id)
+                s.query(Lead, CrawlSnapshot.title.label("domain_title"),
+                        CrawlSnapshot.category_code)
+                .outerjoin(CrawlSnapshot, Lead.snapshot_id == CrawlSnapshot.id)
             )
             q = self._apply_lead_filters(
                 q, job_ids, categories, states, search, complete_only, min_score,
@@ -157,7 +166,7 @@ class LeadMixin:
                      require_name: bool = False, require_designation: bool = False,
                      require_phone: bool = False) -> list[int]:
         with self._Session() as s:
-            q = s.query(Lead.id).outerjoin(Domain, Lead.domain_id == Domain.id)
+            q = s.query(Lead.id).outerjoin(CrawlSnapshot, Lead.snapshot_id == CrawlSnapshot.id)
             q = self._apply_lead_filters(
                 q, job_ids, categories, states, search, complete_only, min_score,
                 org_types=org_types, entry_type=entry_type, require_name=require_name,
@@ -175,9 +184,9 @@ class LeadMixin:
                                  require_phone: bool = False) -> list[dict]:
         with self._Session() as s:
             q = (
-                s.query(Lead, Domain.title.label("domain_title"),
-                        Domain.category_code, Domain.category_title)
-                .outerjoin(Domain, Lead.domain_id == Domain.id)
+                s.query(Lead, CrawlSnapshot.title.label("domain_title"),
+                        CrawlSnapshot.category_code, CrawlSnapshot.category_title)
+                .outerjoin(CrawlSnapshot, Lead.snapshot_id == CrawlSnapshot.id)
             )
             if lead_ids:
                 q = q.filter(Lead.id.in_(lead_ids))
@@ -187,6 +196,8 @@ class LeadMixin:
                     org_types=org_types, entry_type=entry_type, require_name=require_name,
                     require_designation=require_designation, require_phone=require_phone,
                 )
+            # domain_id (soft link, recovered from the snapshot at save time) groups
+            # the same org together across jobs; snapshot_id would split it per-job.
             rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",
@@ -209,14 +220,14 @@ class LeadMixin:
     def get_lead_categories(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
             q = (
-                s.query(Domain.category_code, Domain.category_title,
+                s.query(CrawlSnapshot.category_code, CrawlSnapshot.category_title,
                         func.count(Lead.id).label("count"))
-                .join(Lead, Lead.domain_id == Domain.id)
+                .join(Lead, Lead.snapshot_id == CrawlSnapshot.id)
             )
             if job_ids:
                 q = q.filter(Lead.job_id.in_(job_ids))
             rows = (
-                q.group_by(Domain.category_code, Domain.category_title)
+                q.group_by(CrawlSnapshot.category_code, CrawlSnapshot.category_title)
                 .order_by(func.count(Lead.id).desc())
                 .all()
             )
@@ -230,15 +241,15 @@ class LeadMixin:
     def get_lead_org_types(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
             q = (
-                s.query(Domain.org_type, Domain.org_type_title,
+                s.query(CrawlSnapshot.org_type, CrawlSnapshot.org_type_title,
                         func.count(Lead.id).label("count"))
-                .join(Lead, Lead.domain_id == Domain.id)
-                .filter(Domain.org_type.isnot(None))
+                .join(Lead, Lead.snapshot_id == CrawlSnapshot.id)
+                .filter(CrawlSnapshot.org_type.isnot(None))
             )
             if job_ids:
                 q = q.filter(Lead.job_id.in_(job_ids))
             rows = (
-                q.group_by(Domain.org_type, Domain.org_type_title)
+                q.group_by(CrawlSnapshot.org_type, CrawlSnapshot.org_type_title)
                 .order_by(func.count(Lead.id).desc())
                 .all()
             )
@@ -251,12 +262,12 @@ class LeadMixin:
 
     def get_lead_states(self, job_ids: list[int] | None = None, categories: list[str] = None) -> list[str]:
         with self._Session() as s:
-            q = s.query(Domain.state).join(Lead, Lead.domain_id == Domain.id).filter(Domain.state.isnot(None))
+            q = s.query(CrawlSnapshot.state).join(Lead, Lead.snapshot_id == CrawlSnapshot.id).filter(CrawlSnapshot.state.isnot(None))
             if job_ids:
                 q = q.filter(Lead.job_id.in_(job_ids))
             if categories:
-                q = q.filter(Domain.category_code.in_(categories))
-            rows = q.distinct().order_by(Domain.state).all()
+                q = q.filter(CrawlSnapshot.category_code.in_(categories))
+            rows = q.distinct().order_by(CrawlSnapshot.state).all()
             return [r[0] for r in rows if r[0]]
 
     def bulk_upsert_manual_leads(self, job_id: int, rows: list[dict]) -> tuple[int, int, list[dict]]:

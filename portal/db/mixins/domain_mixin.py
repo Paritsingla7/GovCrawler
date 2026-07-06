@@ -220,6 +220,8 @@ class DomainMixin:
             return [
                 {"id": d.id, "title": d.title, "main_url": d.main_url,
                  "contact_url": d.contact_url, "category_code": d.category_code,
-                 "state": d.state, "org_type": d.org_type}
+                 "category_title": d.category_title, "state": d.state,
+                 "org_type": d.org_type, "org_type_title": d.org_type_title,
+                 "external_id": d.external_id}
                 for d in rows
             ]

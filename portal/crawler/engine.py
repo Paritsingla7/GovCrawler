@@ -349,6 +349,8 @@ class CrawlerEngine:
     async def _process(self, item: _QueueItem, browser_context):
         url = item.url
         depth = item.depth
+        # NB: the seed "domain id" threaded through the queue is actually a
+        # crawl_snapshots.id (a per-crawl frozen snapshot), not a domains.id.
         domain_id = item.domain_id
 
         if depth > self._max_depth_seen:
@@ -397,12 +399,12 @@ class CrawlerEngine:
         self._db.increment_job_progress(self._job_id, new_leads=new_leads,
                                         domain_done=domain_done)
 
-    def _save_leads(self, leads, domain_id, is_seed, depth: int = 0) -> int:
+    def _save_leads(self, leads, snapshot_id, is_seed, depth: int = 0) -> int:
         new_leads = 0
         for lead in leads:
             saved = self._db.save_lead(
                 job_id=self._job_id,
-                domain_id=domain_id,
+                snapshot_id=snapshot_id,
                 email=lead.email,
                 person_name=lead.person_name,
                 designation=lead.designation,

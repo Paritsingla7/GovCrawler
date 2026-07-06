@@ -55,8 +55,12 @@ GovCrawler/
 │       │                                     # smtp_credentials.daily_send_limit,
 │       │                                     # campaign_emails/test_campaign_emails.credential_id
 │       ├── 0009_add_campaign_pause_reason.py # campaigns/test_campaigns.pause_reason
-│       └── 0010_add_lead_score.py            # leads.lead_score (values populated by
-│                                             # Database._recompute_lead_scores(), not the migration)
+│       ├── 0010_add_lead_score.py            # leads.lead_score (values populated by
+│       │                                     # Database._recompute_lead_scores(), not the migration)
+│       └── 0011_add_crawl_snapshots.py       # crawl_snapshots table only — leads.snapshot_id
+│                                             # column + backfill deliberately live in
+│                                             # Database._ensure_columns()/_backfill_snapshots()
+│                                             # instead (see that file's docstring for why)
 │
 ├── GovScraper/                     # Standalone domain-discovery tool (no dependency on
 │   │                               # the portal app/DB; run with GovScraper/ as CWD since
@@ -242,9 +246,9 @@ GovCrawler/
     │   ├── base.py                 # declarative_base() + SQLite WAL pragma listener
     │   ├── enums.py                # CampaignStatus, EmailStatus
     │   ├── database.py             # Database class: __init__, _ensure_columns()
-    │   │                           # (incl. _recompute_lead_scores()), close()
-    │   │                           # Composed from the mixins below — same public API
-    │   │                           # as before, just organized by concern
+    │   │                           # (incl. _recompute_lead_scores(), _backfill_snapshots()),
+    │   │                           # close(). Composed from the mixins below — same public
+    │   │                           # API as before, just organized by concern
     │   ├── migrations.py           # run_migrations(db_uri): stamps a pre-Alembic DB at
     │   │                           # head (first contact), then always runs
     │   │                           # `alembic upgrade head` — called from Database.__init__
@@ -252,7 +256,7 @@ GovCrawler/
     │   │
     │   ├── tables/                 # ORM model definitions
     │   │   ├── __init__.py
-    │   │   ├── crawl.py            # Domain, CrawlJob, VisitedUrl, JobCustomUrl
+    │   │   ├── crawl.py            # Domain, CrawlJob, CrawlSnapshot, VisitedUrl, JobCustomUrl
     │   │   ├── leads.py            # Lead
     │   │   └── outreach.py         # Campaign, CampaignCredential, CampaignEmail,
     │   │                           # EmailTemplate, SMTPCredential, Blacklist,
@@ -268,10 +272,17 @@ GovCrawler/
     │       │                       # finish_job, increment_job_progress, update_job_metrics,
     │       │                       # get_job, list_jobs, _job_dict,
     │       │                       # add_job_custom_urls, get_job_custom_urls
+    │       ├── crawl_snapshot_mixin.py  # create_crawl_snapshot (get-or-insert, per
+    │       │                       # (job_id, source_domain_id)), get_crawl_snapshots(job_id)
+    │       │                       # — freezes seed domain metadata per crawl so leads
+    │       │                       # (and a job's seed view) are immune to domains refreshes
     │       ├── lead_mixin.py       # get_lead_score_weights, save_lead, get_leads,
     │       │                       # get_lead_ids, get_all_leads_for_export,
     │       │                       # get_lead_categories, get_lead_states, get_lead_org_types,
     │       │                       # bulk_upsert_manual_leads, update_lead
+    │       │                       # Domain-derived fields (title, category, state, org_type)
+    │       │                       # are read via CrawlSnapshot (joined on Lead.snapshot_id),
+    │       │                       # not the live domains catalog — see database-schema.md
     │       │                       # _apply_lead_filters(): shared filter-building
     │       │                       # helper used by all three list/export methods
     │       │                       # so pagination totals can never diverge from rows

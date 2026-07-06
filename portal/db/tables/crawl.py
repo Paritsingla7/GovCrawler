@@ -19,6 +19,32 @@ class Domain(Base):
     imported_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
+class CrawlSnapshot(Base):
+    """Per-crawl frozen copy of a seed domain's metadata.
+
+    Leads (and a job's seed view) point here instead of at the mutable `domains`
+    catalog, so refreshing/rebuilding `domains` never alters lead-visible data —
+    the metadata is frozen exactly as it was when the crawl ran.
+    """
+    __tablename__ = "crawl_snapshots"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("crawl_jobs.id"), nullable=False, index=True)
+    source_domain_id = Column(Integer)  # catalog domains.id at crawl time (soft link)
+    external_id = Column(String)
+    category_code = Column(String)
+    category_title = Column(String)
+    state = Column(String)
+    org_type = Column(String)
+    org_type_title = Column(String)
+    title = Column(String)
+    main_url = Column(String)
+    contact_url = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("job_id", "source_domain_id", name="uq_snapshot_job_domain"),
+    )
+
+
 class CrawlJob(Base):
     __tablename__ = "crawl_jobs"
     id = Column(Integer, primary_key=True, autoincrement=True)

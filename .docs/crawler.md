@@ -233,6 +233,16 @@ that chain, not just future recrawls. This is a known, intentionally-deferred in
 supplied (see [api-reference.md](api-reference.md#crawl-jobs)). This is recorded on the job as `source_type`
 (`"domains"` or `"custom_urls"`, [database-schema.md](database-schema.md)).
 
+### Seed snapshots (decoupling leads from the catalog)
+
+For `domains`-sourced jobs, `create_job` calls `db.create_crawl_snapshot(job_id, domain)` for each seed, freezing the
+domain's metadata into the `crawl_snapshots` table, and threads the **snapshot id** (not the catalog `domains.id`)
+through the engine as the seed id. That id lands on `leads.snapshot_id`, and every lead display/filter/enumeration
+reads domain metadata from the snapshot — so a later destructive `domains` refresh (which reassigns `domains.id`)
+never corrupts lead-visible data. `get_job_seeds` and the CLI (`python -m portal crawl`) resolve a job's seeds from
+these snapshots too. See [database-schema.md](database-schema.md) (`crawl_snapshots`). Custom-URL seeds carry no
+domain, so their leads have a null `snapshot_id`.
+
 For `custom_urls`:
 
 - Each URL is trimmed, auto-prefixed with `http://` if it has no scheme, and deduplicated.

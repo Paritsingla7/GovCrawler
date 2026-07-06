@@ -118,10 +118,19 @@ async def cmd_crawl(config: dict, job_id: int):
         seeds = [(url, None) for url in urls]
         engine_config = {**config, "crawler": {**config["crawler"], "target_suffixes": []}}
     else:
-        domain_ids = json.loads(job.get("domain_ids") or "[]")
-        domains = db.get_domains_by_ids(domain_ids)
-        seeds = [(d["contact_url"] or d["main_url"], d["id"])
-                 for d in domains if (d["contact_url"] or d["main_url"])]
+        # Resolve seeds from the frozen per-job snapshots (refresh-immune). The
+        # snapshot id is threaded to the engine and stored on leads.snapshot_id.
+        snaps = db.get_crawl_snapshots(job_id)
+        if not snaps:
+            # Pre-feature job that never produced snapshots: build them now from
+            # the catalog (get-or-insert, idempotent), then re-read.
+            domain_ids = json.loads(job.get("domain_ids") or "[]")
+            for d in db.get_domains_by_ids(domain_ids):
+                if d["contact_url"] or d["main_url"]:
+                    db.create_crawl_snapshot(job_id, d)
+            snaps = db.get_crawl_snapshots(job_id)
+        seeds = [(s["contact_url"] or s["main_url"], s["id"])
+                 for s in snaps if (s["contact_url"] or s["main_url"])]
 
     log.info(f"Running job {job_id} with {len(seeds)} seeds…")
     db.start_job(job_id)

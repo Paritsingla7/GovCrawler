@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from .base import Base
 from .migrations import run_migrations
+from .mixins.crawl_snapshot_mixin import CrawlSnapshotMixin
 from .mixins.domain_mixin import DomainMixin
 from .mixins.job_mixin import JobMixin
 from .mixins.lead_mixin import LeadMixin
@@ -14,7 +15,7 @@ from ..services.lead_scoring import DEFAULT_WEIGHTS, compute_lead_score
 log = logging.getLogger(__name__)
 
 
-class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin):
+class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlMixin, OutreachMixin):
     def __init__(self, config: dict):
         uri = config["database"]["uri"]
         self.engine = create_engine(uri, echo=False, pool_pre_ping=True)
@@ -62,6 +63,7 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
                 ("field_provenance", "TEXT"),
                 ("depth", "INTEGER NOT NULL DEFAULT 0"),
                 ("lead_score", "INTEGER NOT NULL DEFAULT 0"),
+                ("snapshot_id", "INTEGER"),
             ],
             "domains": [
                 ("external_id", "VARCHAR"),
@@ -78,6 +80,8 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
                         log.info(f"Schema: added column {table}.{col_name}")
             if "leads" in inspector.get_table_names():
                 self._recompute_lead_scores(conn)
+                if "crawl_snapshots" in inspector.get_table_names():
+                    self._backfill_snapshots(conn)
             conn.commit()
 
     def _recompute_lead_scores(self, conn):
@@ -105,6 +109,38 @@ class Database(DomainMixin, JobMixin, LeadMixin, VisitedUrlMixin, OutreachMixin)
             conn.execute(text("UPDATE leads SET lead_score = :score WHERE id = :id"),
                          {"score": score, "id": m["id"]})
         log.info(f"Schema: recomputed lead_score for {len(rows)} leads")
+
+    def _backfill_snapshots(self, conn):
+        """One-time: freeze each domain-backed lead's current catalog metadata
+        into a per-(job, domain) crawl_snapshots row, then point the lead at it.
+
+        Runs on every startup but is a cheap no-op once done (the snapshot_id
+        IS NULL guards on both statements naturally stop matching rows after
+        the first successful pass). The extra NOT EXISTS guard on the INSERT
+        protects against a prior partial run having already created some
+        snapshot rows before failing on the UPDATE (a real failure mode seen
+        here — see 0011_add_crawl_snapshots.py). Leads with no domain_id
+        (manual/custom-URL) are left with snapshot_id = NULL, same as before.
+        """
+        conn.execute(text(
+            "INSERT INTO crawl_snapshots "
+            "(job_id, source_domain_id, external_id, category_code, category_title, "
+            " state, org_type, org_type_title, title, main_url, contact_url, created_at) "
+            "SELECT DISTINCT l.job_id, l.domain_id, d.external_id, d.category_code, d.category_title, "
+            " d.state, d.org_type, d.org_type_title, d.title, d.main_url, d.contact_url, CURRENT_TIMESTAMP "
+            "FROM leads l JOIN domains d ON l.domain_id = d.id "
+            "WHERE l.snapshot_id IS NULL AND l.domain_id IS NOT NULL "
+            "AND NOT EXISTS (SELECT 1 FROM crawl_snapshots s "
+            "                WHERE s.job_id = l.job_id AND s.source_domain_id = l.domain_id)"
+        ))
+        result = conn.execute(text(
+            "UPDATE leads SET snapshot_id = ("
+            " SELECT s.id FROM crawl_snapshots s "
+            " WHERE s.job_id = leads.job_id AND s.source_domain_id = leads.domain_id) "
+            "WHERE snapshot_id IS NULL AND domain_id IS NOT NULL"
+        ))
+        if result.rowcount:
+            log.info(f"Schema: backfilled snapshot_id for {result.rowcount} leads")
 
     def close(self):
         self.engine.dispose()

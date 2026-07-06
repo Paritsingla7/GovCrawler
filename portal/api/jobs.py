@@ -10,7 +10,6 @@ Registers routes:
 """
 
 import asyncio
-import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
@@ -18,7 +17,7 @@ from urllib.parse import urlsplit
 
 from .deps import get_active_tasks, get_browser, get_config as get_app_config, get_db
 from ..crawler.engine import CrawlerEngine
-from ..db import CrawlJob, Database
+from ..db import Database
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +124,10 @@ async def create_job(
         for d in domains:
             url = d["contact_url"] or d["main_url"]
             if url:
-                seeds.append((url, d["id"]))
+                # Freeze this seed's metadata into a per-job snapshot and thread
+                # the snapshot id (not the mutable catalog domain id) downstream.
+                snap_id = db.create_crawl_snapshot(job_id, d)
+                seeds.append((url, snap_id))
 
         if not seeds:
             db.finish_job(job_id, status="failed",
@@ -166,17 +168,17 @@ async def get_job_seeds(job_id: int, db: Database = Depends(get_db)):
     if job["source_type"] == "custom_urls":
         return db.get_job_custom_urls(job_id)
 
-    # In CrawlJob, domain_ids is stored as JSON list[int].
-    # Since db.get_job doesn't include it in _job_dict, we can fetch it directly from the DB here
-    with db._Session() as s:
-        j = s.query(CrawlJob).filter_by(id=job_id).first()
-        if not j or not j.domain_ids:
-            return []
-        try:
-            ids = json.loads(j.domain_ids)
-            return db.get_domains_by_ids(ids)
-        except Exception:
-            return []
+    # Resolve seeds from the frozen per-job snapshots, not the mutable catalog,
+    # so the seed view survives a domains refresh. `id` is the original catalog
+    # domain id (source_domain_id) so "Use same seeds" reposts domain_ids as
+    # before; the displayed metadata comes from the frozen snapshot.
+    return [
+        {"id": s["source_domain_id"], "title": s["title"],
+         "main_url": s["main_url"], "contact_url": s["contact_url"],
+         "category_code": s["category_code"], "state": s["state"],
+         "org_type": s["org_type"]}
+        for s in db.get_crawl_snapshots(job_id)
+    ]
 
 
 def cancel_job_if_running(job_id: int, db: Database, active_tasks: dict[int, asyncio.Task]) -> bool:

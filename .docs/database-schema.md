@@ -1,8 +1,8 @@
 # Database Schema
 
 Tables are defined as SQLAlchemy ORM models under [`portal/db/tables/`](../portal/db/tables/): `crawl.py` (Domain,
-CrawlJob, VisitedUrl, JobCustomUrl), `leads.py` (Lead), and `outreach.py` (Campaign, CampaignEmail, EmailTemplate,
-SMTPCredential, Blacklist, TestCampaign, TestCampaignEmail, CampaignCredential). Enums live in
+CrawlJob, CrawlSnapshot, VisitedUrl, JobCustomUrl), `leads.py` (Lead), and `outreach.py` (Campaign, CampaignEmail,
+EmailTemplate, SMTPCredential, Blacklist, TestCampaign, TestCampaignEmail, CampaignCredential). Enums live in
 [`portal/db/enums.py`](../portal/db/enums.py). The `Database` wrapper class in
 [`portal/db/database.py`](../portal/db/database.py) provides all data-access methods — its ~50 methods are composed
 from mixins under [`portal/db/mixins/`](../portal/db/mixins/), grouped by concern (domain, job, lead, visited-url,
@@ -123,32 +123,61 @@ Ad-hoc seed URLs for a `custom_urls`-sourced crawl job (an alternative to select
 
 ---
 
+### `crawl_snapshots`
+
+Per-crawl **frozen copy** of a seed domain's metadata. Leads (and a job's seed view) point here instead of at the
+mutable `domains` catalog, so refreshing/rebuilding `domains` (which reassigns `domains.id`) never alters
+lead-visible data — the metadata is frozen exactly as it was when the crawl ran.
+
+| Column             | Type       | Notes                                                       |
+|--------------------|------------|-------------------------------------------------------------|
+| `id`               | Integer PK | Auto-increment; threaded through the crawler as the seed id |
+| `job_id`           | Integer FK | → `crawl_jobs.id` — indexed                                 |
+| `source_domain_id` | Integer    | Catalog `domains.id` at crawl time (soft link, nullable)    |
+| `external_id`      | String     | Frozen from the domain                                      |
+| `category_code`    | String     | Frozen                                                      |
+| `category_title`   | String     | Frozen                                                      |
+| `state`            | String     | Frozen                                                      |
+| `org_type`         | String     | Frozen                                                      |
+| `org_type_title`   | String     | Frozen                                                      |
+| `title`            | String     | Frozen                                                      |
+| `main_url`         | String     | Frozen                                                      |
+| `contact_url`      | String     | Frozen                                                      |
+| `created_at`       | DateTime   | UTC                                                         |
+
+**Unique constraint:** `(job_id, source_domain_id)`. `create_crawl_snapshot()` is **get-or-insert** — an existing
+row for a job+domain is returned unchanged, never overwritten, so leads captured earlier stay frozen. Snapshots are
+created at job-creation time (`POST /api/jobs`) and read back by both the crawler and `GET /api/jobs/{id}/seeds`.
+
+---
+
 ### `leads`
 
 Extracted contact records.
 
-| Column             | Type       | Notes                                                                                                 |
-|--------------------|------------|-------------------------------------------------------------------------------------------------------|
-| `id`               | Integer PK | Auto-increment                                                                                        |
-| `job_id`           | Integer FK | → `crawl_jobs.id` — indexed                                                                           |
-| `domain_id`        | Integer FK | → `domains.id` (nullable — null for manually-imported leads)                                          |
-| `email`            | String     | Lowercase, indexed                                                                                    |
-| `person_name`      | String     | Extracted or user-edited (nullable)                                                                   |
-| `designation`      | String     | e.g. "Secretary", "Director" (nullable)                                                               |
-| `department`       | String     | e.g. "Ministry of Finance" (nullable)                                                                 |
-| `source_url`       | String     | Page the lead was extracted from                                                                      |
-| `source_title`     | String     | `<title>` of that page (nullable)                                                                     |
-| `context_snippet`  | Text       | ±200 chars around the email (nullable)                                                                |
-| `domain_state`     | String     | Denormalized from domain at insert time                                                               |
-| `domain_org_type`  | String     | Denormalized from domain at insert time                                                               |
-| `entity_kind`      | String     | Nullable; extraction classification                                                                   |
-| `phone`            | String     | Nullable; extracted phone number                                                                      |
-| `channel_tag`      | String     | Nullable; `"manual"` for CSV-imported leads, else extraction-set                                      |
-| `confidence_band`  | String     | Nullable; email provenance tier — see `extraction.confidence` in [configuration.md](configuration.md) |
-| `field_provenance` | Text       | Nullable; detail on where each field came from                                                        |
-| `lead_score`       | Integer    | NOT NULL, default 0 — see "Lead Scoring" below                                                        |
-| `depth`            | Integer    | NOT NULL, default 0 — crawl depth the lead was found at                                               |
-| `captured_at`      | DateTime   | UTC                                                                                                   |
+| Column             | Type       | Notes                                                                                                                                                                                           |
+|--------------------|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `id`               | Integer PK | Auto-increment                                                                                                                                                                                  |
+| `job_id`           | Integer FK | → `crawl_jobs.id` — indexed                                                                                                                                                                     |
+| `snapshot_id`      | Integer FK | → `crawl_snapshots.id` (nullable). **Source of all domain-derived display/filter fields** — immune to catalog refreshes. Null for manual/custom-URL leads.                                      |
+| `domain_id`        | Integer FK | → `domains.id` (nullable). Soft historical link only; set from the snapshot's `source_domain_id`. No longer used for lead display, so a value that dangles after a catalog refresh is harmless. |
+| `email`            | String     | Lowercase, indexed                                                                                                                                                                              |
+| `person_name`      | String     | Extracted or user-edited (nullable)                                                                                                                                                             |
+| `designation`      | String     | e.g. "Secretary", "Director" (nullable)                                                                                                                                                         |
+| `department`       | String     | e.g. "Ministry of Finance" (nullable)                                                                                                                                                           |
+| `source_url`       | String     | Page the lead was extracted from                                                                                                                                                                |
+| `source_title`     | String     | `<title>` of that page (nullable)                                                                                                                                                               |
+| `context_snippet`  | Text       | ±200 chars around the email (nullable)                                                                                                                                                          |
+| `domain_state`     | String     | Denormalized from domain at insert time                                                                                                                                                         |
+| `domain_org_type`  | String     | Denormalized from domain at insert time                                                                                                                                                         |
+| `entity_kind`      | String     | Nullable; extraction classification                                                                                                                                                             |
+| `phone`            | String     | Nullable; extracted phone number                                                                                                                                                                |
+| `channel_tag`      | String     | Nullable; `"manual"` for CSV-imported leads, else extraction-set                                                                                                                                |
+| `confidence_band`  | String     | Nullable; email provenance tier — see `extraction.confidence` in [configuration.md](configuration.md)                                                                                           |
+| `field_provenance` | Text       | Nullable; detail on where each field came from                                                                                                                                                  |
+| `lead_score`       | Integer    | NOT NULL, default 0 — see "Lead Scoring" below                                                                                                                                                  |
+| `depth`            | Integer    | NOT NULL, default 0 — crawl depth the lead was found at                                                                                                                                         |
+| `captured_at`      | DateTime   | UTC                                                                                                                                                                                             |
 
 **Unique constraint:** `(job_id, email)` — an email is stored at most once per job. Global dedup (across jobs) is
 enforced at the `email` level in `save_lead()`.
@@ -322,25 +351,25 @@ Individual staged emails for a test campaign.
 ## Entity Relationship Summary
 
 ```
-domains ──────────────────────────────────┐
-    │                                     │
-    │ (domain_ids JSON, or via            │
-    │  job_custom_urls for custom_urls)   │
-    ▼                                     ▼
-crawl_jobs ──────┬────────────────┐   leads ─────────────────┐
-    │            │                │                          │
-    │ (job_id)   │ (job_id)       │                          │ (lead_id FK)
-    ▼            ▼                                            ▼
-visited_urls  job_custom_urls                        campaign_emails ─────┐
-                                                            │              │ (credential_id)
-                                                            ▼              │
-                                                        campaigns ── email_templates
-                                                         │      │          │
-                                        (campaign_credentials)  │          │
-                                                         │      ▼          ▼
-                                                         └─ smtp_credentials
-                                                                │
-                                                            blacklist
+domains ── (domain_ids JSON selection record) ──▶ crawl_jobs
+    │                                                 │ (create_job snapshots each seed)
+    │ (copied at crawl time)                          ▼
+    └──────────────────────────────────────▶ crawl_snapshots ──┐
+                                                    ▲           │ (snapshot_id FK — source of
+crawl_jobs ──────┬────────────────┐   leads ───────┘           │  all domain-derived fields)
+    │            │                │       │                     │
+    │ (job_id)   │ (job_id)       │       │ (lead_id FK)        │
+    ▼            ▼                │       ▼                     │
+visited_urls  job_custom_urls     │  campaign_emails ─────┐     │
+                                  │       │              │ (credential_id)
+        (leads.domain_id → domains.id     ▼              │
+         is a soft link only)         campaigns ── email_templates
+                                       │      │          │
+                      (campaign_credentials)  │          │
+                                       │      ▼          ▼
+                                       └─ smtp_credentials
+                                              │
+                                          blacklist
 ```
 
 ---
@@ -380,26 +409,36 @@ for each method call.
 
 ### Lead Methods — `portal/db/mixins/lead_mixin.py`
 
-| Method                                   | Description                                                                |
-|------------------------------------------|----------------------------------------------------------------------------|
-| `get_lead_score_weights()`               | Returns the active `lead_score.weights` dict                               |
-| `save_lead(...)`                         | Insert with global email dedup; computes `lead_score`; returns bool        |
-| `get_leads(...)`                         | Paginated `(list[dict], total)` with join to domains                       |
-| `get_lead_ids(...)`                      | All matching IDs                                                           |
-| `get_all_leads_for_export(...)`          | Full rows for CSV export                                                   |
-| `get_lead_categories(job_id)`            | Category counts for leads                                                  |
-| `get_lead_states(job_id, category)`      | Distinct states                                                            |
-| `get_lead_org_types(job_id)`             | Organization-type counts for leads (leads-scoped, unlike `/api/org-types`) |
-| `bulk_upsert_manual_leads(job_id, rows)` | CSV-import manual leads (`channel_tag="manual"`, score forced to 0)        |
-| `update_lead(lead_id, updates)`          | Edit name/designation/department/state; recomputes `lead_score`            |
+| Method                                   | Description                                                                                                                                               |
+|------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `get_lead_score_weights()`               | Returns the active `lead_score.weights` dict                                                                                                              |
+| `save_lead(...)`                         | Insert with global email dedup; takes `snapshot_id`, freezes state/org_type + recovers `domain_id` from the snapshot; computes `lead_score`; returns bool |
+| `get_leads(...)`                         | Paginated `(list[dict], total)` with join to `crawl_snapshots`                                                                                            |
+| `get_lead_ids(...)`                      | All matching IDs                                                                                                                                          |
+| `get_all_leads_for_export(...)`          | Full rows for CSV export                                                                                                                                  |
+| `get_lead_categories(job_id)`            | Category counts for leads                                                                                                                                 |
+| `get_lead_states(job_id, category)`      | Distinct states                                                                                                                                           |
+| `get_lead_org_types(job_id)`             | Organization-type counts for leads (leads-scoped, unlike `/api/org-types`)                                                                                |
+| `bulk_upsert_manual_leads(job_id, rows)` | CSV-import manual leads (`channel_tag="manual"`, score forced to 0)                                                                                       |
+| `update_lead(lead_id, updates)`          | Edit name/designation/department/state; recomputes `lead_score`                                                                                           |
 
 `get_leads`, `get_lead_ids`, and `get_all_leads_for_export` all build their filter set through a shared
 `_apply_lead_filters()` static helper (`job_id`, `category`, `state`, `search`, `complete_only`, `min_score`,
 `org_type`, `show_manual`, `require_name`, `require_designation`, `require_phone`), so pagination totals can never
 diverge from the row query. `get_leads` additionally sorts through a separate `_apply_lead_sort()` helper
 (`sort_by` ∈ `score`/`contact`/`name`, `sort_dir`) — sorting is deliberately kept out of the filter helper so the
-two concerns don't tangle. `category`/`state`/`org_type` filters are bypassed for manual leads (they have no
-`domain_id`) when `show_manual` is true; `min_score` never excludes manual leads (they're always 0 by design).
+two concerns don't tangle. `category`/`state`/`org_type` filters all read from the joined `crawl_snapshots` row (
+previously `category`/`state`
+came from a live `domains` join and `org_type` from the frozen `Lead` column — now unified). They are bypassed for
+manual leads (which have no snapshot) when `show_manual` is true; `min_score` never excludes manual leads (they're
+always 0 by design).
+
+### Crawl Snapshot Methods — `portal/db/mixins/crawl_snapshot_mixin.py`
+
+| Method                             | Description                                                                                   |
+|------------------------------------|-----------------------------------------------------------------------------------------------|
+| `create_crawl_snapshot(job_id, d)` | Get-or-insert a frozen seed snapshot on `(job_id, source_domain_id)`; returns snapshot id     |
+| `get_crawl_snapshots(job_id)`      | All frozen seed snapshots for a job (raw rows: snapshot `id` + `source_domain_id` + metadata) |
 
 `get_leads`, `get_lead_ids`, and `get_all_leads_for_export` all build their filter set through a shared
 `_apply_lead_filters()` static helper, so pagination totals can never diverge from the row query (a duplicated
