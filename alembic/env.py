@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from logging.config import fileConfig
@@ -10,8 +11,14 @@ from alembic import context
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
-if config.config_file_name is not None:
+# This line sets up loggers basically — but only when nothing has configured
+# logging yet (bare `alembic` CLI usage). At runtime, `run_migrations()` is
+# called from `Database.__init__()` on every server start, after
+# `portal.main` has already attached the app's own FileHandler to the root
+# logger; fileConfig()'s default disable_existing_loggers=True would silently
+# rip that handler off root and disable every already-created `portal.*`
+# logger, so skip it whenever the root logger is already configured.
+if config.config_file_name is not None and not logging.getLogger().hasHandlers():
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here

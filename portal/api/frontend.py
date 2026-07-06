@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .deps import get_db
 from ..db import Database
+from ..paths import LOG_FILE_PATH
 
 router = APIRouter(tags=["frontend"])
 
@@ -64,7 +65,7 @@ async def user_guide_page(request: Request):
 
 @router.get("/api/logs")
 async def get_logs():
-    log_file = Path("portal/data/portal.log")
+    log_file = LOG_FILE_PATH
     if not log_file.exists():
         return {"logs": "Log file not found."}
     try:
