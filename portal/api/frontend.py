@@ -29,37 +29,37 @@ _templates = Jinja2Templates(directory=str(_frontend_dir))
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     template = _templates.get_template("index.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "dashboard"}))
 
 
 @router.get("/leads", response_class=HTMLResponse)
 async def leads_page(request: Request):
     template = _templates.get_template("leads.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "leads"}))
 
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     template = _templates.get_template("settings.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "settings"}))
 
 
 @router.get("/test-campaign", response_class=HTMLResponse)
 async def test_campaign_page(request: Request):
     template = _templates.get_template("test-campaign.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "test-campaign"}))
 
 
 @router.get("/campaigns", response_class=HTMLResponse)
 async def campaigns_page(request: Request):
     template = _templates.get_template("campaigns.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "campaigns"}))
 
 
 @router.get("/user-guide", response_class=HTMLResponse)
 async def user_guide_page(request: Request):
     template = _templates.get_template("user-guide.html")
-    return HTMLResponse(template.render({"request": request}))
+    return HTMLResponse(template.render({"request": request, "active_page": "user-guide"}))
 
 
 @router.get("/api/logs")

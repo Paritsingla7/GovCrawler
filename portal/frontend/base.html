@@ -19,6 +19,19 @@
         <div style="display:flex;">Gov<span>Crawler</span></div>
     </div>
     <div class="header-right">
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'dashboard' }}"
+                onclick="window.location.href='/'">🏠 Dashboard
+        </button>
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'leads' }}"
+                onclick="window.location.href='/leads'">📋 Leads
+        </button>
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'campaigns' }}"
+                onclick="window.location.href='/campaigns'">📣 Campaigns
+        </button>
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'settings' }}"
+                onclick="openConfig()">⚙️ Settings
+        </button>
+        <button class="btn-secondary btn-sm" onclick="openLogs()">📃 View Logs</button>
         {% block header_actions %}{% endblock %}
         <a class="btn-icon" href="/user-guide"
            style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"
@@ -27,6 +40,11 @@
 </header>
 
 {% block content %}{% endblock %}
+
+<footer>
+    <span>GovCrawler Portal</span>
+    <a href="/user-guide">Help</a>
+</footer>
 
 <!-- Bottom Dock -->
 <div id="bottom-dock" style="display:none;">
