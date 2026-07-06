@@ -195,12 +195,32 @@ header {
     color: var(--muted);
 }
 
+.header-right .btn-secondary.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+/* ── Footer ── */
+footer {
+    height: 36px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 /* ── Layout ── */
 .layout {
     display: flex;
     flex: 1;
     overflow: hidden;
-    height: calc(100vh - 52px);
+    height: calc(100vh - 52px - 36px);
 }
 
 /* ── Sidebar ── */
