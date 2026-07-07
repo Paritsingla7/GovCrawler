@@ -416,22 +416,24 @@ for each method call.
 | `get_leads(...)`                         | Paginated `(list[dict], total)` with join to `crawl_snapshots`                                                                                            |
 | `get_lead_ids(...)`                      | All matching IDs                                                                                                                                          |
 | `get_all_leads_for_export(...)`          | Full rows for CSV export                                                                                                                                  |
-| `get_lead_categories(job_id)`            | Category counts for leads                                                                                                                                 |
-| `get_lead_states(job_id, category)`      | Distinct states                                                                                                                                           |
-| `get_lead_org_types(job_id)`             | Organization-type counts for leads (leads-scoped, unlike `/api/org-types`)                                                                                |
+| `get_lead_categories(job_ids)`           | Category counts for leads (`job_ids` is a list — multi-select)                                                                                            |
+| `get_lead_states(job_ids, categories)`   | Distinct states (both params are lists)                                                                                                                   |
+| `get_lead_org_types(job_ids)`            | Organization-type counts for leads (leads-scoped, unlike `/api/org-types`)                                                                                |
 | `bulk_upsert_manual_leads(job_id, rows)` | CSV-import manual leads (`channel_tag="manual"`, score forced to 0)                                                                                       |
 | `update_lead(lead_id, updates)`          | Edit name/designation/department/state; recomputes `lead_score`                                                                                           |
 
 `get_leads`, `get_lead_ids`, and `get_all_leads_for_export` all build their filter set through a shared
-`_apply_lead_filters()` static helper (`job_id`, `category`, `state`, `search`, `complete_only`, `min_score`,
-`org_type`, `show_manual`, `require_name`, `require_designation`, `require_phone`), so pagination totals can never
-diverge from the row query. `get_leads` additionally sorts through a separate `_apply_lead_sort()` helper
-(`sort_by` ∈ `score`/`contact`/`name`, `sort_dir`) — sorting is deliberately kept out of the filter helper so the
-two concerns don't tangle. `category`/`state`/`org_type` filters all read from the joined `crawl_snapshots` row (
-previously `category`/`state`
-came from a live `domains` join and `org_type` from the frozen `Lead` column — now unified). They are bypassed for
-manual leads (which have no snapshot) when `show_manual` is true; `min_score` never excludes manual leads (they're
-always 0 by design).
+`_apply_lead_filters()` static helper (`job_ids`, `categories`, `states`, `search`, `complete_only`, `min_score`,
+`org_types`, `entry_type`, `require_name`, `require_designation`, `require_phone`), so pagination totals can never
+diverge from the row query. `job_ids`/`categories`/`states`/`org_types` are all multi-select (lists) — the frontend's
+job/category/state/org filters on the leads page are checkbox dropdowns, not single-selects. `get_leads` additionally
+sorts through a separate `_apply_lead_sort()` helper (`sort_by` ∈ `score`/`contact`/`name`, `sort_dir`) — sorting is
+deliberately kept out of the filter helper so the two concerns don't tangle. `category`/`state`/`org_type` filters all
+read from the joined `crawl_snapshots` row (previously `category`/`state` came from a live `domains` join and
+`org_type` from the frozen `Lead` column — now unified). They are bypassed for manual leads (which have no snapshot)
+unless `entry_type="manual"` narrows the query to manual leads only; `entry_type` ∈ `manual`/`extracted`/`both`
+(replacing the older boolean `show_manual` flag) selects which of `channel_tag == "manual"` vs everything else to
+include. `min_score` never excludes manual leads (they're always 0 by design).
 
 ### Crawl Snapshot Methods — `portal/db/mixins/crawl_snapshot_mixin.py`
 

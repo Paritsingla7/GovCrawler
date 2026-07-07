@@ -75,6 +75,8 @@ Paginated domain list with filters.
 | `state` | string | — | Filter by state name |
 | `org_type` | string | — | Filter by org type code |
 | `search` | string | — | Search in title or URL |
+| `sort_by` | string | — | Only `crawlable` is supported — groups domains with a `main_url` set ahead of (or behind) those without one |
+| `sort_dir` | string | desc | `asc` or `desc` |
 | `page` | int | 1 | Page number |
 | `limit` | int | 50 | Max 200 |
 
@@ -313,14 +315,14 @@ Paginated leads with filters and sorting.
 **Query params:**
 | Param | Type | Default | Description |
 |---|---|---|---|
-| `job_id` | int | — | Filter to a specific job |
-| `category` | string | — | Filter by domain category (bypassed for manual leads if `show_manual`) |
-| `state` | string | — | Filter by domain state (bypassed for manual leads if `show_manual`) |
-| `org_type` | string | — | Filter by domain org type (bypassed for manual leads if `show_manual`) |
+| `job_id` | int, repeatable | — | Filter to one or more jobs (multi-select — repeat the param, e.g. `?job_id=1&job_id=2`) |
+| `category` | string, repeatable | — | Filter by domain category (manual leads always bypass this — see `entry_type`) |
+| `state` | string, repeatable | — | Filter by domain state (manual leads always bypass this — see `entry_type`) |
+| `org_type` | string, repeatable | — | Filter by domain org type (manual leads always bypass this — see `entry_type`) |
 | `search` | string | — | Search email, name, designation, department |
 | `complete_only` | bool | false | Only leads with name + designation + department filled |
 | `min_score` | int | — | Minimum `lead_score` (0-100); never excludes manual leads (always score 0) |
-| `show_manual` | bool | true | Include CSV-imported manual leads (`channel_tag == "manual"`) |
+| `entry_type` | string | both | `manual` (CSV-imported only), `extracted` (crawled only), or `both` |
 | `require_name` | bool | false | Only leads with `person_name` set |
 | `require_designation` | bool | false | Only leads with `designation` set |
 | `require_phone` | bool | false | Only leads with `phone` set |
@@ -366,7 +368,7 @@ the frontend's score-breakdown tooltip.
 
 Lead counts grouped by category.
 
-**Query params:** `job_id` (optional)
+**Query params:** `job_id` (optional, repeatable)
 
 ---
 
@@ -374,7 +376,7 @@ Lead counts grouped by category.
 
 Distinct states with leads.
 
-**Query params:** `job_id` (optional), `category` (optional)
+**Query params:** `job_id` (optional, repeatable), `category` (optional, repeatable)
 
 ---
 
@@ -383,7 +385,7 @@ Distinct states with leads.
 Organization-type counts for leads — like `GET /api/org-types` but scoped to leads that actually exist (inner-joined
 to `domains`), not every domain in the directory.
 
-**Query params:** `job_id` (optional)
+**Query params:** `job_id` (optional, repeatable)
 
 **Response:** `[{ "code": "dept", "title": "Departments", "count": 42 }]`
 
@@ -416,26 +418,28 @@ export and is not accepted here).
 
 ```json
 {
-  "job_id": 42,
-  "category": null,
-  "state": null,
+  "job_ids": [42],
+  "categories": null,
+  "states": null,
   "search": null,
   "complete_only": false,
   "min_score": null,
-  "org_type": null,
-  "show_manual": true,
+  "org_types": null,
+  "entry_type": "both",
   "require_name": false,
   "require_designation": false,
   "require_phone": false,
   "lead_ids": [1, 2, 3],
-  "fields": ["email", "person_name", "designation", "source_url"]
+  "fields": ["email", "person_name", "designation", "phone", "source_url"]
 }
 ```
 
 `lead_ids` and `fields` are optional. `email` is always included. If `fields` is omitted, all fields are exported.
+Note the plural, list-typed filter fields (`job_ids`, `categories`, `states`, `org_types`) — these mirror the
+multi-select filters on `GET /api/leads` and are NOT the same shape as that endpoint's repeatable query params.
 
 **Available fields:**
-`email, person_name, designation, department, domain_title, domain_state, domain_org_type, category_title, source_url, source_title, context_snippet, lead_score, depth, captured_at`
+`email, person_name, designation, department, phone, domain_title, domain_state, domain_org_type, category_title, source_url, source_title, context_snippet, lead_score, depth, captured_at`
 
 **Response:** `text/csv` download.
 
