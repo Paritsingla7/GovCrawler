@@ -1,9 +1,24 @@
+import json
+
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from ..tables.crawl import CrawlSnapshot
 from ..tables.leads import Lead
 from ...services.lead_scoring import compute_lead_score
+
+
+def _department_is_url_fallback(field_provenance: str | None) -> bool:
+    """True when the parser's only source for `department` was the bare
+    URL subdomain slug (e.g. "seepz"), not anything found on the page —
+    see parser.py's `_score` stage, which tags this as "url_default"."""
+    if not field_provenance:
+        return False
+    try:
+        provenance = json.loads(field_provenance)
+    except (TypeError, ValueError):
+        return False
+    return provenance.get("department") == "url_default"
 
 
 class LeadMixin:
@@ -33,12 +48,18 @@ class LeadMixin:
             if snapshot_id:
                 snap = (
                     s.query(CrawlSnapshot.source_domain_id, CrawlSnapshot.state,
-                            CrawlSnapshot.org_type)
+                            CrawlSnapshot.org_type, CrawlSnapshot.title)
                     .filter_by(id=snapshot_id).first()
                 )
                 if snap:
                     domain_id = snap.source_domain_id
                     domain_state, domain_org_type = snap.state, snap.org_type
+                    # A department that came only from the URL's bare
+                    # subdomain slug is a worse label than the org's actual
+                    # title — swap it in when nothing on the page itself
+                    # supplied a department.
+                    if snap.title and _department_is_url_fallback(field_provenance):
+                        department = snap.title
             lead_score = compute_lead_score({
                 "email": email, "phone": phone, "person_name": person_name,
                 "designation": designation,

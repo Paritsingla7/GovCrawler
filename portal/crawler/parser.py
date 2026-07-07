@@ -16,13 +16,31 @@ import logging
 import re
 from bs4 import BeautifulSoup, Tag
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 log = logging.getLogger(__name__)
 
 # Rung order (higher index = higher precedence)
 _RUNG_ORDER = ["proximity_text", "table_block", "microdata", "mailto_tel"]
 _RUNG_RANK = {r: i for i, r in enumerate(_RUNG_ORDER)}
+
+# Hard bounds on table-derived text — a degenerate/layout table (a single
+# cell dumping an entire document) must never turn into an unbounded regex
+# scan or an unbounded field value.
+_MAX_CELL_CHARS = 500
+_MAX_ROW_SCAN_CHARS = 5000
+
+# mailto:/microdata email cleanup
+_MAX_RECIPIENTS_PER_HREF = 5
+_EMAIL_STRIP_CHARS = " \t\r\n,;<>'\""
+
+# A keyword hit only tells us WHERE a designation starts, never how long it
+# is — stop at the first sign the raw text ran past the title into embedded
+# contact info (email, a phone label, a long digit run, or a line break).
+_DESIGNATION_STOP_RE = re.compile(
+    r"[@\n]|\b(?:e-?mail|phone|tel(?:ephone)?)\b\s*[:\-]?|\d{5,}",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -177,8 +195,8 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
     for a in soup.find_all("a", href=True):
         href = a.get("href", "")
         if href.startswith("mailto:"):
-            addr = href[7:].split("?")[0].strip().lower().strip(".")
-            if addr and email_re.match(addr):
+            raw_addr = href[7:].split("?")[0]
+            for addr in _clean_email_candidates(raw_addr, email_re):
                 candidates.append({
                     "address": addr,
                     "rung": "mailto_tel",
@@ -203,8 +221,7 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
         prop = el.get("itemprop", "").lower()
         if prop == "email":
             content = el.get("content") or el.get_text(strip=True)
-            addr = content.lower().strip().strip(".")
-            if addr and email_re.match(addr):
+            for addr in _clean_email_candidates(content, email_re):
                 candidates.append({
                     "address": addr,
                     "rung": "microdata",
@@ -237,6 +254,72 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
     return candidates
 
 
+def _clean_email_candidates(raw: str, email_re: re.Pattern) -> list[str]:
+    """Turns one raw mailto-href/microdata-content string into zero or more
+    clean, individually-valid email addresses. Handles URL-encoded artifacts
+    (%20 etc.), multiple comma-joined recipients (RFC 6068 allows a mailto:
+    href to list several), and stray punctuation a browser would never emit
+    but a hand-written page sometimes does. Validates each candidate with a
+    full-string match — a remainder that's still broken after cleanup (a
+    doubled domain, an embedded space, an empty local part) is dropped
+    rather than stored as a broken "email"."""
+    if not raw:
+        return []
+    decoded = unquote(raw)
+    pieces = decoded.split(",")[:_MAX_RECIPIENTS_PER_HREF]
+    cleaned: list[str] = []
+    for piece in pieces:
+        candidate = piece.strip(_EMAIL_STRIP_CHARS).replace(" ", "").lower().strip(".")
+        if candidate and email_re.fullmatch(candidate):
+            cleaned.append(candidate)
+    return cleaned
+
+
+def _dedupe_col_map(col: dict) -> dict:
+    """A layout/degenerate table can header-match more than one field role
+    to the same cell index (e.g. one generic header column matching several
+    keyword lists). Keep the highest-priority role's claim on that index and
+    null the rest, so name/designation/department never silently copy the
+    same cell verbatim."""
+    seen: set[int] = set()
+    deduped = {}
+    for key in ("name", "designation", "department", "email"):
+        idx = col.get(key)
+        if idx is not None and idx in seen:
+            deduped[key] = None
+        else:
+            deduped[key] = idx
+            if idx is not None:
+                seen.add(idx)
+    return deduped
+
+
+def _truncate_at_known_suffix(address: str, valid_suffixes: tuple) -> str:
+    """Free-text scanning has no way to know where a real domain ends —
+    `alltimeplastics.com` immediately followed by unrelated glued text with
+    no separator (`ajay.sawale`) is syntactically just as valid a 3-label
+    domain to the regex as the real 2-label one. If a configured
+    valid_suffix appears anywhere inside the matched domain, truncate right
+    after its first (leftmost) occurrence and drop everything past it —
+    recovers "info@alltimeplastics.com" from
+    "info@alltimeplastics.comajay.sawale". Leaves the address untouched
+    when no configured suffix appears anywhere in it — there's no positive
+    evidence of where to cut, so nothing is guessed or dropped."""
+    local, _, domain = address.rpartition("@")
+    if not domain:
+        return address
+    earliest_end = None
+    for suffix in valid_suffixes:
+        pos = domain.find(suffix)
+        if pos != -1:
+            end = pos + len(suffix)
+            if earliest_end is None or end < earliest_end:
+                earliest_end = end
+    if earliest_end is None or earliest_end == len(domain):
+        return address
+    return f"{local}@{domain[:earliest_end]}"
+
+
 def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern,
                               valid_suffixes: tuple) -> list[dict]:
     results = []
@@ -245,20 +328,26 @@ def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern,
         if len(rows) < 2:
             continue
         headers = [c.get_text(strip=True).lower() for c in rows[0].find_all(["th", "td"])]
-        col = {
+        col = _dedupe_col_map({
             "name": _find_col(headers, ["name", "officer", "official", "contact person"]),
             "designation": _find_col(headers, ["designation", "post", "rank", "position"]),
             "department": _find_col(headers, ["department", "division", "ministry", "section"]),
             "email": _find_col(headers, ["email", "e-mail", "mail"]),
-        }
+        })
         for row in rows[1:]:
             cells = row.find_all(["td", "th"])
             if not cells:
                 continue
             cell_texts = [c.get_text(separator=" ", strip=True) for c in cells]
             row_text = " ".join(cell_texts)
+            if len(row_text) > _MAX_ROW_SCAN_CHARS:
+                # Degenerate row (e.g. a single cell dumping an entire
+                # document's text) — skip rather than regex-scan an
+                # unbounded blob and risk binding a CPU-hazard-sized span
+                # to person_name/designation/department.
+                continue
             for m in email_re.finditer(row_text):
-                addr = m.group(0).lower().strip(".")
+                addr = _truncate_at_known_suffix(m.group(0).lower().strip("."), valid_suffixes)
                 results.append({
                     "address": addr,
                     "rung": "table_block",
@@ -283,9 +372,10 @@ def _extract_proximity_candidates(text: str, email_re: re.Pattern,
                                   ecfg: dict) -> list[dict]:
     results = []
     seen: set[str] = set()
+    valid_suffixes = tuple(ecfg.get("valid_suffixes", [".gov.in", ".nic.in"]))
 
     for m in email_re.finditer(text):
-        addr = m.group(0).lower().strip(".")
+        addr = _truncate_at_known_suffix(m.group(0).lower().strip("."), valid_suffixes)
         if addr in seen:
             continue
         seen.add(addr)
@@ -452,7 +542,7 @@ def _enrich_fields(entities: list[dict], soup: BeautifulSoup, raw_text: str,
                 col = entity.get("_col", {})
                 cell_texts = entity.get("_cell_texts", [])
                 entity["person_name"] = _cell_value(cell_texts, col.get("name"))
-                entity["designation"] = _cell_value(cell_texts, col.get("designation"))
+                entity["designation"] = _clip_designation(_cell_value(cell_texts, col.get("designation")))
                 entity["department"] = _cell_value(cell_texts, col.get("department"))
 
                 # Fallback name/designation from row_text
@@ -503,12 +593,30 @@ def _match_name(text: str, pcfg: dict) -> str | None:
     prefixes = pcfg.get("title_prefixes", [])
     if not prefixes:
         return None
+    # Horizontal whitespace only ([ \t], not \s) between words — a name
+    # must never continue across a line break. Without this, a following
+    # line's leading word (e.g. a role like "Scientist" on its own line)
+    # gets swallowed into the captured name.
     pat = (r"\b(" + "|".join(re.escape(p) for p in prefixes) +
-           r")\b\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})")
+           r")\b\.?[ \t]+([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){0,3})")
     m = re.search(pat, text)
     if m:
-        return f"{m.group(1)} {m.group(2)}".strip()
+        return " ".join(f"{m.group(1)} {m.group(2)}".split())
     return None
+
+
+def _clip_designation(value: str | None, max_chars: int = 120) -> str | None:
+    """Cuts a raw designation string at the first sign it has run past a
+    job title into embedded contact info (an email, a phone label, a long
+    digit run, or a line break) — a keyword/table-column hit only tells us
+    WHERE a title starts, never how long it is."""
+    if not value:
+        return None
+    window = value[:max_chars]
+    stop = _DESIGNATION_STOP_RE.search(window)
+    end = stop.start() if stop else len(window)
+    cleaned = " ".join(window[:end].split()).strip(" ,.-")
+    return cleaned[:60] if cleaned else None
 
 
 def _match_designation(text: str, pcfg: dict) -> str | None:
@@ -517,10 +625,9 @@ def _match_designation(text: str, pcfg: dict) -> str | None:
         return None
     pat = r"\b(" + "|".join(re.escape(k) for k in keywords) + r")\b"
     m = re.search(pat, text, re.IGNORECASE)
-    if m:
-        s = m.start()
-        return " ".join(text[s: s + 60].split())[:60]
-    return None
+    if not m:
+        return None
+    return _clip_designation(text[m.start():])
 
 
 # ── Stage 4: normalise_spans ────────────────────────────────────────────────
@@ -560,7 +667,7 @@ def _normalise_spans(entities: list[dict], ecfg: dict,
         m = email_re.search(resolved)
         if not m:
             continue  # drop — could not resolve to valid email
-        addr = m.group(0).lower().strip(".")
+        addr = _truncate_at_known_suffix(m.group(0).lower().strip("."), gov_suffixes)
         if addr in resolved_emails:
             continue  # already have a better-rung candidate
         resolved_emails.add(addr)
@@ -667,4 +774,4 @@ def _cell_value(cells: list[str], col_idx: int | None) -> str | None:
     if col_idx is None or col_idx >= len(cells):
         return None
     v = cells[col_idx].strip()
-    return v if v else None
+    return v[:_MAX_CELL_CHARS] if v else None
