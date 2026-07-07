@@ -10,7 +10,7 @@ import copy
 import yaml
 from fastapi import APIRouter, Depends
 
-from .deps import get_config as get_app_config, get_config_path
+from .deps import CurrentUser, get_config as get_app_config, get_config_path, require
 
 router = APIRouter(tags=["config"])
 
@@ -64,7 +64,8 @@ async def get_config(c: dict = Depends(get_app_config)):
 
 
 @router.post("/api/config")
-async def save_config(body: dict, c: dict = Depends(get_app_config), config_path=Depends(get_config_path)):
+async def save_config(body: dict, c: dict = Depends(get_app_config), config_path=Depends(get_config_path),
+                      user: CurrentUser = Depends(require("settings.manage"))):
     cfg = copy.deepcopy(c)
 
     int_keys = {"workers", "max_depth", "recrawl_days", "per_url_timeout", "playwright_timeout"}

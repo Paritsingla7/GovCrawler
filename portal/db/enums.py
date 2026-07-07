@@ -1,15 +1,5 @@
-import enum
+"""Moved to shared/enums.py (Phase 0 — shared/ carve-out). Re-exported here
+so `portal/db/tables/outreach.py`'s `from ..enums import ...` keeps working."""
+from shared.enums import CampaignStatus, EmailStatus
 
-
-class CampaignStatus(enum.Enum):
-    RUNNING = "RUNNING"
-    PAUSED = "PAUSED"
-    CANCELLED = "CANCELLED"
-    COMPLETED = "COMPLETED"
-
-
-class EmailStatus(enum.Enum):
-    DRAFT = "DRAFT"
-    QUEUED = "QUEUED"
-    SENT = "SENT"
-    FAILED = "FAILED"
+__all__ = ["CampaignStatus", "EmailStatus"]

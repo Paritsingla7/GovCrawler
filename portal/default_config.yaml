@@ -179,3 +179,10 @@ lead_score:
     person_name: 40
     designation: 30
     phone: 10
+auth:
+  jwt_secret: ''
+  access_ttl_minutes: 15
+  refresh_ttl_days: 14
+  cookie_secure: false
+  lockout_threshold: 5
+  lockout_minutes: 15

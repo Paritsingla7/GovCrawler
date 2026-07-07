@@ -8,6 +8,7 @@ Usage:
     python -m portal import-json path/to.json # seed from a specific file
     python -m portal import                   # refresh from live india.gov.in API
     python -m portal crawl <job_id>           # manually run a specific job (debug)
+    python -m portal create-admin <email> [password]  # provision the first admin user
 """
 import asyncio
 import logging
@@ -91,6 +92,25 @@ def cmd_import_json(config: dict, json_path: str = "gov_domains.json"):
     db.close()
 
 
+def cmd_create_admin(config: dict, email: str, password: str | None = None):
+    import getpass
+    db = Database(config)
+    if db.get_user_by_email(email):
+        log.error(f"A user with email {email} already exists.")
+        db.close()
+        sys.exit(1)
+    if not password:
+        password = getpass.getpass("Password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            log.error("Passwords do not match.")
+            db.close()
+            sys.exit(1)
+    user_id = db.create_user(email=email, password=password, is_admin=True)
+    log.info(f"Admin user created: {email} (id={user_id})")
+    db.close()
+
+
 def cmd_import(config: dict):
     from .scraper.importer import import_all
     db = Database(config)
@@ -171,9 +191,15 @@ def main():
             print("Usage: python -m portal crawl <job_id>")
             sys.exit(1)
         asyncio.run(cmd_crawl(config, int(args[1])))
+    elif cmd == "create-admin":
+        if len(args) < 2:
+            print("Usage: python -m portal create-admin <email> [password]")
+            sys.exit(1)
+        password = args[2] if len(args) > 2 else None
+        cmd_create_admin(config, args[1], password)
     else:
         print(f"Unknown command: {cmd}")
-        print("Commands: serve | import-json [path] | import | crawl <job_id>")
+        print("Commands: serve | import-json [path] | import | crawl <job_id> | create-admin <email> [password]")
         sys.exit(1)
 
 

@@ -2,6 +2,7 @@
 Frontend HTML page routes plus small UI-support endpoints.
 
 Registers routes:
+  GET    /login             → login page (unauthenticated)
   GET    /                  → domains browser page
   GET    /leads             → leads page
   GET    /settings          → settings page
@@ -17,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from .deps import get_db
+from .deps import CurrentUser, current_user_or_redirect, get_current_user, get_db, require
 from ..db import Database
 from ..paths import LOG_FILE_PATH
 
@@ -27,44 +28,50 @@ _frontend_dir = Path(__file__).parent.parent / "frontend"
 _templates = Jinja2Templates(directory=str(_frontend_dir))
 
 
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    template = _templates.get_template("login.html")
+    return HTMLResponse(template.render({"request": request, "active_page": "login"}))
+
+
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("index.html")
     return HTMLResponse(template.render({"request": request, "active_page": "dashboard"}))
 
 
 @router.get("/leads", response_class=HTMLResponse)
-async def leads_page(request: Request):
+async def leads_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("leads.html")
     return HTMLResponse(template.render({"request": request, "active_page": "leads"}))
 
 
 @router.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request):
+async def settings_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("settings.html")
     return HTMLResponse(template.render({"request": request, "active_page": "settings"}))
 
 
 @router.get("/test-campaign", response_class=HTMLResponse)
-async def test_campaign_page(request: Request):
+async def test_campaign_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("test-campaign.html")
     return HTMLResponse(template.render({"request": request, "active_page": "test-campaign"}))
 
 
 @router.get("/campaigns", response_class=HTMLResponse)
-async def campaigns_page(request: Request):
+async def campaigns_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("campaigns.html")
     return HTMLResponse(template.render({"request": request, "active_page": "campaigns"}))
 
 
 @router.get("/user-guide", response_class=HTMLResponse)
-async def user_guide_page(request: Request):
+async def user_guide_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("user-guide.html")
     return HTMLResponse(template.render({"request": request, "active_page": "user-guide"}))
 
 
 @router.get("/api/logs")
-async def get_logs():
+async def get_logs(user: CurrentUser = Depends(get_current_user)):
     log_file = LOG_FILE_PATH
     if not log_file.exists():
         return {"logs": "Log file not found."}
@@ -77,6 +84,6 @@ async def get_logs():
 
 
 @router.delete("/api/visited-urls")
-async def clear_visited_urls(db: Database = Depends(get_db)):
+async def clear_visited_urls(db: Database = Depends(get_db), user: CurrentUser = Depends(require("crawl.run"))):
     db.clear_visited_urls()
     return {"message": "Visited URLs cleared."}

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, TemplateSyntaxError
 from pydantic import BaseModel
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from ..db import Database
 
 router = APIRouter(tags=["templates"])
@@ -60,7 +60,8 @@ async def get_template(template_id: int, db: Database = Depends(get_db)):
 
 
 @router.post("/api/templates", status_code=201)
-async def create_template(req: TemplateCreate, db: Database = Depends(get_db)):
+async def create_template(req: TemplateCreate, db: Database = Depends(get_db),
+                          user: CurrentUser = Depends(require("templates.manage"))):
     # Validate Jinja2 syntax for both subject and body
     for field_name, field_val in [("subject", req.subject), ("raw_body", req.raw_body)]:
         err = validate_jinja2(field_val)
@@ -76,7 +77,8 @@ async def create_template(req: TemplateCreate, db: Database = Depends(get_db)):
 
 
 @router.put("/api/templates/{template_id}")
-async def update_template(template_id: int, req: TemplateUpdate, db: Database = Depends(get_db)):
+async def update_template(template_id: int, req: TemplateUpdate, db: Database = Depends(get_db),
+                          user: CurrentUser = Depends(require("templates.manage"))):
     existing = db.get_template(template_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -106,7 +108,8 @@ async def update_template(template_id: int, req: TemplateUpdate, db: Database = 
 
 
 @router.delete("/api/templates/{template_id}")
-async def delete_template(template_id: int, db: Database = Depends(get_db)):
+async def delete_template(template_id: int, db: Database = Depends(get_db),
+                          user: CurrentUser = Depends(require("templates.manage"))):
     if not db.delete_template(template_id):
         raise HTTPException(status_code=404, detail="Template not found")
     return {"message": "Template deleted"}

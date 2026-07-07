@@ -10,7 +10,7 @@ Registers routes:
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from ..db import Database
 
 router = APIRouter(tags=["blacklist"])
@@ -41,7 +41,8 @@ async def list_blacklist(
 
 
 @router.post("/api/blacklist", status_code=201)
-async def add_to_blacklist(req: BlacklistAdd, db: Database = Depends(get_db)):
+async def add_to_blacklist(req: BlacklistAdd, db: Database = Depends(get_db),
+                           user: CurrentUser = Depends(require("blacklist.manage"))):
     email = req.email.strip().lower()
     if "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email address")
@@ -54,7 +55,8 @@ async def add_to_blacklist(req: BlacklistAdd, db: Database = Depends(get_db)):
 
 
 @router.delete("/api/blacklist/{blacklist_id}")
-async def remove_from_blacklist(blacklist_id: int, db: Database = Depends(get_db)):
+async def remove_from_blacklist(blacklist_id: int, db: Database = Depends(get_db),
+                                user: CurrentUser = Depends(require("blacklist.manage"))):
     if not db.remove_from_blacklist(blacklist_id):
         raise HTTPException(status_code=404, detail="Blacklist entry not found")
     return {"message": "Entry removed from blacklist"}

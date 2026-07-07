@@ -4,18 +4,19 @@ from sqlalchemy.orm import sessionmaker
 
 from .base import Base
 from .migrations import run_migrations
+from .mixins.auth_mixin import AuthMixin
 from .mixins.crawl_snapshot_mixin import CrawlSnapshotMixin
 from .mixins.domain_mixin import DomainMixin
 from .mixins.job_mixin import JobMixin
 from .mixins.lead_mixin import LeadMixin
 from .mixins.outreach_mixin import OutreachMixin
 from .mixins.visited_mixin import VisitedUrlMixin
-from ..services.lead_scoring import DEFAULT_WEIGHTS, compute_lead_score
+from shared.scoring import DEFAULT_WEIGHTS, compute_lead_score
 
 log = logging.getLogger(__name__)
 
 
-class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlMixin, OutreachMixin):
+class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlMixin, OutreachMixin, AuthMixin):
     def __init__(self, config: dict):
         uri = config["database"]["uri"]
         self.engine = create_engine(uri, echo=False, pool_pre_ping=True)
@@ -25,6 +26,7 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
         self._lead_score_weights = config.get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)
         self._ensure_columns()
         run_migrations(uri)
+        self.seed_rbac()
         log.info(f"Database ready: {uri}")
 
     def _ensure_columns(self):

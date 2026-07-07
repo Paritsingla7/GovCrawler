@@ -36,6 +36,7 @@
         <a class="btn-icon" href="/user-guide"
            style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"
            title="User Guide">?</a>
+        <button class="btn-secondary btn-sm" onclick="logout()" title="Log out">⎋ Logout</button>
     </div>
 </header>
 
@@ -326,6 +327,13 @@
 <script src="/static/js/base.js"></script>
 {% block extra_scripts %}{% endblock %}
 <script>
+    async function logout() {
+        try {
+            await fetch("/auth/logout", {method: "POST"});
+        } finally {
+            window.location.href = "/login";
+        }
+    }
     {% block init_js %}
     {% endblock %}
     {% block extra_js %}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Login — GovCrawler Portal</title>
+    <link href="/static/img/favicon.ico" rel="icon" type="image/x-icon">
+    <link href="/static/css/base.css" rel="stylesheet">
+</head>
+
+<body>
+<div style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
+    <form id="login-form" style="width:320px; padding:32px; border:1px solid var(--border); border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:24px;">
+            <div class="logo-icon">⚡</div>
+            <div style="font-size:18px; font-weight:600;">Gov<span>Crawler</span></div>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label class="cfg-label" for="login-email">Email</label>
+            <input class="cfg-input" id="login-email" required style="width:100%" type="email">
+        </div>
+        <div style="margin-bottom:16px;">
+            <label class="cfg-label" for="login-password">Password</label>
+            <input class="cfg-input" id="login-password" required style="width:100%" type="password">
+        </div>
+        <div id="login-error" style="display:none; color:var(--red, #e05252); font-size:12px; margin-bottom:12px;"></div>
+        <button class="btn-primary" id="login-submit" style="width:100%" type="submit">Log in</button>
+    </form>
+</div>
+<script src="/static/js/login.js"></script>
+</body>
+
+</html>

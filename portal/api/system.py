@@ -14,7 +14,7 @@ import logging
 from fastapi import APIRouter, Depends
 
 from . import campaigns as campaigns_module
-from .deps import get_active_tasks, get_db
+from .deps import get_active_tasks, get_db, require_loopback
 from .jobs import cancel_job_if_running
 from ..db import CampaignStatus, Database, TestCampaign
 
@@ -65,12 +65,12 @@ def _get_activity(db: Database, active_tasks: dict) -> dict:
     }
 
 
-@router.get("/api/system/activity")
+@router.get("/api/system/activity", dependencies=[Depends(require_loopback)])
 async def get_activity(db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
     return _get_activity(db, active_tasks)
 
 
-@router.post("/api/system/cancel-all")
+@router.post("/api/system/cancel-all", dependencies=[Depends(require_loopback)])
 async def cancel_all(db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
     activity = _get_activity(db, active_tasks)
 

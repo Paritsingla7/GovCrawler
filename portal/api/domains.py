@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from urllib.parse import urlsplit
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from ..db import Database
 
 router = APIRouter(tags=["domains"])
@@ -121,6 +121,7 @@ async def update_domain_url(
         domain_id: int,
         req: UpdateDomainUrlRequest,
         db: Database = Depends(get_db),
+        user: CurrentUser = Depends(require("domains.import")),
 ):
     main_url = _normalize_domain_url(req.main_url)
     contact_url = _normalize_domain_url(req.contact_url) if req.contact_url else None

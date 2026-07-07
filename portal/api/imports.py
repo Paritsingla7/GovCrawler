@@ -13,7 +13,7 @@ import tempfile
 from fastapi import APIRouter, Depends, File, UploadFile
 from pathlib import Path
 
-from .deps import get_config as get_app_config, get_db
+from .deps import CurrentUser, get_config as get_app_config, get_db, require
 from ..db import Database
 from ..scraper.importer import import_all, import_from_json, import_status
 
@@ -43,6 +43,7 @@ async def trigger_json_import(
         file: UploadFile = File(...),
         db: Database = Depends(get_db),
         config: dict = Depends(get_app_config),
+        user: CurrentUser = Depends(require("domains.import")),
 ):
     """Import domains from an uploaded JSON file — zero API calls."""
     if import_status.get("running"):
@@ -56,7 +57,8 @@ async def trigger_json_import(
 
 
 @router.post("/api/import")
-async def trigger_import(db: Database = Depends(get_db), config: dict = Depends(get_app_config)):
+async def trigger_import(db: Database = Depends(get_db), config: dict = Depends(get_app_config),
+                         user: CurrentUser = Depends(require("domains.import"))):
     """Import from live india.gov.in API — use only to refresh data."""
     if import_status.get("running"):
         return {"message": "Import already running", "status": import_status}

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..tables.crawl import CrawlSnapshot
 from ..tables.leads import Lead
-from ...services.lead_scoring import compute_lead_score
+from shared.scoring import compute_lead_score
 
 
 def _department_is_url_fallback(field_provenance: str | None) -> bool:

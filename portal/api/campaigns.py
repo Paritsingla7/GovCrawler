@@ -16,7 +16,7 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from .dispatcher import resolve_credential_pool, run_campaign_dispatch, run_test_campaign_dispatch
 from ..db import Database, CampaignStatus, Lead
 from ..services.campaign_service import render_draft_emails, render_template_string
@@ -80,7 +80,8 @@ class TestCampaignCreate(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/api/campaigns", status_code=201)
-async def create_campaign(req: CampaignCreate, db: Database = Depends(get_db)):
+async def create_campaign(req: CampaignCreate, db: Database = Depends(get_db),
+                          user: CurrentUser = Depends(require("campaigns.manage"))):
     """The core draft generation endpoint.
     Loads leads, filters blacklist, renders templates, stages drafts."""
 
@@ -149,7 +150,8 @@ async def create_campaign(req: CampaignCreate, db: Database = Depends(get_db)):
 
 
 @router.post("/api/campaigns/{campaign_id}/dispatch")
-async def dispatch_campaign(campaign_id: int, db: Database = Depends(get_db)):
+async def dispatch_campaign(campaign_id: int, db: Database = Depends(get_db),
+                            user: CurrentUser = Depends(require("campaigns.dispatch"))):
     """Start the background dispatch worker for a campaign."""
     # 1. Verify campaign exists and has DRAFT emails
     campaign = db.get_campaign(campaign_id)
@@ -236,7 +238,8 @@ async def get_campaign(campaign_id: int, db: Database = Depends(get_db)):
 
 @router.put("/api/campaigns/{campaign_id}/credentials")
 async def update_campaign_credentials(campaign_id: int, req: CampaignCredentialsUpdate,
-                                      db: Database = Depends(get_db)):
+                                      db: Database = Depends(get_db),
+                                      user: CurrentUser = Depends(require("campaigns.manage"))):
     """Change which SMTP credentials a campaign may dispatch through, any time after
     drafting (PAUSED or RUNNING). The dispatcher re-reads this assignment on every
     send, so a change to a RUNNING campaign takes effect on its next send without
@@ -253,7 +256,8 @@ async def update_campaign_credentials(campaign_id: int, req: CampaignCredentials
 
 
 @router.patch("/api/campaigns/{campaign_id}")
-async def update_campaign_status(campaign_id: int, req: CampaignStatusUpdate, db: Database = Depends(get_db)):
+async def update_campaign_status(campaign_id: int, req: CampaignStatusUpdate, db: Database = Depends(get_db),
+                                 user: CurrentUser = Depends(require("campaigns.dispatch"))):
     """Update campaign status. Used by the kill switch (PAUSED/CANCELLED)."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -309,7 +313,8 @@ async def get_campaign_emails(
 
 @router.put("/api/campaigns/{campaign_id}/emails/{email_id}")
 async def update_campaign_email(campaign_id: int, email_id: int,
-                                req: CampaignEmailUpdate, db: Database = Depends(get_db)):
+                                req: CampaignEmailUpdate, db: Database = Depends(get_db),
+                                user: CurrentUser = Depends(require("campaigns.manage"))):
     """Manual body override for a specific staged email."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -328,7 +333,8 @@ async def update_campaign_email(campaign_id: int, email_id: int,
 
 @router.patch("/api/campaigns/{campaign_id}/emails/{email_id}/selection")
 async def toggle_email_selection(campaign_id: int, email_id: int,
-                                 req: EmailSelectionUpdate, db: Database = Depends(get_db)):
+                                 req: EmailSelectionUpdate, db: Database = Depends(get_db),
+                                 user: CurrentUser = Depends(require("campaigns.manage"))):
     """Select or deselect a DRAFT or QUEUED email. Deselecting a QUEUED email pulls
     it back to DRAFT so it's excluded from the next dispatch."""
     campaign = db.get_campaign(campaign_id)
@@ -343,7 +349,8 @@ async def toggle_email_selection(campaign_id: int, email_id: int,
 
 @router.patch("/api/campaigns/{campaign_id}/emails/selection-all")
 async def bulk_toggle_email_selection(campaign_id: int, req: BulkEmailSelectionUpdate,
-                                      db: Database = Depends(get_db)):
+                                      db: Database = Depends(get_db),
+                                      user: CurrentUser = Depends(require("campaigns.manage"))):
     """Select or deselect every DRAFT email in the campaign, regardless of pagination."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -355,7 +362,8 @@ async def bulk_toggle_email_selection(campaign_id: int, req: BulkEmailSelectionU
 
 
 @router.delete("/api/campaigns/{campaign_id}/emails/{email_id}", status_code=200)
-async def delete_campaign_email(campaign_id: int, email_id: int, db: Database = Depends(get_db)):
+async def delete_campaign_email(campaign_id: int, email_id: int, db: Database = Depends(get_db),
+                                user: CurrentUser = Depends(require("campaigns.manage"))):
     """Permanently remove a DRAFT email from a campaign."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -368,7 +376,8 @@ async def delete_campaign_email(campaign_id: int, email_id: int, db: Database = 
 
 
 @router.post("/api/campaigns/{campaign_id}/emails", status_code=201)
-async def add_emails_to_campaign(campaign_id: int, req: AddEmailsRequest, db: Database = Depends(get_db)):
+async def add_emails_to_campaign(campaign_id: int, req: AddEmailsRequest, db: Database = Depends(get_db),
+                                 user: CurrentUser = Depends(require("campaigns.manage"))):
     """Add new leads to an existing campaign by re-rendering the campaign template."""
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -427,7 +436,8 @@ async def parse_test_campaign_csv(file: UploadFile = File(...)):
 
 
 @router.post("/api/test-campaigns", status_code=201)
-async def create_test_campaign(req: TestCampaignCreate, db: Database = Depends(get_db)):
+async def create_test_campaign(req: TestCampaignCreate, db: Database = Depends(get_db),
+                               user: CurrentUser = Depends(require("campaigns.manage"))):
     template = db.get_template(req.template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -464,7 +474,8 @@ async def create_test_campaign(req: TestCampaignCreate, db: Database = Depends(g
 
 
 @router.post("/api/test-campaigns/{campaign_id}/dispatch")
-async def dispatch_test_campaign(campaign_id: int, db: Database = Depends(get_db)):
+async def dispatch_test_campaign(campaign_id: int, db: Database = Depends(get_db),
+                                 user: CurrentUser = Depends(require("campaigns.dispatch"))):
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test Campaign not found")
@@ -527,7 +538,8 @@ async def get_test_campaign_emails(
 
 @router.put("/api/test-campaigns/{campaign_id}/emails/{email_id}")
 async def update_test_campaign_email(campaign_id: int, email_id: int,
-                                     req: CampaignEmailUpdate, db: Database = Depends(get_db)):
+                                     req: CampaignEmailUpdate, db: Database = Depends(get_db),
+                                     user: CurrentUser = Depends(require("campaigns.manage"))):
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Test Campaign not found")
@@ -545,7 +557,8 @@ async def update_test_campaign_email(campaign_id: int, email_id: int,
 
 @router.patch("/api/test-campaigns/{campaign_id}/emails/{email_id}/selection")
 async def toggle_test_email_selection(campaign_id: int, email_id: int,
-                                      req: EmailSelectionUpdate, db: Database = Depends(get_db)):
+                                      req: EmailSelectionUpdate, db: Database = Depends(get_db),
+                                      user: CurrentUser = Depends(require("campaigns.manage"))):
     """Select or deselect a DRAFT or QUEUED test email. Deselecting a QUEUED email
     pulls it back to DRAFT so it's excluded from the next dispatch."""
     campaign = db.get_test_campaign(campaign_id)
@@ -560,7 +573,8 @@ async def toggle_test_email_selection(campaign_id: int, email_id: int,
 
 @router.patch("/api/test-campaigns/{campaign_id}/emails/selection-all")
 async def bulk_toggle_test_email_selection(campaign_id: int, req: BulkEmailSelectionUpdate,
-                                           db: Database = Depends(get_db)):
+                                           db: Database = Depends(get_db),
+                                           user: CurrentUser = Depends(require("campaigns.manage"))):
     """Select or deselect every DRAFT test email in the campaign, regardless of pagination."""
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
@@ -572,7 +586,8 @@ async def bulk_toggle_test_email_selection(campaign_id: int, req: BulkEmailSelec
 
 
 @router.delete("/api/test-campaigns/{campaign_id}/emails/{email_id}", status_code=200)
-async def delete_test_campaign_email(campaign_id: int, email_id: int, db: Database = Depends(get_db)):
+async def delete_test_campaign_email(campaign_id: int, email_id: int, db: Database = Depends(get_db),
+                                     user: CurrentUser = Depends(require("campaigns.manage"))):
     """Permanently remove a DRAFT test email from a test campaign."""
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
@@ -585,7 +600,8 @@ async def delete_test_campaign_email(campaign_id: int, email_id: int, db: Databa
 
 
 @router.patch("/api/test-campaigns/{campaign_id}")
-async def update_test_campaign_status(campaign_id: int, req: CampaignStatusUpdate, db: Database = Depends(get_db)):
+async def update_test_campaign_status(campaign_id: int, req: CampaignStatusUpdate, db: Database = Depends(get_db),
+                                      user: CurrentUser = Depends(require("campaigns.dispatch"))):
     campaign = db.get_test_campaign(campaign_id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")

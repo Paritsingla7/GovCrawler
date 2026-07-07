@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from ..db import Database
 from ..services.csv_import import build_template_csv, parse_contacts_csv
 
@@ -134,7 +134,8 @@ async def get_lead_org_types(job_id: list[int] = Query(None), db: Database = Dep
 
 
 @router.post("/api/leads/export")
-async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
+async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db),
+                       user: CurrentUser = Depends(require("leads.export"))):
     rows = db.get_all_leads_for_export(
         job_ids=req.job_ids,
         categories=req.categories,
@@ -174,7 +175,8 @@ async def export_leads(req: ExportLeadsRequest, db: Database = Depends(get_db)):
 
 
 @router.post("/api/leads/import-csv")
-async def import_leads_csv(file: UploadFile = File(...), db: Database = Depends(get_db)):
+async def import_leads_csv(file: UploadFile = File(...), db: Database = Depends(get_db),
+                           user: CurrentUser = Depends(require("leads.import"))):
     """Bulk-create or update manual leads from an uploaded CSV file."""
     content = await file.read()
     rows, skipped = parse_contacts_csv(content)
@@ -198,7 +200,8 @@ async def download_leads_csv_template():
 
 
 @router.put("/api/leads/{lead_id}")
-async def update_lead(lead_id: int, req: LeadUpdate, db: Database = Depends(get_db)):
+async def update_lead(lead_id: int, req: LeadUpdate, db: Database = Depends(get_db),
+                      user: CurrentUser = Depends(require("leads.edit"))):
     updates = req.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

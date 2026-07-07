@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 from urllib.parse import urlsplit
 
-from .deps import get_active_tasks, get_browser, get_config as get_app_config, get_db
+from .deps import CurrentUser, get_active_tasks, get_browser, get_config as get_app_config, get_db, require
 from ..crawler.engine import CrawlerEngine
 from ..db import Database
 
@@ -92,6 +92,7 @@ async def create_job(
         config: dict = Depends(get_app_config),
         browser=Depends(get_browser),
         active_tasks: dict = Depends(get_active_tasks),
+        user: CurrentUser = Depends(require("crawl.run")),
 ):
     engine_config = config
 
@@ -192,7 +193,8 @@ def cancel_job_if_running(job_id: int, db: Database, active_tasks: dict[int, asy
 
 
 @router.post("/api/jobs/{job_id}/cancel")
-async def cancel_job(job_id: int, db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
+async def cancel_job(job_id: int, db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks),
+                     user: CurrentUser = Depends(require("crawl.run"))):
     if cancel_job_if_running(job_id, db, active_tasks):
         return {"message": "Job cancelled"}
     return {"message": "Job is not currently running"}

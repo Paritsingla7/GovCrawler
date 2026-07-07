@@ -1,6 +1,7 @@
 from .base import Base
 from .database import Database
 from .enums import CampaignStatus, EmailStatus
+from .tables.auth import AuditLog, Permission, Role, RolePermission, User, UserPermission, UserSession
 from .tables.crawl import CrawlJob, CrawlSnapshot, Domain, JobCustomUrl, VisitedUrl
 from .tables.leads import Lead
 from .tables.outreach import (
@@ -13,4 +14,5 @@ __all__ = [
     "Domain", "CrawlJob", "CrawlSnapshot", "JobCustomUrl", "VisitedUrl", "Lead",
     "Campaign", "EmailTemplate", "SMTPCredential", "CampaignCredential", "CampaignEmail",
     "Blacklist", "TestCampaign", "TestCampaignEmail",
+    "User", "Role", "Permission", "RolePermission", "UserPermission", "UserSession", "AuditLog",
 ]

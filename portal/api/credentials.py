@@ -13,7 +13,7 @@ import aiosmtplib
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .deps import get_db
+from .deps import CurrentUser, get_db, require
 from ..db import Database
 
 router = APIRouter(tags=["credentials"])
@@ -50,7 +50,8 @@ async def list_credentials(db: Database = Depends(get_db)):
 
 
 @router.post("/api/credentials", status_code=201)
-async def create_credential(req: CredentialCreate, db: Database = Depends(get_db)):
+async def create_credential(req: CredentialCreate, db: Database = Depends(get_db),
+                            user: CurrentUser = Depends(require("credentials.manage"))):
     cid = db.create_credential(
         host=req.host,
         port=req.port,
@@ -62,7 +63,8 @@ async def create_credential(req: CredentialCreate, db: Database = Depends(get_db
 
 
 @router.put("/api/credentials/{credential_id}")
-async def update_credential(credential_id: int, req: CredentialUpdate, db: Database = Depends(get_db)):
+async def update_credential(credential_id: int, req: CredentialUpdate, db: Database = Depends(get_db),
+                            user: CurrentUser = Depends(require("credentials.manage"))):
     updates = req.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -73,14 +75,16 @@ async def update_credential(credential_id: int, req: CredentialUpdate, db: Datab
 
 
 @router.delete("/api/credentials/{credential_id}")
-async def delete_credential(credential_id: int, db: Database = Depends(get_db)):
+async def delete_credential(credential_id: int, db: Database = Depends(get_db),
+                            user: CurrentUser = Depends(require("credentials.manage"))):
     if not db.delete_credential(credential_id):
         raise HTTPException(status_code=404, detail="Credential not found")
     return {"message": "Credential deleted"}
 
 
 @router.post("/api/credentials/{credential_id}/test")
-async def test_credential(credential_id: int, db: Database = Depends(get_db)):
+async def test_credential(credential_id: int, db: Database = Depends(get_db),
+                          user: CurrentUser = Depends(require("credentials.manage"))):
     """Test SMTP connection and login."""
     cred = db.get_credential(credential_id)
     if not cred:
