@@ -3,7 +3,7 @@ import json
 
 from shared.enums import JobStatus
 
-from ..tables.crawl import CrawlJob, CrawlJobDomain, JobCustomUrl
+from ..tables.crawl import CrawlJob, CrawlJobDomain, JobCustomUrl, JobFrontier
 
 _TERMINAL_STATUSES = {JobStatus.DONE.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value}
 
@@ -195,3 +195,23 @@ class JobMixin:
             "started_at": j.started_at.isoformat() if j.started_at else None,
             "finished_at": j.finished_at.isoformat() if j.finished_at else None,
         }
+
+    def save_frontier_snapshot(self, job_id: int, snapshot: dict) -> None:
+        """Cloud-side counterpart to agent/local_store.py's local frontier
+        checkpoint — upserted, one row per job. Only called when
+        crawler.cross_machine_resume is enabled (see agent/cloud_client.py)."""
+        with self._Session() as s:
+            payload = json.dumps(snapshot)
+            existing = s.query(JobFrontier).filter_by(job_id=job_id).first()
+            if existing:
+                existing.snapshot_json = payload
+                existing.updated_at = datetime.datetime.utcnow()
+            else:
+                s.add(JobFrontier(job_id=job_id, snapshot_json=payload,
+                                  updated_at=datetime.datetime.utcnow()))
+            s.commit()
+
+    def load_frontier_snapshot(self, job_id: int) -> dict | None:
+        with self._Session() as s:
+            row = s.query(JobFrontier).filter_by(job_id=job_id).first()
+            return json.loads(row.snapshot_json) if row else None

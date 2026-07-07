@@ -1,9 +1,15 @@
 """
-System-level activity aggregation for the desktop control panel (run.py).
+System-level activity aggregation for the desktop control panel (run.py) and
+the browser-facing admin dashboard.
 
 Registers routes:
   GET  /api/system/activity     → live counts of crawl jobs / campaigns
-                                   (production or test) currently running
+                                   (production or test) currently running,
+                                   loopback-only (desktop launcher)
+  GET  /api/admin/activity      → same shape plus dispatch progress + a
+                                   recently-finished tail, for the browser
+                                   admin dashboard (permission-gated, not
+                                   loopback-restricted)
   POST /api/system/cancel-all   → cancel everything currently active
   GET  /healthz                 → liveness/readiness probe (public, no auth)
 
@@ -16,7 +22,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import text
 
 from . import campaigns as campaigns_module
-from .deps import get_active_tasks, get_db, require_loopback
+from .deps import get_active_tasks, get_db, require, require_loopback
 from ..db import Campaign, CampaignStatus, Database
 from agent.api import cancel_job_if_running
 
@@ -85,6 +91,27 @@ def _get_activity(db: Database, active_tasks: dict) -> dict:
 @router.get("/api/system/activity", dependencies=[Depends(require_loopback)])
 async def get_activity(db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
     return _get_activity(db, active_tasks)
+
+
+def _get_admin_activity(db: Database, active_tasks: dict) -> dict:
+    """Same live counts as `_get_activity`, plus per-campaign dispatch
+    progress (from the existing `get_campaign_stats` aggregate) and a
+    recently-finished tail — the browser admin dashboard polls this instead
+    of `/api/system/activity` since it isn't running on localhost."""
+    activity = _get_activity(db, active_tasks)
+    for campaign in activity["campaigns"]:
+        campaign["stats"] = db.get_campaign_stats(campaign["id"])
+
+    recent_jobs = db.list_jobs(limit=5, view_all=True)
+    recent_campaigns, _ = db.list_campaigns(limit=5, view_all=True)
+    activity["recent_jobs"] = [j for j in recent_jobs if j["status"] not in ("pending", "running")]
+    activity["recent_campaigns"] = [c for c in recent_campaigns if c["status"] not in ("RUNNING",)]
+    return activity
+
+
+@router.get("/api/admin/activity", dependencies=[Depends(require("jobs.view_all"))])
+async def get_admin_activity(db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
+    return _get_admin_activity(db, active_tasks)
 
 
 @router.post("/api/system/cancel-all", dependencies=[Depends(require_loopback)])

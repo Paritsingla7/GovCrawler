@@ -10,7 +10,8 @@
   exact commands it ran so this is auditable after the fact.
 
 Tighten the RPO by running `backup.sh` more often (e.g. every 6h) — it's idempotent and
-cheap; nothing about the design assumes once-daily.
+cheap; nothing about the design assumes once-daily. For a tighter RPO than any cron interval can
+give (minutes instead of hours), see [PITR.md](PITR.md)'s WAL archiving + point-in-time recovery.
 
 ## Setup
 

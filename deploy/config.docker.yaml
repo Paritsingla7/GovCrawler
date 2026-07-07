@@ -12,6 +12,7 @@ crawler:
   recrawl_days: 30
   httpx_first: true
   playwright_fallback: false
+  cross_machine_resume: false
   httpx_timeout:
     connect: 10
     read: 30

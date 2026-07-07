@@ -51,13 +51,15 @@ async def resume_remote_job(base_url: str, token_provider, job_id: int, transpor
 
 
 class CloudApiClient:
-    def __init__(self, base_url: str, token_provider, job_id: int, outbox_path, transport=None):
+    def __init__(self, base_url: str, token_provider, job_id: int, outbox_path, transport=None,
+                cross_machine_resume: bool = False):
         self._base_url = base_url.rstrip("/")
         self._token_provider = token_provider
         self._job_id = job_id
         self._outbox = LocalOutbox(outbox_path)
         self._http = httpx.AsyncClient(base_url=self._base_url, timeout=15, transport=transport)
         self._flush_task: asyncio.Task | None = None
+        self._cross_machine_resume = cross_machine_resume
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._token_provider()}"}
@@ -97,10 +99,35 @@ class CloudApiClient:
     # ── Frontier checkpoint (survives a crash so a resume isn't a restart) ───
 
     def save_frontier(self, snapshot: dict) -> None:
+        """Always writes the local checkpoint (fast, same-machine resume).
+        When crawler.cross_machine_resume is on, also best-effort uploads to
+        the cloud — called from a db_pool executor thread (see engine.py's
+        `_save_checkpoint`), so a blocking sync HTTP call here doesn't block
+        the event loop. A failed upload is logged and otherwise ignored: the
+        local checkpoint is still authoritative for same-machine resume."""
         self._outbox.save_frontier(self._job_id, snapshot)
+        if not self._cross_machine_resume:
+            return
+        try:
+            with httpx.Client(base_url=self._base_url, timeout=15) as http:
+                r = http.post(f"/api/coordination/jobs/{self._job_id}/frontier",
+                              json={"snapshot": snapshot}, headers=self._headers())
+                r.raise_for_status()
+        except Exception as e:
+            log.warning(f"job {self._job_id}: cloud frontier upload failed: {e}")
 
-    def load_frontier(self) -> dict | None:
-        return self._outbox.load_frontier(self._job_id)
+    async def load_frontier(self) -> dict | None:
+        local = self._outbox.load_frontier(self._job_id)
+        if local is not None or not self._cross_machine_resume:
+            return local
+        try:
+            r = await self._http.get(f"/api/coordination/jobs/{self._job_id}/frontier",
+                                     headers=self._headers())
+            r.raise_for_status()
+            return r.json().get("snapshot")
+        except Exception as e:
+            log.warning(f"job {self._job_id}: cloud frontier fetch failed: {e}")
+            return None
 
     def clear_frontier(self) -> None:
         self._outbox.clear_frontier(self._job_id)

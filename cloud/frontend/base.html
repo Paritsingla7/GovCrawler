@@ -32,6 +32,11 @@
         <button class="btn-secondary btn-sm{{ ' active' if active_page == 'settings' }}"
                 onclick="openConfig()">⚙️ Settings
         </button>
+        {% if user is defined and user and user.can('jobs.view_all') %}
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'admin-dashboard' }}"
+                onclick="window.location.href='/admin/dashboard'">🛡️ Admin
+        </button>
+        {% endif %}
         <button class="btn-secondary btn-sm" onclick="openLogs()">📃 View Logs</button>
         <a class="btn-icon" href="/user-guide"
            style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"

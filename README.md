@@ -1,5 +1,7 @@
 # GovCrawler
 
+![CI](https://github.com/Jaguar000212/GovCrawler/actions/workflows/ci.yaml/badge.svg)
+
 ## Overview
 
 GovCrawler is a full-stack platform for discovering, crawling, and extracting contact data from Indian Government
@@ -220,6 +222,38 @@ sections:
 | `extraction.person.designation_keywords` | Keywords that trigger designation detection          |
 
 See [`.docs/configuration.md`](.docs/configuration.md) for the full reference.
+
+---
+
+## Deployment (Docker / VPS)
+
+The multi-user cloud deployment (auth/RBAC, campaigns, admin dashboard) runs as a `docker compose`
+stack rather than the desktop `.exe` — see [`deploy/`](deploy/):
+
+```bash
+cd deploy
+cp .env.example .env   # fill in POSTGRES_PASSWORD, JWT_SECRET, CREDENTIAL_ENC_KEY, DOMAIN, etc.
+docker compose up --build -d
+```
+
+Services: `db` (Postgres, WAL archiving on), `migrate` (one-shot Alembic), `api` (FastAPI + admin
+dashboard at `/admin/dashboard`), `dispatcher` (standalone campaign send loop — set
+`DISPATCH_MODE=external`, the compose default), `proxy` (Caddy, automatic TLS).
+
+| Doc                                      | Covers                                                              |
+|-------------------------------------------|----------------------------------------------------------------------|
+| [`deploy/SECURITY.md`](deploy/SECURITY.md) | Hardening checklist, CORS/CSRF, JWT/credential key rotation, least-privilege DB role, OS hardening (`harden-vps.sh`) |
+| [`deploy/BACKUP.md`](deploy/BACKUP.md)     | Daily `pg_dump` backups + rehearsed restore (RPO ≤24h)              |
+| [`deploy/PITR.md`](deploy/PITR.md)         | WAL archiving + point-in-time recovery (RPO tightened to minutes)   |
+
+Key env vars beyond the obvious (`DATABASE_URL`, `JWT_SECRET`, `CREDENTIAL_ENC_KEY`, `DOMAIN`):
+`DATABASE_URL_APP` (least-privilege runtime DB role, `api`/`dispatcher` only — `migrate` keeps the
+superuser URL for DDL), `DISPATCH_MODE` (`embedded` for desktop/dev, `external` for the compose
+`dispatcher` service), `ADMIN_ORIGIN` (enables CORS if the admin UI is served from a different
+origin than the API), `JWT_SECRET_PREV` / `CREDENTIAL_ENC_KEY_PREV` (dual-key rotation grace
+period — see `SECURITY.md`), `CROSS_MACHINE_RESUME` (opt-in; lets a job resumed from a different
+machine than the one that ran it fetch its frontier checkpoint from the cloud DB instead of
+falling back to a full re-crawl from seeds).
 
 ---
 

@@ -8,6 +8,8 @@ Registers routes:
   POST /api/coordination/jobs/{id}/heartbeat    → metrics push, returns {cancel_requested}
   POST /api/coordination/jobs/{id}/finish       → terminal status
   POST /api/coordination/jobs/{id}/resume       → interrupted -> running
+  POST /api/coordination/jobs/{id}/frontier     → save a cloud-side frontier snapshot
+  GET  /api/coordination/jobs/{id}/frontier     → fetch it back (cross-machine resume)
 
 This is plan.md §7/§16.2's coordination contract. Today the "agent" calling
 these is the same process (CloudApiClient defaults to this server's own
@@ -155,6 +157,30 @@ async def coordination_heartbeat(
 ):
     cancel_requested = db.heartbeat(job_id, metrics.model_dump())
     return {"cancel_requested": cancel_requested}
+
+
+class FrontierPayload(BaseModel):
+    snapshot: dict
+
+
+@router.post("/jobs/{job_id}/frontier")
+async def coordination_save_frontier(
+        job_id: int, payload: FrontierPayload,
+        db: Database = Depends(get_db),
+        user: CurrentUser = Depends(get_current_user),
+):
+    db.save_frontier_snapshot(job_id, payload.snapshot)
+    return {"status": "ok"}
+
+
+@router.get("/jobs/{job_id}/frontier")
+async def coordination_load_frontier(
+        job_id: int,
+        db: Database = Depends(get_db),
+        user: CurrentUser = Depends(get_current_user),
+):
+    snapshot = db.load_frontier_snapshot(job_id)
+    return {"snapshot": snapshot}
 
 
 class FinishPayload(BaseModel):

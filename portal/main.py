@@ -82,6 +82,10 @@ def load_config() -> dict:
         config.setdefault("dispatch", {})["mode"] = os.environ["DISPATCH_MODE"]
     if os.environ.get("ADMIN_ORIGIN"):
         config.setdefault("auth", {})["admin_origin"] = os.environ["ADMIN_ORIGIN"]
+    if os.environ.get("CROSS_MACHINE_RESUME"):
+        config.setdefault("crawler", {})["cross_machine_resume"] = (
+            os.environ["CROSS_MACHINE_RESUME"].lower() in ("1", "true", "yes")
+        )
     return config
 
 

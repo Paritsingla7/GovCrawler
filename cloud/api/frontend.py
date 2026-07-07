@@ -8,6 +8,7 @@ Registers routes:
   GET    /settings          → settings page
   GET    /test-campaign     → test campaign page
   GET    /campaigns         → campaigns page
+  GET    /admin/dashboard   → admin real-time activity dashboard
   GET    /user-guide        → user guide page
   GET    /api/logs          → last 1000 lines of portal.log
   DELETE /api/visited-urls  → clear the recrawl-protection cache
@@ -37,37 +38,43 @@ async def login_page(request: Request):
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("index.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "dashboard"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "dashboard", "user": user}))
 
 
 @router.get("/leads", response_class=HTMLResponse)
 async def leads_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("leads.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "leads"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "leads", "user": user}))
 
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("settings.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "settings"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "settings", "user": user}))
 
 
 @router.get("/test-campaign", response_class=HTMLResponse)
 async def test_campaign_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("test-campaign.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "test-campaign"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "test-campaign", "user": user}))
 
 
 @router.get("/campaigns", response_class=HTMLResponse)
 async def campaigns_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("campaigns.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "campaigns"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "campaigns", "user": user}))
+
+
+@router.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard_page(request: Request, user: CurrentUser = Depends(require("jobs.view_all"))):
+    template = _templates.get_template("admin-dashboard.html")
+    return HTMLResponse(template.render({"request": request, "active_page": "admin-dashboard", "user": user}))
 
 
 @router.get("/user-guide", response_class=HTMLResponse)
 async def user_guide_page(request: Request, user: CurrentUser = Depends(current_user_or_redirect)):
     template = _templates.get_template("user-guide.html")
-    return HTMLResponse(template.render({"request": request, "active_page": "user-guide"}))
+    return HTMLResponse(template.render({"request": request, "active_page": "user-guide", "user": user}))
 
 
 @router.get("/api/logs")

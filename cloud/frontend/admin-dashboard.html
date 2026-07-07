@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard — GovCrawler{% endblock %}
+
+{% block content %}
+<div class="layout" style="flex-direction:column; padding:16px; gap:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0;">Admin Dashboard</h2>
+        <div style="font-size:12px; color:var(--text-muted);">Auto-refreshes every 3s · <span id="ad-last-updated">—</span></div>
+    </div>
+
+    <section>
+        <div class="section-label" style="margin-bottom:8px;">Active Crawl Jobs</div>
+        <div class="admin-card-grid" id="ad-active-jobs">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </section>
+
+    <section>
+        <div class="section-label" style="margin-bottom:8px;">Active Campaigns</div>
+        <div class="admin-card-grid" id="ad-active-campaigns">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </section>
+
+    <section>
+        <div class="section-label" style="margin-bottom:8px;">Recently Finished Jobs</div>
+        <div class="admin-card-grid" id="ad-recent-jobs">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </section>
+
+    <section>
+        <div class="section-label" style="margin-bottom:8px;">Recently Finished Campaigns</div>
+        <div class="admin-card-grid" id="ad-recent-campaigns">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </section>
+</div>
+
+<style>
+    .admin-card-grid { display:flex; flex-wrap:wrap; gap:12px; }
+    .admin-card {
+        background: var(--panel, #161b22); border: 1px solid var(--border, #30363d);
+        border-radius: 8px; padding: 12px 14px; min-width: 220px; font-size: 12px;
+    }
+    .admin-card h4 { margin: 0 0 6px; font-size: 13px; }
+    .admin-card .admin-card-meta { color: var(--text-muted, #8b949e); margin-top: 4px; }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/admin-dashboard.js"></script>
+{% endblock %}
+
+{% block init_js %}
+startAdminDashboardPoll();
+{% endblock %}

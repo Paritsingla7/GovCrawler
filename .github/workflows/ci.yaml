@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+
+jobs:
+  lint:
+    # Lints only files changed in this PR, not the whole repo — the existing
+    # codebase predates any enforced black/ruff config (pyproject.toml, this
+    # PR's sibling change) and isn't fully compliant yet. Diff-scoping lets
+    # new/changed code be held to the standard without a repo-wide reformat.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install ruff black
+      - name: Determine changed Python files
+        id: changed
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.py' | grep -v '^alembic/versions/' || true)
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$FILES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+      - name: ruff check (changed files)
+        if: steps.changed.outputs.files != ''
+        run: echo "${{ steps.changed.outputs.files }}" | xargs ruff check
+      - name: black --check (changed files)
+        if: steps.changed.outputs.files != ''
+        run: echo "${{ steps.changed.outputs.files }}" | xargs black --check
+
+  import-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - name: Compile-check every module
+        run: python -m py_compile $(git ls-files '*.py')
+      - name: Import each subsystem entrypoint
+        run: python -c "import portal.main, cloud.api.server, agent.api"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  migration-smoke-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: govcrawler
+          POSTGRES_PASSWORD: govcrawler
+          POSTGRES_DB: govcrawler
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U govcrawler"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - name: alembic upgrade head against a fresh Postgres DB
+        env:
+          DATABASE_URL: postgresql://govcrawler:govcrawler@localhost:5432/govcrawler
+        run: alembic upgrade head

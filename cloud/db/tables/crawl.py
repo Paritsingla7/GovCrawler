@@ -91,6 +91,19 @@ class JobCustomUrl(Base):
     )
 
 
+class JobFrontier(Base):
+    """Cloud-side copy of a job's frontier checkpoint, for optional cross-
+    machine resume (plan.md §18 Decision C — off by default via
+    crawler.cross_machine_resume). Local per-job SQLite (agent/local_store.py)
+    remains the primary, always-written checkpoint; this table is only
+    consulted when a `resume` call finds no local file (a different machine
+    than the one that ran the original crawl)."""
+    __tablename__ = "job_frontiers"
+    job_id = Column(Integer, ForeignKey("crawl_jobs.id"), primary_key=True)
+    snapshot_json = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
 class VisitedUrl(Base):
     __tablename__ = "visited_urls"
     id = Column(Integer, primary_key=True, autoincrement=True)

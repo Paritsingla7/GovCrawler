@@ -126,7 +126,9 @@ async def create_job(
     engine_config = created["policy"]
 
     outbox_path = DATA_DIR / f"outbox_job_{job_id}.db"
-    cloud = CloudApiClient(base_url, token_provider, job_id, outbox_path)
+    cross_machine_resume = engine_config.get("crawler", {}).get("cross_machine_resume", False)
+    cloud = CloudApiClient(base_url, token_provider, job_id, outbox_path,
+                           cross_machine_resume=cross_machine_resume)
     task = asyncio.create_task(_run_crawl(job_id, seeds, created["visited_bootstrap"],
                                           cloud, engine_config, browser, active_tasks))
     active_tasks[job_id] = task
@@ -160,8 +162,10 @@ async def resume_job(
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
 
     outbox_path = DATA_DIR / f"outbox_job_{job_id}.db"
-    cloud = CloudApiClient(base_url, token_provider, job_id, outbox_path)
-    frontier = cloud.load_frontier()
+    cross_machine_resume = resumed["policy"].get("crawler", {}).get("cross_machine_resume", False)
+    cloud = CloudApiClient(base_url, token_provider, job_id, outbox_path,
+                           cross_machine_resume=cross_machine_resume)
+    frontier = await cloud.load_frontier()
     if frontier is None:
         log.warning(f"Job {job_id}: no local frontier checkpoint found — resuming from seeds instead")
 
