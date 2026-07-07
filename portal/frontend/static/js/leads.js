@@ -454,7 +454,7 @@ function renderLeads(leads, total) {
     const tbody = document.getElementById('leads-tbody');
     tbody.innerHTML = '';
     if (!leads.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No leads found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No leads found.</td></tr>';
         return;
     }
     const WARN_FIELDS = ['person_name', 'designation', 'department', 'domain_state'];
@@ -477,9 +477,10 @@ function renderLeads(leads, total) {
             `<td style="text-align:center">${scoreBadge(l)}</td>`,
             `<td>
                 <a href="mailto:${esc(l.email)}" style="display:block;font-family:monospace;font-size:11px;color:var(--accent)">${esc(l.email)}<span style="font-size:9px;margin-left:2px;opacity:0.55">↗</span></a>
-                ${l.phone
-                ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:10px;color:var(--muted);margin-top:2px">📞 ${esc(l.phone)}</a>`
-                : ''}
+            </td>`,
+            `<td>${l.phone
+                ? `<a href="tel:${esc(l.phone)}" style="display:block;font-family:monospace;font-size:11px;color:var(--muted)">📞 ${esc(l.phone)}</a>`
+                : '<span class="empty-state" style="padding:0">—</span>'}
             </td>`,
             `<td class="lead-person-cell">
                 <input type="text" class="lead-cell-input lead-primary-input" data-lead-id="${l.id}" data-field="person_name" data-orig="${esc(l.person_name || '')}" value="${esc(l.person_name || '')}" placeholder="Name" autocomplete="off" spellcheck="false">
