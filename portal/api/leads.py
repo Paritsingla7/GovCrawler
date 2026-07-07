@@ -27,7 +27,7 @@ from ..services.csv_import import build_template_csv, parse_contacts_csv
 router = APIRouter(tags=["leads"])
 
 _ALL_EXPORT_FIELDS = [
-    "email", "person_name", "designation", "department",
+    "email", "person_name", "designation", "department", "phone",
     "domain_title", "domain_state", "domain_org_type",
     "category_title", "source_url", "source_title", "context_snippet",
     "lead_score", "depth", "captured_at",

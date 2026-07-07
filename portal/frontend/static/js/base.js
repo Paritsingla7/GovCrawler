@@ -705,7 +705,7 @@ async function exportDashboardLeads() {
         return;
     }
 
-    const body = {job_id: activeJobId};
+    const body = {job_ids: [activeJobId]};
 
     // Optional: show loading feedback on the button
     const btn1 = document.getElementById('btn-export-leads');

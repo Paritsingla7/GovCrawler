@@ -19,6 +19,7 @@
         <div style="display:flex;">Gov<span>Crawler</span></div>
     </div>
     <div class="header-right">
+        {% block header_actions %}{% endblock %}
         <button class="btn-secondary btn-sm{{ ' active' if active_page == 'dashboard' }}"
                 onclick="window.location.href='/'">🏠 Dashboard
         </button>
@@ -32,7 +33,6 @@
                 onclick="openConfig()">⚙️ Settings
         </button>
         <button class="btn-secondary btn-sm" onclick="openLogs()">📃 View Logs</button>
-        {% block header_actions %}{% endblock %}
         <a class="btn-icon" href="/user-guide"
            style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"
            title="User Guide">?</a>
