@@ -1,12 +1,12 @@
 import datetime
-from sqlalchemy import func, literal, or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 
-from ..enums import CampaignStatus, EmailStatus
+from ..enums import CampaignKind, CampaignStatus, EmailStatus
 from ..tables.outreach import (
     Blacklist, Campaign, CampaignCredential, CampaignEmail, EmailTemplate, SMTPCredential,
-    TestCampaign, TestCampaignEmail,
 )
+from ...security.crypto import decrypt_password, encrypt_password
 
 
 class OutreachMixin:
@@ -87,61 +87,50 @@ class OutreachMixin:
 
     # ── Campaign ──────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _campaign_dict(c: Campaign) -> dict:
+        return {"id": c.id, "name": c.name, "template_id": c.template_id,
+                "kind": c.kind, "test_credential_id": c.test_credential_id,
+                "status": c.status.value, "owner_id": c.owner_id,
+                "pause_reason": c.pause_reason,
+                "created_at": c.created_at.isoformat() if c.created_at else None}
+
     def create_campaign(self, name: str, template_id: int,
-                        status: CampaignStatus = None) -> int:
+                        kind: str = CampaignKind.PRODUCTION.value,
+                        test_credential_id: int | None = None,
+                        status: CampaignStatus = None,
+                        owner_id: int | None = None) -> int:
         if status is None:
             status = CampaignStatus.RUNNING
         with self._Session() as s:
-            c = Campaign(name=name, template_id=template_id, status=status)
+            c = Campaign(name=name, template_id=template_id, kind=kind,
+                        test_credential_id=test_credential_id, status=status,
+                        owner_id=owner_id)
             s.add(c)
             s.commit()
             return c.id
 
-    def get_campaign(self, campaign_id: int) -> dict | None:
+    def get_campaign(self, campaign_id: int, owner_id: int | None = None,
+                     view_all: bool = False) -> dict | None:
         with self._Session() as s:
-            c = s.query(Campaign).filter_by(id=campaign_id).first()
-            if not c:
-                return None
-            return {"id": c.id, "name": c.name, "template_id": c.template_id,
-                    "status": c.status.value, "pause_reason": c.pause_reason,
-                    "created_at": c.created_at.isoformat() if c.created_at else None}
+            q = s.query(Campaign).filter_by(id=campaign_id)
+            if not view_all:
+                q = q.filter(Campaign.owner_id == owner_id)
+            c = q.first()
+            return self._campaign_dict(c) if c else None
 
-    def list_campaigns(self, page: int = 1, limit: int = 20, include_test: bool = True) -> tuple[list[dict], int]:
+    def list_campaigns(self, page: int = 1, limit: int = 20, kind: str | None = None,
+                       owner_id: int | None = None, view_all: bool = False) -> tuple[list[dict], int]:
         with self._Session() as s:
-            q1 = s.query(
-                Campaign.id.label('id'),
-                Campaign.name.label('name'),
-                Campaign.template_id.label('template_id'),
-                Campaign.status.label('status'),
-                Campaign.created_at.label('created_at'),
-                literal(False).label('is_test')
-            )
-            q2 = s.query(
-                TestCampaign.id.label('id'),
-                TestCampaign.name.label('name'),
-                TestCampaign.template_id.label('template_id'),
-                TestCampaign.status.label('status'),
-                TestCampaign.created_at.label('created_at'),
-                literal(True).label('is_test')
-            )
-
-            if include_test:
-                subq = q1.union_all(q2).subquery()
-            else:
-                subq = q1.subquery()
-
-            total = s.query(subq).count()
+            q = s.query(Campaign)
+            if kind:
+                q = q.filter(Campaign.kind == kind)
+            if not view_all:
+                q = q.filter(Campaign.owner_id == owner_id)
+            total = q.count()
             offset = (page - 1) * limit
-            rows = s.query(subq).order_by(subq.c.created_at.desc()).offset(offset).limit(limit).all()
-
-            return (
-                [{"id": r.id, "name": r.name, "template_id": r.template_id,
-                  "status": r.status.value if hasattr(r.status, 'value') else r.status, "is_test": r.is_test,
-                  "created_at": r.created_at.isoformat() if r.created_at and hasattr(r.created_at, 'isoformat') else (
-                      r.created_at if isinstance(r.created_at, str) else None)}
-                 for r in rows],
-                total,
-            )
+            rows = q.order_by(Campaign.created_at.desc()).offset(offset).limit(limit).all()
+            return ([self._campaign_dict(c) for c in rows], total)
 
     def update_campaign_status(self, campaign_id: int, new_status: CampaignStatus,
                                reason: str | None = None) -> bool:
@@ -157,11 +146,21 @@ class OutreachMixin:
             return updated > 0
 
     # ── Campaign ↔ SMTPCredential assignment ─────────────────────────────────
+    # Production campaigns use the campaign_credentials pool (junction table);
+    # test campaigns use the single Campaign.test_credential_id column — no
+    # round-robin needed for a one-off dummy-recipient test run.
 
     def set_campaign_credentials(self, campaign_id: int, credential_ids: list[int]) -> None:
         """Replace the set of credentials a campaign is allowed to send through.
         Empty list means no explicit restriction (dispatcher falls back to all active credentials)."""
         with self._Session() as s:
+            c = s.query(Campaign).filter_by(id=campaign_id).first()
+            if not c:
+                return
+            if c.kind == CampaignKind.TEST.value:
+                c.test_credential_id = credential_ids[0] if credential_ids else None
+                s.commit()
+                return
             s.query(CampaignCredential).filter_by(campaign_id=campaign_id).delete()
             s.add_all([
                 CampaignCredential(campaign_id=campaign_id, credential_id=cid)
@@ -171,12 +170,17 @@ class OutreachMixin:
 
     def get_campaign_credential_ids(self, campaign_id: int) -> list[int]:
         with self._Session() as s:
+            c = s.query(Campaign).filter_by(id=campaign_id).first()
+            if not c:
+                return []
+            if c.kind == CampaignKind.TEST.value:
+                return [c.test_credential_id] if c.test_credential_id else []
             rows = s.query(CampaignCredential.credential_id).filter_by(campaign_id=campaign_id).all()
             return [r.credential_id for r in rows]
 
     def get_credentials_by_ids(self, credential_ids: list[int]) -> list[dict]:
         """Active, non-cooling credentials among the given ids. Used to resolve a
-        campaign's (or test campaign's) explicit credential assignment to a send pool."""
+        campaign's explicit credential assignment to a send pool."""
         if not credential_ids:
             return []
         now = datetime.datetime.utcnow()
@@ -187,7 +191,7 @@ class OutreachMixin:
                 or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now),
             ).all()
             return [{"id": c.id, "host": c.host, "port": c.port,
-                     "username": c.username, "password": c.password,
+                     "username": c.username, "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
                      "daily_send_limit": c.daily_send_limit} for c in rows]
 
     # ── CampaignEmail ─────────────────────────────────────────────────────────
@@ -200,12 +204,13 @@ class OutreachMixin:
     def bulk_create_campaign_emails(self, campaign_id: int,
                                     emails: list[dict]) -> int:
         """Bulk insert rendered draft emails. Each dict must have:
-        lead_id, recipient_email, subject, body. Optional: is_selected, missing_fields."""
+        recipient_email, subject, body. Optional: lead_id (None for test/dummy
+        recipients), is_selected, missing_fields."""
         with self._Session() as s:
             objects = [
                 CampaignEmail(
                     campaign_id=campaign_id,
-                    lead_id=e["lead_id"],
+                    lead_id=e.get("lead_id"),
                     recipient_email=e["recipient_email"],
                     subject=e["subject"],
                     body=e["body"],
@@ -218,6 +223,17 @@ class OutreachMixin:
             s.add_all(objects)
             s.commit()
             return len(objects)
+
+    def create_campaign_email(self, campaign_id: int, recipient_email: str, subject: str,
+                              body: str, lead_id: int | None = None) -> int:
+        """Single-row insert — used for test-campaign dummy recipients (created
+        one at a time from a rendered dummy_details list)."""
+        with self._Session() as s:
+            e = CampaignEmail(campaign_id=campaign_id, lead_id=lead_id,
+                              recipient_email=recipient_email, subject=subject, body=body)
+            s.add(e)
+            s.commit()
+            return e.id
 
     def get_campaign_emails(self, campaign_id: int, status: str = None,
                             page: int = 1, limit: int = 50) -> tuple[list[dict], int]:
@@ -252,7 +268,7 @@ class OutreachMixin:
             return updated > 0
 
     def get_campaign_stats(self, campaign_id: int) -> dict:
-        """Aggregate counts by status for a campaign's emails."""
+        """Aggregate counts by status for a campaign's emails (production or test)."""
         with self._Session() as s:
             rows = (
                 s.query(CampaignEmail.status, func.count(CampaignEmail.id))
@@ -373,159 +389,13 @@ class OutreachMixin:
             s.commit()
             return updated
 
-    # ── TestCampaign ──────────────────────────────────────────────────────────
-
-    def create_test_campaign(self, name: str, template_id: int, test_credential_id: int | None = None,
-                             status: CampaignStatus = None) -> int:
-        if status is None:
-            status = CampaignStatus.RUNNING
-        with self._Session() as s:
-            c = TestCampaign(name=name, template_id=template_id, test_credential_id=test_credential_id, status=status)
-            s.add(c)
-            s.commit()
-            return c.id
-
-    def create_test_campaign_email(self, test_campaign_id: int, recipient_email: str, subject: str, body: str) -> int:
-        with self._Session() as s:
-            e = TestCampaignEmail(test_campaign_id=test_campaign_id, recipient_email=recipient_email, subject=subject,
-                                  body=body)
-            s.add(e)
-            s.commit()
-            return e.id
-
-    def get_test_campaign(self, campaign_id: int) -> dict | None:
-        with self._Session() as s:
-            c = s.query(TestCampaign).filter_by(id=campaign_id).first()
-            if not c: return None
-            return {"id": c.id, "name": c.name, "template_id": c.template_id,
-                    "test_credential_id": c.test_credential_id, "status": c.status.value, "is_test": True,
-                    "pause_reason": c.pause_reason,
-                    "created_at": c.created_at.isoformat() if c.created_at else None}
-
-    def update_test_campaign_status(self, campaign_id: int, new_status: CampaignStatus,
-                                    reason: str | None = None) -> bool:
-        with self._Session() as s:
-            updated = s.query(TestCampaign).filter_by(id=campaign_id).update(
-                {"status": new_status, "pause_reason": reason}
-            )
-            s.commit()
-            return updated > 0
-
-    def get_test_campaign_stats(self, campaign_id: int) -> dict:
-        with self._Session() as s:
-            rows = s.query(TestCampaignEmail.status, func.count(TestCampaignEmail.id)).filter_by(
-                test_campaign_id=campaign_id).group_by(TestCampaignEmail.status).all()
-            stats = {"draft": 0, "queued": 0, "sent": 0, "failed": 0, "total": 0}
-            for status_val, count in rows:
-                stats[status_val.value.lower()] = count
-                stats["total"] += count
-            return stats
-
-    def get_test_campaign_emails(self, campaign_id: int, status: str = None, page: int = 1, limit: int = 50) -> tuple[
-        list[dict], int]:
-        with self._Session() as s:
-            q = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id)
-            if status: q = q.filter(TestCampaignEmail.status == EmailStatus(status))
-            total = q.count()
-            offset = (page - 1) * limit
-            rows = q.order_by(TestCampaignEmail.id).offset(offset).limit(limit).all()
-            return ([{"id": e.id, "campaign_id": e.test_campaign_id, "lead_id": None,
-                      "recipient_email": e.recipient_email, "subject": e.subject, "body": e.body,
-                      "status": e.status.value, "is_selected": e.is_selected,
-                      "missing_fields": e.missing_fields,
-                      "error_message": e.error_message,
-                      "sent_at": e.sent_at.isoformat() if e.sent_at else None} for e in rows], total)
-
-    def queue_test_campaign_emails(self, campaign_id: int) -> int:
-        with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id,
-                                                           status=EmailStatus.DRAFT).update(
-                {"status": EmailStatus.QUEUED})
-            s.commit()
-            return updated
-
-    def get_next_queued_test_email(self, campaign_id: int) -> dict | None:
-        with self._Session() as s:
-            e = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id, status=EmailStatus.QUEUED).order_by(
-                TestCampaignEmail.id).first()
-            if not e: return None
-            return {"id": e.id, "campaign_id": e.test_campaign_id, "recipient_email": e.recipient_email,
-                    "subject": e.subject, "body": e.body}
-
-    def update_test_email(self, email_id: int, new_subject: str, new_body: str) -> bool:
-        with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(id=email_id, status=EmailStatus.DRAFT).update({
-                "subject": new_subject,
-                "body": new_body
-            })
-            s.commit()
-            return updated > 0
-
-    def set_test_email_selection(self, email_id: int, is_selected: bool) -> bool:
-        """Toggle selection on a DRAFT test email. Deselecting a QUEUED test email
-        pulls it back to DRAFT, mirroring set_email_selection."""
-        with self._Session() as s:
-            email = s.query(TestCampaignEmail).filter_by(id=email_id).first()
-            if not email or email.status not in (EmailStatus.DRAFT, EmailStatus.QUEUED):
-                return False
-            updates = {"is_selected": is_selected}
-            if email.status == EmailStatus.QUEUED and not is_selected:
-                updates["status"] = EmailStatus.DRAFT
-            s.query(TestCampaignEmail).filter_by(id=email_id).update(updates)
-            s.commit()
-            return True
-
-    def set_all_test_email_selection(self, campaign_id: int, is_selected: bool) -> int:
-        """Bulk select/deselect every DRAFT test email in a campaign, across all
-        pages. When deselecting, also pulls any QUEUED leftovers back to DRAFT."""
-        with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(
-                test_campaign_id=campaign_id, status=EmailStatus.DRAFT
-            ).update({"is_selected": is_selected})
-            if not is_selected:
-                updated += s.query(TestCampaignEmail).filter_by(
-                    test_campaign_id=campaign_id, status=EmailStatus.QUEUED
-                ).update({"status": EmailStatus.DRAFT, "is_selected": False})
-            s.commit()
-            return updated
-
-    def delete_test_campaign_email(self, email_id: int) -> bool:
-        """Remove a DRAFT test email from a test campaign."""
-        with self._Session() as s:
-            deleted = s.query(TestCampaignEmail).filter_by(
-                id=email_id, status=EmailStatus.DRAFT
-            ).delete()
-            s.commit()
-            return deleted > 0
-
-    def mark_test_email_sent(self, email_id: int, credential_id: int | None = None) -> None:
-        with self._Session() as s:
-            s.query(TestCampaignEmail).filter_by(id=email_id).update(
-                {"status": EmailStatus.SENT, "sent_at": datetime.datetime.utcnow(),
-                 "credential_id": credential_id})
-            s.commit()
-
-    def mark_test_email_failed(self, email_id: int, error_message: str, credential_id: int | None = None) -> None:
-        with self._Session() as s:
-            s.query(TestCampaignEmail).filter_by(id=email_id).update(
-                {"status": EmailStatus.FAILED, "error_message": error_message,
-                 "credential_id": credential_id})
-            s.commit()
-
-    def cancel_remaining_queued_test(self, campaign_id: int) -> int:
-        with self._Session() as s:
-            updated = s.query(TestCampaignEmail).filter_by(test_campaign_id=campaign_id,
-                                                           status=EmailStatus.QUEUED).update(
-                {"status": EmailStatus.FAILED, "error_message": "Campaign cancelled"})
-            s.commit()
-            return updated
-
     # ── SMTP Credential operations ────────────────────────────────────────────
 
     def create_credential(self, host: str, port: int, username: str, password: str,
                           daily_send_limit: int | None = None) -> int:
         with self._Session() as s:
-            c = SMTPCredential(host=host, port=port, username=username, password=password,
+            c = SMTPCredential(host=host, port=port, username=username,
+                               password_encrypted=encrypt_password(password, self._cred_enc_key),
                                daily_send_limit=daily_send_limit)
             s.add(c)
             s.commit()
@@ -537,7 +407,7 @@ class OutreachMixin:
             if not c:
                 return None
             return {"id": c.id, "host": c.host, "port": c.port,
-                    "username": c.username, "password": c.password,
+                    "username": c.username, "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
                     "is_active": c.is_active,
                     "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
                     "daily_send_limit": c.daily_send_limit}
@@ -555,6 +425,8 @@ class OutreachMixin:
         return creds
 
     def update_credential(self, credential_id: int, **kwargs) -> bool:
+        if "password" in kwargs and kwargs["password"] is not None:
+            kwargs["password_encrypted"] = encrypt_password(kwargs.pop("password"), self._cred_enc_key)
         with self._Session() as s:
             updated = s.query(SMTPCredential).filter_by(id=credential_id).update(
                 {k: v for k, v in kwargs.items() if v is not None}
@@ -577,7 +449,7 @@ class OutreachMixin:
                 or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now)
             ).all()
             return [{"id": c.id, "host": c.host, "port": c.port,
-                     "username": c.username, "password": c.password,
+                     "username": c.username, "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
                      "daily_send_limit": c.daily_send_limit} for c in rows]
 
     def disable_credential(self, credential_id: int) -> None:
@@ -596,17 +468,11 @@ class OutreachMixin:
         """Count of emails successfully sent via this credential since 00:00 UTC today."""
         today_start = datetime.datetime.combine(datetime.datetime.utcnow().date(), datetime.time.min)
         with self._Session() as s:
-            n1 = s.query(CampaignEmail).filter(
+            return s.query(CampaignEmail).filter(
                 CampaignEmail.credential_id == credential_id,
                 CampaignEmail.status == EmailStatus.SENT,
                 CampaignEmail.sent_at >= today_start,
             ).count()
-            n2 = s.query(TestCampaignEmail).filter(
-                TestCampaignEmail.credential_id == credential_id,
-                TestCampaignEmail.status == EmailStatus.SENT,
-                TestCampaignEmail.sent_at >= today_start,
-            ).count()
-            return n1 + n2
 
     def get_credential_health(self, credential_id: int) -> dict:
         """Send/failure counts for a credential, all-time and today. Used to surface
@@ -615,22 +481,20 @@ class OutreachMixin:
         with self._Session() as s:
             sent_total = 0
             failed_total = 0
-            sent_today = 0
-            for model in (CampaignEmail, TestCampaignEmail):
-                rows = (
-                    s.query(model.status, func.count(model.id))
-                    .filter(model.credential_id == credential_id)
-                    .group_by(model.status)
-                    .all()
-                )
-                for status_val, count in rows:
-                    if status_val == EmailStatus.SENT:
-                        sent_total += count
-                    elif status_val == EmailStatus.FAILED:
-                        failed_total += count
-                sent_today += s.query(model).filter(
-                    model.credential_id == credential_id,
-                    model.status == EmailStatus.SENT,
-                    model.sent_at >= today_start,
-                ).count()
+            rows = (
+                s.query(CampaignEmail.status, func.count(CampaignEmail.id))
+                .filter(CampaignEmail.credential_id == credential_id)
+                .group_by(CampaignEmail.status)
+                .all()
+            )
+            for status_val, count in rows:
+                if status_val == EmailStatus.SENT:
+                    sent_total += count
+                elif status_val == EmailStatus.FAILED:
+                    failed_total += count
+            sent_today = s.query(CampaignEmail).filter(
+                CampaignEmail.credential_id == credential_id,
+                CampaignEmail.status == EmailStatus.SENT,
+                CampaignEmail.sent_at >= today_start,
+            ).count()
             return {"sent_total": sent_total, "failed_total": failed_total, "sent_today": sent_today}

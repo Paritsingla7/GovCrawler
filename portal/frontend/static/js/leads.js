@@ -520,7 +520,9 @@ function renderLeads(leads, total) {
             </td>`,
             editableCell(l.id, 'department', l.department, {'font-size': '12px', 'color': 'var(--muted)'}),
             `<td style="text-align:center">
-                <input type="text" class="lead-cell-input lead-primary-input" style="font-size:12px;color:var(--muted);text-align:center" data-lead-id="${l.id}" data-field="domain_state" data-orig="${esc(l.domain_state || '')}" value="${esc(l.domain_state || '')}" placeholder="State" autocomplete="off" spellcheck="false">
+                ${l.is_manual
+                    ? `<input type="text" class="lead-cell-input lead-primary-input" style="font-size:12px;color:var(--muted);text-align:center" data-lead-id="${l.id}" data-field="manual_state" data-orig="${esc(l.manual_state || '')}" value="${esc(l.manual_state || '')}" placeholder="State" autocomplete="off" spellcheck="false">`
+                    : `<div style="font-size:12px;color:var(--muted)">${esc(l.domain_state || '—')}</div>`}
                 <div style="margin-top:3px"><span class="tag tag-${catCode}">${catCode.toUpperCase()}</span></div>
             </td>`,
             `<td>${domainUrl

@@ -265,7 +265,7 @@ if (!initialId) return;
 // Find by id in whichever campaigns were loaded
 const found = loadedCampaigns.find(c => c.id === initialId);
 if (found) {
-selectCampaign(found.id, found.is_test);
+selectCampaign(found.id, found.kind);
 return;
 }
 
@@ -275,7 +275,7 @@ if (toggle && !toggle.checked) {
 toggle.checked = true;
 loadCampaigns().then(() => {
 const foundNow = loadedCampaigns.find(c => c.id === initialId);
-if (foundNow) selectCampaign(foundNow.id, foundNow.is_test);
+if (foundNow) selectCampaign(foundNow.id, foundNow.kind);
 });
 }
 });

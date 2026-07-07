@@ -6,7 +6,8 @@ from ..tables.crawl import CrawlJob, CrawlJobDomain, JobCustomUrl
 
 class JobMixin:
     def create_job(self, domain_ids: list[int] = None, custom_urls: list[str] = None,
-                   category_filter: str = None, title_filter: str = None) -> int:
+                   category_filter: str = None, title_filter: str = None,
+                   owner_id: int | None = None) -> int:
         source_type = "custom_urls" if custom_urls else "domains"
         seed_count = len(custom_urls) if custom_urls else len(domain_ids or [])
         with self._Session() as s:
@@ -18,6 +19,7 @@ class JobMixin:
                 total_domains=seed_count,
                 seed_domains=seed_count,
                 status="pending",
+                owner_id=owner_id,
             )
             s.add(job)
             s.commit()
@@ -100,19 +102,21 @@ class JobMixin:
             s.commit()
             return job.id
 
-    def get_job(self, job_id: int) -> dict | None:
+    def get_job(self, job_id: int, owner_id: int | None = None, view_all: bool = False) -> dict | None:
         with self._Session() as s:
-            j = s.query(CrawlJob).filter_by(id=job_id).first()
+            q = s.query(CrawlJob).filter_by(id=job_id)
+            if not view_all:
+                q = q.filter(CrawlJob.owner_id == owner_id)
+            j = q.first()
             return self._job_dict(j) if j else None
 
-    def list_jobs(self, limit: int = 20) -> list[dict]:
+    def list_jobs(self, limit: int = 20, owner_id: int | None = None,
+                  view_all: bool = False) -> list[dict]:
         with self._Session() as s:
-            rows = (
-                s.query(CrawlJob)
-                .order_by(CrawlJob.created_at.desc())
-                .limit(limit)
-                .all()
-            )
+            q = s.query(CrawlJob)
+            if not view_all:
+                q = q.filter(CrawlJob.owner_id == owner_id)
+            rows = q.order_by(CrawlJob.created_at.desc()).limit(limit).all()
             return [self._job_dict(j) for j in rows]
 
     @staticmethod
@@ -130,6 +134,7 @@ class JobMixin:
             "current_depth": j.current_depth or 0,
             "active_workers": j.active_workers or 0,
             "error_message": j.error_message,
+            "owner_id": j.owner_id,
             "category_filter": j.category_filter,
             "title_filter": j.title_filter,
             "created_at": j.created_at.isoformat() if j.created_at else None,

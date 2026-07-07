@@ -11,6 +11,8 @@ from .mixins.job_mixin import JobMixin
 from .mixins.lead_mixin import LeadMixin
 from .mixins.outreach_mixin import OutreachMixin
 from .mixins.visited_mixin import VisitedUrlMixin
+from ..paths import LIVE_CONFIG_PATH
+from ..security.crypto import ensure_credential_enc_key
 from shared.scoring import DEFAULT_WEIGHTS, compute_lead_score
 
 log = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
         self._Session = sessionmaker(bind=self.engine)
         self._recrawl_days = config.get("crawler", {}).get("recrawl_days", 30)
         self._lead_score_weights = config.get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)
+        self._cred_enc_key = ensure_credential_enc_key(config, LIVE_CONFIG_PATH)
         self._ensure_columns()
         run_migrations(uri)
         self.seed_rbac()
@@ -38,18 +41,10 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
                 ("missing_fields", "VARCHAR"),
                 ("credential_id", "INTEGER"),
             ],
-            "test_campaign_emails": [
-                ("is_selected", "BOOLEAN NOT NULL DEFAULT TRUE"),
-                ("missing_fields", "VARCHAR"),
-                ("credential_id", "INTEGER"),
-            ],
             "smtp_credentials": [
                 ("daily_send_limit", "INTEGER"),
             ],
             "campaigns": [
-                ("pause_reason", "VARCHAR"),
-            ],
-            "test_campaigns": [
                 ("pause_reason", "VARCHAR"),
             ],
             "crawl_jobs": [
@@ -82,7 +77,8 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
                         log.info(f"Schema: added column {table}.{col_name}")
             if "leads" in inspector.get_table_names():
                 self._recompute_lead_scores(conn)
-                if "crawl_snapshots" in inspector.get_table_names():
+                leads_columns = {c["name"] for c in inspector.get_columns("leads")}
+                if "crawl_snapshots" in inspector.get_table_names() and "domain_id" in leads_columns:
                     self._backfill_snapshots(conn)
             conn.commit()
 

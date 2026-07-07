@@ -63,6 +63,7 @@ class CrawlJob(Base):
     current_depth = Column(Integer, default=0)
     active_workers = Column(Integer, default=0)
     error_message = Column(String)
+    owner_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     started_at = Column(DateTime)
     finished_at = Column(DateTime)

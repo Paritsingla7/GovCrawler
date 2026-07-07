@@ -54,7 +54,7 @@ class LeadUpdate(BaseModel):
     person_name: str | None = None
     designation: str | None = None
     department: str | None = None
-    domain_state: str | None = None
+    manual_state: str | None = None
 
 
 @router.get("/api/leads")
@@ -184,7 +184,7 @@ async def import_leads_csv(file: UploadFile = File(...), db: Database = Depends(
         raise HTTPException(status_code=400, detail="CSV file is empty")
 
     job_id = db.get_or_create_manual_upload_job()
-    imported, updated, db_skipped = db.bulk_upsert_manual_leads(job_id, rows)
+    imported, updated, db_skipped = db.bulk_upsert_manual_leads(job_id, rows, captured_by=user.id)
     skipped.extend(db_skipped)
 
     return {"imported": imported, "updated": updated, "skipped": skipped}
@@ -205,7 +205,10 @@ async def update_lead(lead_id: int, req: LeadUpdate, db: Database = Depends(get_
     updates = req.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    ok = db.update_lead(lead_id, updates)
-    if not ok:
+    result = db.update_lead(lead_id, updates)
+    if result == "not_manual":
+        raise HTTPException(status_code=400,
+                            detail="State is derived from the crawl for this lead and can't be edited")
+    if not result:
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"ok": True}

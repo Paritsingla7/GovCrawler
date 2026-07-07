@@ -102,7 +102,7 @@ async function uploadDummyLeadsCsv() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const res = await fetch('/api/test-campaigns/parse-csv', {method: 'POST', body: formData});
+        const res = await fetch('/api/campaigns/parse-csv', {method: 'POST', body: formData});
         if (!res.ok) {
             let detail = 'Failed to parse CSV';
             try {
@@ -166,13 +166,14 @@ async function submitTestCampaign(e) {
     const payload = {
         name: document.getElementById('test-name').value,
         template_id: parseInt(document.getElementById('test-template').value, 10),
+        kind: 'test',
         test_credential_id: credId ? parseInt(credId, 10) : null,
         dummy_details: dummyDetails
     };
 
     try {
         // 1. Create Test Campaign
-        const res = await fetch('/api/test-campaigns', {
+        const res = await fetch('/api/campaigns', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)

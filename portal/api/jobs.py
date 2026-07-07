@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, model_validator
 from urllib.parse import urlsplit
 
-from .deps import CurrentUser, get_active_tasks, get_browser, get_config as get_app_config, get_db, require
+from .deps import CurrentUser, get_active_tasks, get_browser, get_config as get_app_config, get_current_user, get_db, require
 from ..crawler.engine import CrawlerEngine
 from ..db import Database
 
@@ -73,7 +73,7 @@ async def _run_crawl(job_id: int, seeds: list[tuple[str, int | None]],
         engine = CrawlerEngine(config=config, db=db, job_id=job_id, browser=browser)
         await engine.run(seeds)
         db.finish_job(job_id, status="done")
-        job = db.get_job(job_id)
+        job = db.get_job(job_id, view_all=True)
         log.info(f"Crawl job {job_id} done. Leads: {job['leads_found']}")
     except asyncio.CancelledError:
         log.info(f"Crawl job {job_id} cancelled by user.")
@@ -104,6 +104,7 @@ async def create_job(
             custom_urls=urls,
             category_filter=req.category_filter,
             title_filter=req.title_filter,
+            owner_id=user.id,
         )
         db.add_job_custom_urls(job_id, urls)
         seeds = [(url, None) for url in urls]
@@ -119,6 +120,7 @@ async def create_job(
             domain_ids=req.domain_ids,
             category_filter=req.category_filter,
             title_filter=req.title_filter,
+            owner_id=user.id,
         )
 
         seeds = []
@@ -145,13 +147,15 @@ async def create_job(
 
 
 @router.get("/api/jobs")
-async def list_jobs(limit: int = Query(20, ge=1, le=100), db: Database = Depends(get_db)):
-    return db.list_jobs(limit=limit)
+async def list_jobs(limit: int = Query(20, ge=1, le=100), db: Database = Depends(get_db),
+                    user: CurrentUser = Depends(get_current_user)):
+    return db.list_jobs(limit=limit, owner_id=user.id, view_all=user.can("jobs.view_all"))
 
 
 @router.get("/api/jobs/{job_id}")
-async def get_job(job_id: int, db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks)):
-    job = db.get_job(job_id)
+async def get_job(job_id: int, db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks),
+                  user: CurrentUser = Depends(get_current_user)):
+    job = db.get_job(job_id, owner_id=user.id, view_all=user.can("jobs.view_all"))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     task = active_tasks.get(job_id)
@@ -161,8 +165,9 @@ async def get_job(job_id: int, db: Database = Depends(get_db), active_tasks: dic
 
 
 @router.get("/api/jobs/{job_id}/seeds")
-async def get_job_seeds(job_id: int, db: Database = Depends(get_db)):
-    job = db.get_job(job_id)
+async def get_job_seeds(job_id: int, db: Database = Depends(get_db),
+                        user: CurrentUser = Depends(get_current_user)):
+    job = db.get_job(job_id, owner_id=user.id, view_all=user.can("jobs.view_all"))
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -195,6 +200,11 @@ def cancel_job_if_running(job_id: int, db: Database, active_tasks: dict[int, asy
 @router.post("/api/jobs/{job_id}/cancel")
 async def cancel_job(job_id: int, db: Database = Depends(get_db), active_tasks: dict = Depends(get_active_tasks),
                      user: CurrentUser = Depends(require("crawl.run"))):
+    job = db.get_job(job_id, view_all=True)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["owner_id"] != user.id and not user.can("crawl.cancel_all"):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     if cancel_job_if_running(job_id, db, active_tasks):
         return {"message": "Job cancelled"}
     return {"message": "Job is not currently running"}

@@ -83,7 +83,6 @@ class CrawlerLauncher:
         self._drain_deadline: float | None = None
         self._prev_jobs: set[int] = set()
         self._prev_campaigns: set[int] = set()
-        self._prev_test_campaigns: set[int] = set()
 
         self._build_ui()
         self._render_state()
@@ -244,7 +243,7 @@ class CrawlerLauncher:
         self._render_state()
 
         self.http = httpx.Client(base_url=self._base_url())
-        self._prev_jobs, self._prev_campaigns, self._prev_test_campaigns = set(), set(), set()
+        self._prev_jobs, self._prev_campaigns = set(), set()
 
         if self.tray is None:
             self._setup_tray()
@@ -328,14 +327,11 @@ class CrawlerLauncher:
             parts.append(f"{len(data['crawl_jobs'])} crawl job(s)")
         if data["campaigns"]:
             parts.append(f"{len(data['campaigns'])} campaign(s)")
-        if data["test_campaigns"]:
-            parts.append(f"{len(data['test_campaigns'])} test campaign(s)")
         self.activity_lbl.config(text=f"Active: {', '.join(parts)}")
 
     def _check_for_completions(self, data: dict):
         cur_jobs = {j["id"] for j in data["crawl_jobs"]}
         cur_campaigns = {c["id"] for c in data["campaigns"]}
-        cur_test_campaigns = {c["id"] for c in data["test_campaigns"]}
 
         for job_id in self._prev_jobs - cur_jobs:
             self._api_async("GET", f"/api/jobs/{job_id}",
@@ -343,12 +339,8 @@ class CrawlerLauncher:
         for cid in self._prev_campaigns - cur_campaigns:
             self._api_async("GET", f"/api/campaigns/{cid}",
                             lambda d, e, cid=cid: self._notify_campaign_done("Campaign", cid, d, e))
-        for cid in self._prev_test_campaigns - cur_test_campaigns:
-            self._api_async("GET", f"/api/test-campaigns/{cid}",
-                            lambda d, e, cid=cid: self._notify_campaign_done("Test campaign", cid, d, e))
 
-        self._prev_jobs, self._prev_campaigns, self._prev_test_campaigns = \
-            cur_jobs, cur_campaigns, cur_test_campaigns
+        self._prev_jobs, self._prev_campaigns = cur_jobs, cur_campaigns
 
     def _notify_job_done(self, job_id: int, data, err):
         if err is not None or not data:
@@ -389,7 +381,6 @@ class CrawlerLauncher:
 
         labels = [j["label"] for j in data["crawl_jobs"]]
         labels += [f"Campaign: {c['name']}" for c in data["campaigns"]]
-        labels += [f"Test campaign: {c['name']}" for c in data["test_campaigns"]]
         preview = "\n".join(f"• {label}" for label in labels[:6])
         if len(labels) > 6:
             preview += f"\n… and {len(labels) - 6} more"

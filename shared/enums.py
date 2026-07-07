@@ -8,6 +8,14 @@ class CampaignStatus(enum.Enum):
     COMPLETED = "COMPLETED"
 
 
+class CampaignKind(enum.Enum):
+    """TEXT+CHECK on the DB side (not a native SqlEnum column, per plan.md §4's
+    portability rationale — ALTER TYPE is transaction-hostile on Postgres and
+    can't drop values), but kept as a real enum in app code for type safety."""
+    PRODUCTION = "production"
+    TEST = "test"
+
+
 class EmailStatus(enum.Enum):
     DRAFT = "DRAFT"
     QUEUED = "QUEUED"

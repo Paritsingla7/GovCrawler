@@ -1,11 +1,19 @@
+import datetime
 import json
 
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from ..tables.crawl import CrawlSnapshot
-from ..tables.leads import Lead
+from ..tables.leads import Lead, LeadOccurrence
 from shared.scoring import compute_lead_score
+
+# Fields that a re-capture may fill in if the existing lead has them blank.
+# Never overwrites an already-populated value (enrich, not replace).
+_ENRICHABLE_FIELDS = (
+    "person_name", "designation", "department", "source_title",
+    "context_snippet", "phone", "confidence_band", "field_provenance", "entity_kind",
+)
 
 
 def _department_is_url_fallback(field_provenance: str | None) -> bool:
@@ -25,60 +33,84 @@ class LeadMixin:
     def get_lead_score_weights(self) -> dict:
         return self._lead_score_weights
 
+    def _record_occurrence(self, s, lead_id: int, job_id: int, source_url: str | None,
+                           captured_by: int | None = None) -> None:
+        """Get-or-create a lead_occurrences row (unique lead_id+job_id). Tolerates
+        a race/duplicate call the same way create_crawl_snapshot does."""
+        try:
+            s.add(LeadOccurrence(lead_id=lead_id, job_id=job_id, source_url=source_url,
+                                 captured_by=captured_by))
+            s.commit()
+        except IntegrityError:
+            s.rollback()  # already recorded for this (lead, job) pair
+
     def save_lead(self, job_id: int, snapshot_id: int | None, email: str | None,
                   person_name: str | None, designation: str | None,
                   department: str | None, source_url: str, source_title: str | None,
                   context_snippet: str, entity_kind: str | None = None,
                   phone: str | None = None, channel_tag: str | None = None,
                   confidence_band: str | None = None,
-                  field_provenance: str | None = None, depth: int = 0) -> bool:
+                  field_provenance: str | None = None, depth: int = 0,
+                  captured_by: int | None = None) -> bool:
         if not email:
             return False
         email = email.lower()
         with self._Session() as s:
-            existing = s.query(Lead.id).filter(Lead.email == email).first()
+            existing = s.query(Lead).filter(Lead.email == email).first()
             if existing:
-                return False
+                # Enrich-on-conflict: fill nulls only, never overwrite a
+                # populated field, then record this job's capture.
+                candidates = {
+                    "person_name": person_name, "designation": designation,
+                    "department": department, "source_title": source_title,
+                    "context_snippet": context_snippet, "phone": phone,
+                    "confidence_band": confidence_band, "field_provenance": field_provenance,
+                    "entity_kind": entity_kind,
+                }
+                changed = False
+                for field in _ENRICHABLE_FIELDS:
+                    value = candidates.get(field)
+                    if value and not getattr(existing, field):
+                        setattr(existing, field, value)
+                        changed = True
+                if changed:
+                    existing.lead_score = compute_lead_score({
+                        "email": existing.email, "phone": existing.phone,
+                        "person_name": existing.person_name, "designation": existing.designation,
+                    }, confidence_band=existing.confidence_band, channel_tag=existing.channel_tag,
+                        weights=self._lead_score_weights)
+                    s.commit()
+                self._record_occurrence(s, existing.id, job_id, source_url, captured_by)
+                return True
 
-            # Freeze state/org_type and recover the soft catalog link from the
-            # per-crawl snapshot (immune to later domains-catalog rebuilds).
-            domain_id = None
-            domain_state = None
-            domain_org_type = None
-            if snapshot_id:
-                snap = (
-                    s.query(CrawlSnapshot.source_domain_id, CrawlSnapshot.state,
-                            CrawlSnapshot.org_type, CrawlSnapshot.title)
-                    .filter_by(id=snapshot_id).first()
-                )
-                if snap:
-                    domain_id = snap.source_domain_id
-                    domain_state, domain_org_type = snap.state, snap.org_type
-                    # A department that came only from the URL's bare
-                    # subdomain slug is a worse label than the org's actual
-                    # title — swap it in when nothing on the page itself
-                    # supplied a department.
-                    if snap.title and _department_is_url_fallback(field_provenance):
-                        department = snap.title
+            # A department that came only from the URL's bare subdomain slug
+            # is a worse label than the org's actual title — swap it in when
+            # nothing on the page itself supplied a department.
+            if snapshot_id and _department_is_url_fallback(field_provenance):
+                snap = s.query(CrawlSnapshot.title).filter_by(id=snapshot_id).first()
+                if snap and snap.title:
+                    department = snap.title
+
             lead_score = compute_lead_score({
                 "email": email, "phone": phone, "person_name": person_name,
                 "designation": designation,
             }, confidence_band=confidence_band, channel_tag=channel_tag,
                 weights=self._lead_score_weights)
             try:
-                s.add(Lead(
-                    job_id=job_id, domain_id=domain_id, snapshot_id=snapshot_id,
+                lead = Lead(
+                    job_id=job_id, snapshot_id=snapshot_id,
                     email=email,
                     person_name=person_name, designation=designation,
                     department=department, source_url=source_url,
                     source_title=source_title,
                     context_snippet=context_snippet,
-                    domain_state=domain_state, domain_org_type=domain_org_type,
                     entity_kind=entity_kind, phone=phone, channel_tag=channel_tag,
                     confidence_band=confidence_band, field_provenance=field_provenance,
                     lead_score=lead_score, depth=depth,
-                ))
+                )
+                s.add(lead)
                 s.commit()
+                self._record_occurrence(s, lead.id, job_id, source_url, captured_by)
                 return True
             except IntegrityError:
                 s.rollback()
@@ -101,9 +133,9 @@ class LeadMixin:
         if categories:
             q = q.filter(or_(is_manual, CrawlSnapshot.category_code.in_(categories)))
         if states:
-            q = q.filter(or_(is_manual, CrawlSnapshot.state.in_(states)))
+            q = q.filter(or_(is_manual, CrawlSnapshot.state.in_(states), Lead.manual_state.in_(states)))
         if org_types:
-            q = q.filter(or_(is_manual, CrawlSnapshot.domain_org_type.in_(org_types)))
+            q = q.filter(or_(is_manual, CrawlSnapshot.org_type.in_(org_types)))
         if search:
             q = q.filter(
                 or_(Lead.email.ilike(f"%{search}%"),
@@ -149,7 +181,8 @@ class LeadMixin:
         with self._Session() as s:
             q = (
                 s.query(Lead, CrawlSnapshot.title.label("domain_title"),
-                        CrawlSnapshot.category_code)
+                        CrawlSnapshot.category_code, CrawlSnapshot.state.label("snap_state"),
+                        CrawlSnapshot.org_type_title)
                 .outerjoin(CrawlSnapshot, Lead.snapshot_id == CrawlSnapshot.id)
             )
             q = self._apply_lead_filters(
@@ -168,7 +201,12 @@ class LeadMixin:
                   "source_url": l.source_url, "source_title": l.source_title,
                   "context_snippet": l.context_snippet,
                   "domain_title": dt, "category_code": cc,
-                  "domain_state": l.domain_state, "domain_org_type": l.domain_org_type,
+                  # display-only: crawled leads (snapshot present) always show
+                  # the snapshot's frozen state; manual leads show manual_state.
+                  "domain_state": snap_state if l.snapshot_id else l.manual_state,
+                  "domain_org_type": ot,
+                  "manual_state": l.manual_state,
+                  "is_manual": l.snapshot_id is None,
                   "confidence_band": l.confidence_band,
                   "field_provenance": l.field_provenance,
                   "channel_tag": l.channel_tag,
@@ -176,7 +214,7 @@ class LeadMixin:
                   "lead_score": l.lead_score or 0,
                   "depth": l.depth or 0,
                   "captured_at": l.captured_at.isoformat() if l.captured_at else None}
-                 for l, dt, cc in rows],
+                 for l, dt, cc, snap_state, ot in rows],
                 total,
             )
 
@@ -206,7 +244,9 @@ class LeadMixin:
         with self._Session() as s:
             q = (
                 s.query(Lead, CrawlSnapshot.title.label("domain_title"),
-                        CrawlSnapshot.category_code, CrawlSnapshot.category_title)
+                        CrawlSnapshot.category_code, CrawlSnapshot.category_title,
+                        CrawlSnapshot.state.label("snap_state"), CrawlSnapshot.org_type_title,
+                        CrawlSnapshot.source_domain_id)
                 .outerjoin(CrawlSnapshot, Lead.snapshot_id == CrawlSnapshot.id)
             )
             if lead_ids:
@@ -217,14 +257,16 @@ class LeadMixin:
                     org_types=org_types, entry_type=entry_type, require_name=require_name,
                     require_designation=require_designation, require_phone=require_phone,
                 )
-            # domain_id (soft link, recovered from the snapshot at save time) groups
-            # the same org together across jobs; snapshot_id would split it per-job.
-            rows = q.order_by(Lead.domain_id, Lead.captured_at).all()
+            # source_domain_id (via the snapshot) groups the same org together
+            # across jobs; snapshot_id would split it per-job. Manual leads
+            # (no snapshot) sort after, grouped by nothing in particular.
+            rows = q.order_by(CrawlSnapshot.source_domain_id, Lead.captured_at).all()
             return [
                 {"email": l.email, "person_name": l.person_name or "",
                  "designation": l.designation or "", "department": l.department or "",
-                 "domain_title": dt or "", "domain_state": l.domain_state or "",
-                 "domain_org_type": l.domain_org_type or "",
+                 "domain_title": dt or "",
+                 "domain_state": (snap_state if l.snapshot_id else l.manual_state) or "",
+                 "domain_org_type": ot or "",
                  "category_title": ct or cc or "",
                  "source_url": l.source_url or "",
                  "source_title": l.source_title or "",
@@ -235,7 +277,7 @@ class LeadMixin:
                  "lead_score": l.lead_score or 0,
                  "depth": l.depth or 0,
                  "captured_at": l.captured_at.isoformat() if l.captured_at else ""}
-                for l, dt, cc, ct in rows
+                for l, dt, cc, ct, snap_state, ot, _sdi in rows
             ]
 
     def get_lead_categories(self, job_ids: list[int] | None = None) -> list[dict]:
@@ -289,11 +331,19 @@ class LeadMixin:
             if categories:
                 q = q.filter(CrawlSnapshot.category_code.in_(categories))
             rows = q.distinct().order_by(CrawlSnapshot.state).all()
-            return [r[0] for r in rows if r[0]]
+            states = {r[0] for r in rows if r[0]}
+            with self._Session() as s2:
+                manual_q = s2.query(Lead.manual_state).filter(Lead.manual_state.isnot(None))
+                if job_ids:
+                    manual_q = manual_q.filter(Lead.job_id.in_(job_ids))
+                states.update(r[0] for r in manual_q.distinct().all() if r[0])
+            return sorted(states)
 
-    def bulk_upsert_manual_leads(self, job_id: int, rows: list[dict]) -> tuple[int, int, list[dict]]:
+    def bulk_upsert_manual_leads(self, job_id: int, rows: list[dict],
+                                 captured_by: int | None = None) -> tuple[int, int, list[dict]]:
         """Insert/update CSV-uploaded leads. Updates a row only if the existing
-        lead with that email is itself manual; leaves crawled leads untouched."""
+        lead with that email is itself manual; a crawled lead is left untouched
+        but still gets a lead_occurrences row recording this capture."""
         imported = 0
         updated = 0
         skipped: list[dict] = []
@@ -311,8 +361,11 @@ class LeadMixin:
                             "person_name": existing.person_name, "designation": existing.designation,
                         }, confidence_band=existing.confidence_band, channel_tag=existing.channel_tag,
                             weights=self._lead_score_weights)
+                        s.commit()
+                        self._record_occurrence(s, existing.id, job_id, "manual-csv-upload", captured_by)
                         updated += 1
                     else:
+                        self._record_occurrence(s, existing.id, job_id, "manual-csv-upload", captured_by)
                         skipped.append({
                             "row": row.get("row"), "email": row["email"],
                             "reason": "email already exists as a crawled lead",
@@ -323,21 +376,26 @@ class LeadMixin:
                     "person_name": row.get("name"), "designation": row.get("designation"),
                 }, confidence_band=None, channel_tag="manual",
                     weights=self._lead_score_weights)
-                s.add(Lead(
-                    job_id=job_id, domain_id=None, email=row["email"],
+                lead = Lead(
+                    job_id=job_id, email=row["email"],
                     person_name=row.get("name"), designation=row.get("designation"),
                     department=row.get("department"), source_url="manual-csv-upload",
                     source_title=None, context_snippet=None,
                     phone=row.get("phone"), channel_tag="manual",
                     lead_score=lead_score, depth=0,
-                ))
+                )
+                s.add(lead)
+                s.commit()
+                self._record_occurrence(s, lead.id, job_id, "manual-csv-upload", captured_by)
                 imported += 1
-            s.commit()
         return imported, updated, skipped
 
-    _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "domain_state"})
+    _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "manual_state"})
 
-    def update_lead(self, lead_id: int, updates: dict) -> bool:
+    def update_lead(self, lead_id: int, updates: dict) -> bool | str:
+        """Returns True on success, False if the lead doesn't exist, or the
+        string "not_manual" if a manual_state edit was attempted on a crawled
+        lead (its state is derived from the crawl snapshot, not editable)."""
         safe = {
             k: (v.strip() if isinstance(v, str) and v.strip() else None)
             for k, v in updates.items()
@@ -349,6 +407,8 @@ class LeadMixin:
             lead = s.query(Lead).filter_by(id=lead_id).first()
             if not lead:
                 return False
+            if "manual_state" in safe and lead.snapshot_id is not None:
+                return "not_manual"
             for k, v in safe.items():
                 setattr(lead, k, v)
             lead.lead_score = compute_lead_score({

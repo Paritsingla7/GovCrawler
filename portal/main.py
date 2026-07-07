@@ -131,7 +131,7 @@ async def cmd_crawl(config: dict, job_id: int):
     from .crawler.engine import CrawlerEngine
 
     db = Database(config)
-    job = db.get_job(job_id)
+    job = db.get_job(job_id, view_all=True)
     if not job:
         log.error(f"Job {job_id} not found.")
         db.close()
@@ -173,7 +173,7 @@ async def cmd_crawl(config: dict, job_id: int):
         finally:
             await browser.close()
 
-    updated = db.get_job(job_id)
+    updated = db.get_job(job_id, view_all=True)
     log.info(f"Job {job_id} finished. Leads: {updated['leads_found']}")
     db.close()
 
