@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path
 from sqlalchemy import create_engine, inspect as sa_inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from .base import Base
 from .migrations import run_migrations
+from .mixins.app_settings_mixin import AppSettingsMixin
 from .mixins.auth_mixin import AuthMixin
 from .mixins.crawl_snapshot_mixin import CrawlSnapshotMixin
 from .mixins.domain_mixin import DomainMixin
@@ -17,20 +19,57 @@ from shared.scoring import DEFAULT_WEIGHTS, compute_lead_score
 
 log = logging.getLogger(__name__)
 
+# plan.md §3.2 — the crawler-policy subset of config.yaml's `crawler` section
+# that lives in app_settings (everything else in `crawler` is machine-local:
+# workers, timeouts, js_settle_time, cross_machine_resume).
+_CRAWLER_POLICY_KEYS = (
+    "target_suffixes", "priority_keywords", "skip_extensions", "pagination",
+    "js_indicators", "max_links_per_page", "max_depth", "recrawl_days",
+    "request_delay", "user_agent", "max_custom_urls",
+)
 
-class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlMixin, OutreachMixin, AuthMixin):
-    def __init__(self, config: dict):
+
+class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlMixin, OutreachMixin, AuthMixin,
+               AppSettingsMixin):
+    def __init__(self, config: dict, config_path: Path = LIVE_CONFIG_PATH):
+        """`config_path` is where a missing `credential_enc_key` gets persisted
+        (ensure_credential_enc_key) — defaults to the real live config for every
+        actual call site (portal.main, dispatch_service, the migration script),
+        but callers building a `Database` from an ad-hoc/test config dict MUST
+        override it, or a generated key silently overwrites the real file."""
         uri = config["database"]["uri"]
         self.engine = create_engine(uri, echo=False, pool_pre_ping=True)
         Base.metadata.create_all(self.engine)
         self._Session = sessionmaker(bind=self.engine)
         self._recrawl_days = config.get("crawler", {}).get("recrawl_days", 30)
-        self._lead_score_weights = config.get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)
-        self._cred_enc_key = ensure_credential_enc_key(config, LIVE_CONFIG_PATH)
+        self._cred_enc_key = ensure_credential_enc_key(config, config_path)
+        # Must precede _ensure_columns(): its lead_score backfill path reads
+        # self._lead_score_weights, which is sourced from app_settings.
+        self._seed_app_settings(config)
         self._ensure_columns()
         run_migrations(uri)
         self.seed_rbac()
         log.info(f"Database ready: {uri}")
+
+    @property
+    def _lead_score_weights(self) -> dict:
+        return self.get_crawl_policy().get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)
+
+    def _seed_app_settings(self, config: dict) -> None:
+        """First-run only: back-fill the `crawl_policy` app_settings row from
+        the live config.yaml's current values (not the shipped defaults), so
+        an upgrade preserves whatever policy this deployment already had.
+        No-op once the row exists — plan.md §19.1 Phase 8's expand step."""
+        if self.get_app_setting("crawl_policy"):
+            return
+        crawler_cfg = config.get("crawler", {})
+        policy = {
+            "extraction": config.get("extraction", {}),
+            "lead_score": {"weights": config.get("lead_score", {}).get("weights", DEFAULT_WEIGHTS)},
+            "crawler": {k: crawler_cfg[k] for k in _CRAWLER_POLICY_KEYS if k in crawler_cfg},
+        }
+        self.set_app_setting("crawl_policy", policy, updated_by=None)
+        log.info("Schema: seeded app_settings.crawl_policy from config.yaml")
 
     def _ensure_columns(self):
         """Safely add new columns to existing tables without a full migration."""
@@ -66,6 +105,7 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
                 ("external_id", "VARCHAR"),
             ],
         }
+        lead_score_newly_added = False
         with self.engine.connect() as conn:
             for table, columns in tables_to_patch.items():
                 if table not in inspector.get_table_names():
@@ -75,18 +115,37 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, VisitedUrlM
                     if col_name not in existing:
                         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
                         log.info(f"Schema: added column {table}.{col_name}")
+                        if table == "leads" and col_name == "lead_score":
+                            lead_score_newly_added = True
             if "leads" in inspector.get_table_names():
-                self._recompute_lead_scores(conn)
+                if lead_score_newly_added:
+                    # One-time backfill for a column that just landed with its
+                    # server_default (0) on every existing row — the Alembic
+                    # 0010 migration relies on this same path (see its
+                    # docstring). Not run unconditionally every boot anymore
+                    # (plan.md §19.1 Phase 8) — only right after the column
+                    # itself is added, same as _backfill_snapshots below.
+                    self._recompute_lead_scores(conn)
                 leads_columns = {c["name"] for c in inspector.get_columns("leads")}
                 if "crawl_snapshots" in inspector.get_table_names() and "domain_id" in leads_columns:
                     self._backfill_snapshots(conn)
             conn.commit()
 
-    def _recompute_lead_scores(self, conn):
-        """Recompute lead_score for every row from current weights.
+    def recompute_lead_scores(self) -> None:
+        """Public entry point for an on-demand recompute — called from the
+        Settings API (background task) when a POST actually changes
+        lead_score.weights. Opens its own connection since callers (e.g.
+        cloud.api.config) have no engine-connection context of their own."""
+        with self.engine.connect() as conn:
+            self._recompute_lead_scores(conn)
+            conn.commit()
 
-        Runs on every startup (not just when the column is new) so a weight
-        change in config takes effect on existing leads without a migration.
+    def _recompute_lead_scores(self, conn):
+        """Recompute lead_score for every row from the current weights.
+
+        Only called when weights actually change (via the public
+        recompute_lead_scores(), triggered from cloud.api.config's
+        POST /api/config) — not on every startup (plan.md §19.1 Phase 8).
         Goes through compute_lead_score() itself (not a parallel SQL
         expression) since the band/manual/phone-slice rules aren't cleanly
         expressible in SQL without duplicating — and risking drift from —

@@ -39,6 +39,26 @@ def _seed_root_domains(seeds: list[tuple[str, int | None]]) -> set[str]:
     return roots
 
 
+def _build_crawl_policy(config: dict, db: Database, *, strip_target_suffixes: bool = False) -> dict:
+    """The dict handed to CrawlerEngine as its `config` — same shape it always
+    had (top-level `crawler`/`extraction` keys), just assembled from two
+    sources instead of one (plan.md §19.1 Phase 8 / §3.2): machine-local
+    runtime knobs from this box's config.yaml, crawl policy (depth/rate
+    limits, filters, extraction rules, lead-score weights) from the cloud
+    `app_settings` table — the DB values win on any overlapping `crawler` key
+    so every crawler gets identical policy regardless of its local file."""
+    stored = db.get_crawl_policy()
+    crawler = {**config["crawler"], **stored.get("crawler", {})}
+    if strip_target_suffixes:
+        crawler["target_suffixes"] = []
+    return {
+        **config,
+        "crawler": crawler,
+        "extraction": stored.get("extraction") or config.get("extraction", {}),
+        "lead_score": {"weights": db._lead_score_weights},
+    }
+
+
 def _visited_bootstrap(db: Database, job_id: int, seeds: list[tuple[str, int | None]]) -> list[str]:
     """Everything this job's engine should treat as already-visited: its own
     prior-run URLs (resume) plus the global recently-visited set, EXCLUDING
@@ -71,13 +91,13 @@ async def coordination_create_job(
     from .jobs import _normalize_custom_urls  # local import: avoids a jobs<->coordination import cycle
 
     if req.custom_urls:
-        max_urls = config["crawler"].get("max_custom_urls", 50)
+        policy = _build_crawl_policy(config, db, strip_target_suffixes=True)
+        max_urls = policy["crawler"].get("max_custom_urls", 50)
         urls = _normalize_custom_urls(req.custom_urls, max_urls)
         job_id = db.create_job(custom_urls=urls, category_filter=req.category_filter,
                                title_filter=req.title_filter, owner_id=user.id)
         db.add_job_custom_urls(job_id, urls)
         seeds = [[url, None] for url in urls]
-        policy = {**config, "crawler": {**config["crawler"], "target_suffixes": []}}
     else:
         if not req.domain_ids:
             raise HTTPException(status_code=422, detail="Provide domain_ids or custom_urls")
@@ -97,7 +117,7 @@ async def coordination_create_job(
         if not seeds:
             db.finish_job(job_id, status="failed", error="No valid URLs for selected domains")
             raise HTTPException(status_code=422, detail="Selected domains have no crawlable URLs")
-        policy = config
+        policy = _build_crawl_policy(config, db)
 
     db.start_job(job_id)
     visited_bootstrap = _visited_bootstrap(db, job_id, [(s[0], s[1]) for s in seeds])
@@ -236,4 +256,5 @@ async def coordination_resume_job(
             snaps = db.get_crawl_snapshots(job_id)
         seeds = [[s["main_url"] or s["contact_url"], s["id"]] for s in snaps]
     visited_bootstrap = _visited_bootstrap(db, job_id, [(s[0], s[1]) for s in seeds])
-    return {"job_id": job_id, "seeds": seeds, "policy": config, "visited_bootstrap": visited_bootstrap}
+    policy = _build_crawl_policy(config, db)
+    return {"job_id": job_id, "seeds": seeds, "policy": policy, "visited_bootstrap": visited_bootstrap}

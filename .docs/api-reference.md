@@ -39,8 +39,8 @@ See [authentication.md](authentication.md) for the token model and permission ca
 
 | Method | Path | Guard | Purpose |
 |--------|------|-------|---------|
-| GET | `/api/config` | auth | Flattened crawler + extraction settings |
-| POST | `/api/config` | `settings.manage` | Update crawler/extraction settings and persist `config.yaml` |
+| GET | `/api/config` | auth | Flattened crawler + extraction + lead-score-weight settings |
+| POST | `/api/config` | `settings.manage` | Update settings — machine-local keys persist to `config.yaml`, policy keys (incl. weights) persist to `app_settings` (plan.md §19.1 Phase 8); a weight change schedules a background lead-score recompute |
 
 ## Domains — `cloud/api/domains.py`
 

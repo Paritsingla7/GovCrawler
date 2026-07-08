@@ -939,15 +939,26 @@ They are ordered by dependency — 7 unblocks 9 — and each is independently sh
   free functions in `agent/crawler/pagination.py`. Updated `Dockerfile`, `GovCrawler.spec`, and all import
   sites; `ci.yaml` needed no changes (its `pip install -r requirements.txt` / `pytest -q` invocations already
   work unchanged against the new layout). *Prereq for:* Phase 9 (shared/ hoisting).
-- **Phase 8 — DB-backed crawl policy (`app_settings`, §3.2).** Move the *policy* half of `config.yaml`
-  (extraction, `lead_score.weights`, crawler policy knobs — NOT machine-local runtime: workers/timeouts/bind)
-  into an `app_settings(key TEXT PK, value JSONB, updated_by, updated_at)` table. New Alembic revision +
-  `AppSettingsMixin` (get/set with an optimistic `updated_at` check, §17); seed from the canonical `config.yaml`
-  on first migrate (expand → backfill → switch); `settings.manage` reads/writes the DB, and the job-create
-  `policy` payload is built from `app_settings` instead of the file so every crawler is guaranteed identical
-  policy; a score-weight change triggers a **background** recompute (replacing the every-startup
-  `_recompute_lead_scores`). *Risk:* two config sources during the transition; mitigate with the expand/contract
-  order and a one-release dual-read.
+- **Phase 8 — DB-backed crawl policy (`app_settings`, §3.2). Shipped 2026-07-08.** Moved the *policy* half
+  of `config.yaml` (extraction, `lead_score.weights`, crawler policy knobs — NOT machine-local runtime:
+  workers/timeouts/bind) into an `app_settings(key TEXT PK, value JSON, updated_by, updated_at)` table
+  (0022 Alembic revision; plain `sa.JSON` rather than `postgresql.JSONB`, for SQLite-desktop portability) +
+  `AppSettingsMixin` (`get_app_setting`/`set_app_setting` with an optimistic `updated_at` check, §17 —
+  `cloud/api/config.py`'s `POST` uses last-write-wins for now, per user decision, since the Settings form
+  doesn't yet thread the check-value through); seeded from the live `config.yaml`'s current values on first
+  boot after the migration (`Database._seed_app_settings`, an app-startup concern in this codebase, not
+  inside the migration — matches `seed_rbac()`'s existing precedent). `cloud/api/config.py`'s `GET`/`POST
+  /api/config` keeps its exact wire contract (same flat JSON keys) while routing each field to the right
+  backend internally, plus 5 new `weight_*` fields (API-only — no Settings-page UI yet, by user decision) so
+  the weights are actually editable; `cloud/api/coordination.py`'s job-create/resume now build `policy` via
+  `_build_crawl_policy(config, db)`, merging DB policy with local machine config into the same dict shape
+  `CrawlerEngine` always expected, so the engine itself needed zero changes. A weight change now triggers a
+  **background** recompute (`Database.recompute_lead_scores`) only when the posted weights actually differ
+  from the stored ones — replacing the old every-startup unconditional `_recompute_lead_scores()`. That
+  removal uncovered a real dependency: Alembic `0010_add_lead_score`'s own docstring documented the
+  every-startup recompute as *the* backfill mechanism for a freshly-added `lead_score` column on an old DB
+  (server-default 0) — so `_ensure_columns()` now fires a narrower, one-time recompute specifically when
+  that column is newly added in the current run, preserving the upgrade path without the unconditional cost.
 - **Phase 9 — True agent/process split (§2.2, §8, §15).** Make the agent its own process with **zero
   `cloud.*` imports**: the agent forwards the operator's real access token (from the keyring flow, §8) instead
   of `_make_token_provider`'s `db.get_user_by_id` read, so it needs no DB URI, no `cloud.security`, no

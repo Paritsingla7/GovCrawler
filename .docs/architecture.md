@@ -144,9 +144,11 @@ See [outreach.md](outreach.md).
 ### 5. Lead scoring — `shared/scoring.py`
 
 A pure function, `compute_lead_score()`, called wherever a lead is written or edited. Produces a 0–100 score
-from email confidence band plus the presence of name/designation/phone, weighted by `lead_score.weights`.
-Manual (CSV) leads always score 0. `Database._recompute_lead_scores()` re-runs it for every lead on each
-startup, so a weight change applies retroactively. See [configuration.md](configuration.md#lead-scoring).
+from email confidence band plus the presence of name/designation/phone, weighted by `lead_score.weights`
+(DB-backed via `app_settings`, plan.md §19.1 Phase 8). Manual (CSV) leads always score 0.
+`Database.recompute_lead_scores()` re-runs it for every lead when a weight change is posted to
+`POST /api/config` (background task, not on every startup), so the change applies retroactively without a
+restart. See [configuration.md](configuration.md#lead-scoring).
 
 ### 6. Domain discovery — `GovScraper/` + `cloud/services/importer.py`
 

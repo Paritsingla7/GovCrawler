@@ -1,16 +1,23 @@
 # Configuration Reference
 
-Configuration is a single YAML file. `portal/default_config.yaml` is the shipped template;
-`portal/config.yaml` is the live, gitignored copy (created from the template on first run). In Docker,
-`deploy/config.docker.yaml` is baked in as `portal/config.yaml`. `portal.main.load_config()` reads it and
-applies environment-variable overrides (below). Crawl/extraction settings are also editable at runtime from
-the **Settings** page (`GET`/`POST /api/config`, the latter gated by `settings.manage`), which writes back
-to `config.yaml`.
+Configuration is split across two backends (plan.md §19.1 Phase 8 / §3.2), transparent to both the Settings
+UI and the job-create API:
 
-> Note: `plan.md` proposed moving crawl *policy* into a cloud `app_settings` table. That is **not yet**
-> implemented — policy remains file-based in `config.yaml` and is delivered to a crawl as the job's `policy`
-> payload at start. Migrating policy to `app_settings` is planned as Phase 8 (plan.md §19.1); machine-local
-> runtime knobs (workers, timeouts, bind address) stay in `config.yaml` regardless.
+- **Machine-local runtime** — `portal/default_config.yaml` (shipped template) → `portal/config.yaml` (live,
+  gitignored copy; `deploy/config.docker.yaml` in containers). `portal.main.load_config()` reads it and
+  applies environment-variable overrides (below). Covers workers, fetch-strategy toggles, timeouts, and bind
+  address — anything that only affects this one box's performance.
+- **Crawl policy** — the cloud `app_settings` table (`key='crawl_policy'`), managed by
+  `AppSettingsMixin`/`Database.get_crawl_policy()`. Covers extraction rules, lead-score weights, and the
+  crawl-filter knobs (depth, rate limit, target suffixes, pagination, …) — values that must be identical
+  across every crawler, since they affect lead quality/consistency. Seeded once from `config.yaml`'s
+  existing values the first time a DB migrates through 0022 (`Database._seed_app_settings`), then lives in
+  the DB from then on — editing `config.yaml` by hand no longer has any effect on these keys.
+
+Both are editable at runtime from the **Settings** page (`GET`/`POST /api/config`, the latter gated by
+`settings.manage`) — the endpoint routes each field to the right backend internally; the wire contract
+(flat JSON keys) is identical regardless of which backend a field lives in, so the frontend doesn't need to
+know or care.
 
 ## Environment overrides (`load_config`)
 
@@ -46,17 +53,24 @@ Secrets follow an env-first-else-persist rule: if the env var is set it wins (an
 ### `scraper`
 - `category_filter`, `org_type_filter` — restrict a live india.gov.in import.
 
-### `crawler` (policy — must be identical across crawlers)
+### `crawler`
+**Machine-local** (stays in `config.yaml`; may legitimately differ per box):
+
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `workers` | 10 | Concurrent async workers |
-| `max_depth` | 4 | Max crawl depth per seed (0 = seed only) |
-| `recrawl_days` | 30 | Skip URLs visited within N days |
 | `httpx_first` / `playwright_fallback` | true / false | Fetch strategy toggles |
 | `cross_machine_resume` | false | Persist the frontier to the cloud for resume on another machine |
 | `httpx_timeout` | connect 10 / read 30 | httpx timeouts (s) |
 | `playwright_timeout` / `js_settle_time` | 45 / 3.0 | Playwright nav timeout (s) / settle wait (s) |
 | `per_url_timeout` | 100 | Per-page stall killer (s) |
+
+**Policy** (`app_settings.crawl_policy`; identical across every crawler):
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `max_depth` | 4 | Max crawl depth per seed (0 = seed only) |
+| `recrawl_days` | 30 | Skip URLs visited within N days |
 | `request_delay` | 1.5 | Per-domain politeness spacing (s) |
 | `max_links_per_page` | `{0:100, 1:50, 2:40, default:20}` | Per-depth link cap |
 | `max_custom_urls` | 50 | Cap on a custom-URL job's seeds |
@@ -67,7 +81,7 @@ Secrets follow an env-first-else-persist rule: if the env var is set it wins (an
 | `user_agent` | Chrome UA | Request UA |
 | `pagination` | `enabled: false`, `max_pagination_pages: 50`, `max_chain_children: 100`, `text_signals`, `param_signals` | See [crawler.md](crawler.md#link-discovery--pagination) |
 
-### `extraction`
+### `extraction` (policy — `app_settings.crawl_policy`, moved wholesale)
 - `email`: `enabled`, `regex`, `valid_suffixes` (`.gov.in`, `.nic.in`, `.res.in`, `.ac.in`, `.com`),
   `obfuscation` (bracketed `[at]`/`[dot]`/`[hyphen]` → `@`/`.`/`-`), `context_chars` (200).
 - `max_input_chars` (200000; 0 = uncapped) — proximity-scan bound.
@@ -75,23 +89,28 @@ Secrets follow an env-first-else-persist rule: if the env var is set it wins (an
 - `confidence`: `high_rungs` (`mailto_tel`, `microdata`), `mid_rungs` (`table_block`, `proximity_text`).
 - `person`: `enabled`, `title_prefixes` (Shri, Smt, Dr, …), `designation_keywords`, `proximity_chars` (300).
 
-### `lead_score`
-- `weights`: `email_high` 20, `email_low` 10, `person_name` 40, `designation` 30, `phone` 10.
+### `lead_score` (policy — `app_settings.crawl_policy`)
+- `weights`: `email_high` 20, `email_low` 10, `person_name` 40, `designation` 30, `phone` 10. Editable via
+  `POST /api/config`'s `weight_*` fields (API-only for now — no Settings-page UI yet).
 
 ## Lead scoring
 
 `shared/scoring.compute_lead_score(fields, confidence_band, channel_tag, weights)` returns 0–100. Manual
 (`channel_tag == "manual"`) leads short-circuit to **0**. Otherwise: email present adds `email_high` if the
 band is `HIGH` else `email_low`; `person_name` adds 40; `designation` adds 30; `phone` adds 10. Base fields
-cap at 90 with phone as the reserved top slice to 100. Because `Database._recompute_lead_scores()` runs on
-every startup, changing the weights re-scores **all** existing leads, not just new ones.
+cap at 90 with phone as the reserved top slice to 100. `Database.recompute_lead_scores()` re-scores **all**
+existing leads whenever `POST /api/config` actually changes a weight — not on every startup (that
+unconditional recompute was removed in Phase 8; the one case it also covered, backfilling a freshly-added
+`lead_score` column on an old DB, is now a narrower one-time trigger inside `_ensure_columns`).
 
 ## Editing at runtime
 
-The Settings page reads `GET /api/config` (flattened crawler+extraction) and saves via `POST /api/config`
-(`settings.manage`), which coerces types, parses newline/comma list fields, updates the in-memory config,
-and persists `config.yaml`. Read-only display fields (regex, obfuscation map, user agent) are shown but not
-editable there.
+The Settings page reads `GET /api/config` (flattened crawler+extraction+weights) and saves via
+`POST /api/config` (`settings.manage`), which coerces types, parses newline/comma list fields, and writes
+each field to its backend — machine-local keys to `config.yaml`, policy keys to `app_settings` via
+`Database.set_app_setting()`. Read-only display fields (regex, obfuscation map, user agent,
+pagination text/param signals) are shown but not editable there — change them via a direct
+`db.set_app_setting("crawl_policy", ...)` call.
 
 ## PostgreSQL / production
 

@@ -1,109 +1,163 @@
 """Crawler/extraction settings endpoints (GET/POST /api/config). See
-.docs/configuration.md."""
+.docs/configuration.md.
+
+Fields split across two backends (plan.md §19.1 Phase 8 / §3.2), transparently
+to the frontend — the wire shape is unchanged either way:
+  - machine-local runtime (workers, timeouts, fetch-strategy toggles) -> config.yaml
+  - crawl policy (depth/rate limits, filters, extraction rules, lead-score
+    weights) -> the cloud `app_settings` table, via Database.get_crawl_policy()/
+    set_app_setting()
+"""
 
 import copy
 import yaml
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
-from .deps import CurrentUser, get_config as get_app_config, get_config_path, require
+from .deps import CurrentUser, get_config as get_app_config, get_config_path, get_db, require
+from ..db import Database
 
 router = APIRouter(tags=["config"])
 
 
 @router.get("/api/config")
-async def get_config(c: dict = Depends(get_app_config)):
+async def get_config(c: dict = Depends(get_app_config), db: Database = Depends(get_db)):
+    policy = db.get_crawl_policy()
+    crawler = policy.get("crawler", {})
+    extraction = policy.get("extraction", {})
+    weights = policy.get("lead_score", {}).get("weights", {})
     return {
+        # Machine-local (config.yaml)
         "workers": c["crawler"]["workers"],
-        "max_depth": c["crawler"]["max_depth"],
-        "recrawl_days": c["crawler"]["recrawl_days"],
-        "request_delay": c["crawler"]["request_delay"],
         "per_url_timeout": c["crawler"]["per_url_timeout"],
         "httpx_first": c["crawler"].get("httpx_first", True),
         "playwright_fallback": c["crawler"].get("playwright_fallback", True),
         "playwright_timeout": c["crawler"]["playwright_timeout"],
         "js_settle_time": c["crawler"]["js_settle_time"],
-        "email_enabled": c["extraction"]["email"]["enabled"],
-        "email_context_chars": c["extraction"]["email"]["context_chars"],
-        "person_enabled": c["extraction"]["person"]["enabled"],
-        "person_proximity_chars": c["extraction"]["person"]["proximity_chars"],
 
-        # Arrays
-        "target_suffixes": "\n".join(c["crawler"].get("target_suffixes", [])),
-        "priority_keywords": "\n".join(c["crawler"].get("priority_keywords", [])),
-        "skip_extensions": "\n".join(c["crawler"].get("skip_extensions", [])),
-        "valid_suffixes": "\n".join(c["extraction"]["email"].get("valid_suffixes", [])),
-        "title_prefixes": "\n".join(c["extraction"]["person"].get("title_prefixes", [])),
-        "designation_keywords": "\n".join(c["extraction"]["person"].get("designation_keywords", [])),
+        # Policy (app_settings)
+        "max_depth": crawler.get("max_depth", 4),
+        "recrawl_days": crawler.get("recrawl_days", 30),
+        "request_delay": crawler.get("request_delay", 1.5),
+        "email_enabled": extraction.get("email", {}).get("enabled", True),
+        "email_context_chars": extraction.get("email", {}).get("context_chars", 200),
+        "person_enabled": extraction.get("person", {}).get("enabled", True),
+        "person_proximity_chars": extraction.get("person", {}).get("proximity_chars", 300),
 
-        # Dictionary
-        "max_links_per_page_0": c["crawler"].get("max_links_per_page", {}).get(0, 30),
-        "max_links_per_page_1": c["crawler"].get("max_links_per_page", {}).get(1, 15),
-        "max_links_per_page_2": c["crawler"].get("max_links_per_page", {}).get(2, 8),
-        "max_links_per_page_default": c["crawler"].get("max_links_per_page", {}).get("default", 5),
+        # Lead-score weights (policy) — API-only for now, no Settings UI yet
+        "weight_email_high": weights.get("email_high", 20),
+        "weight_email_low": weights.get("email_low", 10),
+        "weight_person_name": weights.get("person_name", 40),
+        "weight_designation": weights.get("designation", 30),
+        "weight_phone": weights.get("phone", 10),
 
-        # Read-only
-        "user_agent": c["crawler"].get("user_agent", ""),
-        "js_indicators": "\n".join(c["crawler"].get("js_indicators", [])),
-        "email_regex": c["extraction"]["email"].get("regex", ""),
-        "email_obfuscation": yaml.dump(c["extraction"]["email"].get("obfuscation", []), default_flow_style=False),
+        # Arrays (policy)
+        "target_suffixes": "\n".join(crawler.get("target_suffixes", [])),
+        "priority_keywords": "\n".join(crawler.get("priority_keywords", [])),
+        "skip_extensions": "\n".join(crawler.get("skip_extensions", [])),
+        "valid_suffixes": "\n".join(extraction.get("email", {}).get("valid_suffixes", [])),
+        "title_prefixes": "\n".join(extraction.get("person", {}).get("title_prefixes", [])),
+        "designation_keywords": "\n".join(extraction.get("person", {}).get("designation_keywords", [])),
 
-        # Pagination (Story #9) — enabled + the two numeric caps are editable
-        # via POST /api/config below. text_signals/param_signals stay
-        # display-only here; edit config.yaml directly to change those lists.
-        "pagination_enabled": c["crawler"].get("pagination", {}).get("enabled", False),
-        "pagination_max_pages": c["crawler"].get("pagination", {}).get("max_pagination_pages", 50),
-        "pagination_max_chain_children": c["crawler"].get("pagination", {}).get("max_chain_children", 100),
-        "pagination_text_signals": "\n".join(c["crawler"].get("pagination", {}).get("text_signals", [])),
-        "pagination_param_signals": "\n".join(c["crawler"].get("pagination", {}).get("param_signals", [])),
+        # Dictionary (policy)
+        "max_links_per_page_0": crawler.get("max_links_per_page", {}).get(0, 30),
+        "max_links_per_page_1": crawler.get("max_links_per_page", {}).get(1, 15),
+        "max_links_per_page_2": crawler.get("max_links_per_page", {}).get(2, 8),
+        "max_links_per_page_default": crawler.get("max_links_per_page", {}).get("default", 5),
+
+        # Read-only (policy)
+        "user_agent": crawler.get("user_agent", ""),
+        "js_indicators": "\n".join(crawler.get("js_indicators", [])),
+        "email_regex": extraction.get("email", {}).get("regex", ""),
+        "email_obfuscation": yaml.dump(extraction.get("email", {}).get("obfuscation", []), default_flow_style=False),
+
+        # Pagination (Story #9, policy) — enabled + the two numeric caps are
+        # editable via POST /api/config below. text_signals/param_signals stay
+        # display-only here; edit via a direct app_settings write to change those lists.
+        "pagination_enabled": crawler.get("pagination", {}).get("enabled", False),
+        "pagination_max_pages": crawler.get("pagination", {}).get("max_pagination_pages", 50),
+        "pagination_max_chain_children": crawler.get("pagination", {}).get("max_chain_children", 100),
+        "pagination_text_signals": "\n".join(crawler.get("pagination", {}).get("text_signals", [])),
+        "pagination_param_signals": "\n".join(crawler.get("pagination", {}).get("param_signals", [])),
     }
 
 
 @router.post("/api/config")
-async def save_config(body: dict, c: dict = Depends(get_app_config), config_path=Depends(get_config_path),
+async def save_config(body: dict, background_tasks: BackgroundTasks,
+                      c: dict = Depends(get_app_config), config_path=Depends(get_config_path),
+                      db: Database = Depends(get_db),
                       user: CurrentUser = Depends(require("settings.manage"))):
+    # ── Machine-local (config.yaml) ─────────────────────────────────────────
     cfg = copy.deepcopy(c)
 
-    int_keys = {"workers", "max_depth", "recrawl_days", "per_url_timeout", "playwright_timeout"}
-    float_keys = {"request_delay", "js_settle_time"}
-    bool_keys = {"httpx_first", "playwright_fallback"}
+    local_int_keys = {"workers", "per_url_timeout", "playwright_timeout"}
+    local_float_keys = {"js_settle_time"}
+    local_bool_keys = {"httpx_first", "playwright_fallback"}
 
-    for k in int_keys:
+    for k in local_int_keys:
         if k in body:
             cfg["crawler"][k] = int(body[k])
-    for k in float_keys:
+    for k in local_float_keys:
         if k in body:
             cfg["crawler"][k] = float(body[k])
-    for k in bool_keys:
+    for k in local_bool_keys:
         if k in body:
             cfg["crawler"][k] = bool(body[k])
 
+    c.update(cfg)
+    with open(config_path, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    # ── Policy (app_settings) ────────────────────────────────────────────────
+    policy = copy.deepcopy(db.get_crawl_policy())
+    crawler = policy.setdefault("crawler", {})
+    extraction = policy.setdefault("extraction", {})
+    weights = policy.setdefault("lead_score", {}).setdefault("weights", {})
+    old_weights = dict(weights)
+
+    policy_int_keys = {"max_depth", "recrawl_days"}
+    policy_float_keys = {"request_delay"}
+    for k in policy_int_keys:
+        if k in body:
+            crawler[k] = int(body[k])
+    for k in policy_float_keys:
+        if k in body:
+            crawler[k] = float(body[k])
+
     if "email_enabled" in body:
-        cfg["extraction"]["email"]["enabled"] = bool(body["email_enabled"])
+        extraction.setdefault("email", {})["enabled"] = bool(body["email_enabled"])
     if "email_context_chars" in body:
-        cfg["extraction"]["email"]["context_chars"] = int(body["email_context_chars"])
+        extraction.setdefault("email", {})["context_chars"] = int(body["email_context_chars"])
     if "person_enabled" in body:
-        cfg["extraction"]["person"]["enabled"] = bool(body["person_enabled"])
+        extraction.setdefault("person", {})["enabled"] = bool(body["person_enabled"])
     if "person_proximity_chars" in body:
-        cfg["extraction"]["person"]["proximity_chars"] = int(body["person_proximity_chars"])
+        extraction.setdefault("person", {})["proximity_chars"] = int(body["person_proximity_chars"])
+
+    weight_fields = {
+        "weight_email_high": "email_high", "weight_email_low": "email_low",
+        "weight_person_name": "person_name", "weight_designation": "designation",
+        "weight_phone": "phone",
+    }
+    for body_key, weight_key in weight_fields.items():
+        if body_key in body:
+            weights[weight_key] = int(body[body_key])
 
     def parse_list(s: str) -> list[str]:
         return [x.strip() for x in s.replace(",", "\n").split("\n") if x.strip()]
 
     if "target_suffixes" in body:
-        cfg["crawler"]["target_suffixes"] = parse_list(body["target_suffixes"])
+        crawler["target_suffixes"] = parse_list(body["target_suffixes"])
     if "priority_keywords" in body:
-        cfg["crawler"]["priority_keywords"] = parse_list(body["priority_keywords"])
+        crawler["priority_keywords"] = parse_list(body["priority_keywords"])
     if "skip_extensions" in body:
-        cfg["crawler"]["skip_extensions"] = parse_list(body["skip_extensions"])
+        crawler["skip_extensions"] = parse_list(body["skip_extensions"])
     if "valid_suffixes" in body:
-        cfg["extraction"]["email"]["valid_suffixes"] = parse_list(body["valid_suffixes"])
+        extraction.setdefault("email", {})["valid_suffixes"] = parse_list(body["valid_suffixes"])
     if "title_prefixes" in body:
-        cfg["extraction"]["person"]["title_prefixes"] = parse_list(body["title_prefixes"])
+        extraction.setdefault("person", {})["title_prefixes"] = parse_list(body["title_prefixes"])
     if "designation_keywords" in body:
-        cfg["extraction"]["person"]["designation_keywords"] = parse_list(body["designation_keywords"])
+        extraction.setdefault("person", {})["designation_keywords"] = parse_list(body["designation_keywords"])
 
-    # dict updates
-    max_links = cfg["crawler"].setdefault("max_links_per_page", {})
+    max_links = crawler.setdefault("max_links_per_page", {})
     if "max_links_per_page_0" in body:
         max_links[0] = int(body["max_links_per_page_0"])
     if "max_links_per_page_1" in body:
@@ -114,8 +168,8 @@ async def save_config(body: dict, c: dict = Depends(get_app_config), config_path
         max_links["default"] = int(body["max_links_per_page_default"])
 
     # Pagination (Story #9) — enabled + the two numeric caps are editable;
-    # text_signals/param_signals stay config.yaml-only (display-only in the UI).
-    pagination = cfg["crawler"].setdefault("pagination", {})
+    # text_signals/param_signals stay app_settings-only (display-only in the UI).
+    pagination = crawler.setdefault("pagination", {})
     if "pagination_enabled" in body:
         pagination["enabled"] = bool(body["pagination_enabled"])
     if "pagination_max_pages" in body:
@@ -123,9 +177,12 @@ async def save_config(body: dict, c: dict = Depends(get_app_config), config_path
     if "pagination_max_chain_children" in body:
         pagination["max_chain_children"] = int(body["pagination_max_chain_children"])
 
-    c.update(cfg)
+    db.set_app_setting("crawl_policy", policy, updated_by=user.id)
 
-    with open(config_path, "w") as f:
-        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    if weights != old_weights:
+        # Runs off the request/event loop (Starlette offloads sync background
+        # tasks to a thread pool) — replaces the old every-startup blanket
+        # recompute with one that only fires when weights actually changed.
+        background_tasks.add_task(db.recompute_lead_scores)
 
     return {"message": "Settings saved. Crawler settings take effect on the next job."}
