@@ -19,23 +19,14 @@ from pathlib import Path
 
 from .paths import LOG_FILE_PATH, LIVE_CONFIG_PATH, DEFAULT_CONFIG_PATH, bootstrap
 
-# ==========================================
-# 1. FIRST-RUN SETUP & ENVIRONMENT
-# ==========================================
+# First-run setup must precede the late imports below (they read env it sets).
 bootstrap()
 
-# ==========================================
-# 2. LATE IMPORTS (Safe now that env is set)
-# ==========================================
 import yaml
 import uvicorn
 from cloud.db import Database
 from cloud.api.server import create_app
 
-# ==========================================
-# 3. LOGGING SETUP (Using Absolute Path)
-# ==========================================
-# Safely configure log handlers
 log_handlers = [logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")]
 
 # Only attach the terminal output if the terminal actually exists

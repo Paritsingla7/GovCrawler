@@ -1,11 +1,4 @@
-"""
-Blacklist CRUD endpoints for manual email/domain blocking.
-
-Registers routes:
-  GET    /api/blacklist          → paginated blacklist
-  POST   /api/blacklist          → manually block an email (domain auto-extracted)
-  DELETE /api/blacklist/{id}     → unblock an entry
-"""
+"""Blacklist CRUD for manual email/domain blocking. See .docs/api-reference.md."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel

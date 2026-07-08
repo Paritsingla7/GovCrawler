@@ -1,17 +1,8 @@
-"""
-CloudApiClient — mirrors the `Database` method surface the crawler engine used
-to call directly, so engine call sites barely change (plan.md §8). Talks HTTP
-to the coordination endpoints (`cloud/api/coordination.py`) instead of the DB;
-`save_lead`/`mark_visited` are fire-and-forget writes into a durable local
-outbox (`agent/local_store.py`) instead of synchronous DB calls — a crash or
-network blip never loses a lead. `send_heartbeat`/`finish_job` talk to the
-API directly (not outboxed) since they need to be timely/ordered.
-
-`token_provider` is a zero-arg callable returning a fresh bearer token per
-call, not a static string — a crawl can run far longer than one access
-token's TTL, and minting a JWT is cheap (no DB round trip), so there's no
-need to cache/refresh one.
-"""
+"""CloudApiClient — mirrors the Database method surface the engine used to call,
+but talks HTTP to cloud/api/coordination.py. `save_lead`/`mark_visited` are
+fire-and-forget writes into the durable local outbox (agent/local_store.py);
+`send_heartbeat`/`finish_job` go to the API directly. `token_provider` returns
+a fresh bearer token per call. See .docs/resilience.md."""
 
 import asyncio
 import logging

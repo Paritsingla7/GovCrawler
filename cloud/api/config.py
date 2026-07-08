@@ -1,10 +1,5 @@
-"""
-Crawler/extraction configuration endpoints.
-
-Registers routes:
-  GET  /api/config    → current crawler settings
-  POST /api/config    → save crawler settings
-"""
+"""Crawler/extraction settings endpoints (GET/POST /api/config). See
+.docs/configuration.md."""
 
 import copy
 import yaml

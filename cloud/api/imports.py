@@ -1,11 +1,5 @@
-"""
-Domain import endpoints (JSON file upload + live india.gov.in API).
-
-Registers routes:
-  POST /api/import/json     → import from uploaded JSON file (zero API calls)
-  POST /api/import          → import from live india.gov.in API
-  GET  /api/import/status   → import progress
-"""
+"""Domain import endpoints (JSON upload + live india.gov.in API), single-flight.
+See .docs/api-reference.md."""
 
 import asyncio
 import logging

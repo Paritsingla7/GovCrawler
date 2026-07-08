@@ -1,18 +1,5 @@
-"""
-Lead browsing, export, and editing endpoints.
-
-Registers routes:
-  GET  /api/leads                    → paginated leads for a job
-  GET  /api/leads/ids                → all matching lead IDs (for select-all)
-  GET  /api/leads/score-weights      → current lead_score point weights
-  GET  /api/leads/categories         → category counts for leads
-  GET  /api/leads/states             → distinct states for leads
-  GET  /api/leads/org-types          → organization-type counts for leads
-  POST /api/leads/export             → CSV download
-  POST /api/leads/import-csv         → bulk-create/update manual leads from CSV
-  GET  /api/leads/import-csv/template→ downloadable CSV template
-  PUT  /api/leads/{id}               → edit name/designation/department/state
-"""
+"""Lead browsing, export, and editing endpoints (shared pool). See
+.docs/api-reference.md."""
 
 import csv
 import io

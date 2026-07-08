@@ -1,14 +1,5 @@
-"""
-Minimal user administration endpoints (Phase 0 — just enough to provision the
-handful of operators; a full admin UI lands in a later phase).
-
-Registers routes:
-  GET  /api/admin/users                        → list users
-  POST /api/admin/users                         → create a user
-  PATCH /api/admin/users/{id}                   → set active/role
-  POST /api/admin/users/{id}/reset-password     → admin sets a new password
-  GET  /api/admin/roles                         → list roles
-"""
+"""User administration endpoints (create/list users, set active/role, reset
+password, list roles). See .docs/authentication.md and .docs/api-reference.md."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 

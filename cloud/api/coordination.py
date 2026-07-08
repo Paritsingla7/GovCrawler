@@ -1,22 +1,6 @@
-"""
-Coordination endpoints — the contract a CloudApiClient speaks, not the browser.
-
-Registers routes:
-  POST /api/coordination/jobs                  → create a job, return {job_id, seeds, policy, visited_bootstrap}
-  POST /api/coordination/jobs/{id}/leads        → batch save_lead
-  POST /api/coordination/jobs/{id}/visited      → batch mark_visited
-  POST /api/coordination/jobs/{id}/heartbeat    → metrics push, returns {cancel_requested}
-  POST /api/coordination/jobs/{id}/finish       → terminal status
-  POST /api/coordination/jobs/{id}/resume       → interrupted -> running
-  POST /api/coordination/jobs/{id}/frontier     → save a cloud-side frontier snapshot
-  GET  /api/coordination/jobs/{id}/frontier     → fetch it back (cross-machine resume)
-
-This is plan.md §7/§16.2's coordination contract. Today the "agent" calling
-these is the same process (CloudApiClient defaults to this server's own
-base URL), so job creation logic here is the same domain-freezing/seed-
-computation `portal/api/jobs.py` used to do inline — moved here so a real
-remote agent can call it too.
-"""
+"""Coordination endpoints — the agent↔cloud contract a CloudApiClient speaks
+(not the browser). Routes and the durability model are in .docs/api-reference.md
+and .docs/resilience.md."""
 
 import logging
 from urllib.parse import urlsplit

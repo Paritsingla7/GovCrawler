@@ -1,21 +1,7 @@
-"""
-System-level activity aggregation for the desktop control panel (run.py) and
-the browser-facing admin dashboard.
-
-Registers routes:
-  GET  /api/system/activity     → live counts of crawl jobs / campaigns
-                                   (production or test) currently running,
-                                   loopback-only (desktop launcher)
-  GET  /api/admin/activity      → same shape plus dispatch progress + a
-                                   recently-finished tail, for the browser
-                                   admin dashboard (permission-gated, not
-                                   loopback-restricted)
-  POST /api/system/cancel-all   → cancel everything currently active
-  GET  /healthz                 → liveness/readiness probe (public, no auth)
-
-Exists so the Tkinter launcher can ask "is it safe to stop the server?" over
-plain HTTP instead of reaching into asyncio task dicts from another thread.
-"""
+"""System activity aggregation for the desktop launcher (loopback) and the
+browser admin dashboard, plus /healthz. Lets the launcher ask "safe to stop?"
+over HTTP instead of touching asyncio task dicts cross-thread. See
+.docs/api-reference.md."""
 
 import logging
 from fastapi import APIRouter, Depends, Response

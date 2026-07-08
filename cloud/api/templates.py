@@ -1,13 +1,5 @@
-"""
-Email Template CRUD endpoints with mandatory Jinja2 validation.
-
-Registers routes:
-  GET    /api/templates          → list all templates
-  GET    /api/templates/{id}     → single template
-  POST   /api/templates          → create (validates Jinja2 syntax)
-  PUT    /api/templates/{id}     → update (validates Jinja2 syntax)
-  DELETE /api/templates/{id}     → delete template
-"""
+"""Email-template CRUD endpoints with mandatory Jinja2 validation. See
+.docs/outreach.md and .docs/api-reference.md."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from jinja2 import Environment, TemplateSyntaxError

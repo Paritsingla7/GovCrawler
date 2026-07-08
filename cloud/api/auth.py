@@ -1,15 +1,5 @@
-"""
-Authentication endpoints.
-
-Registers routes:
-  POST /auth/login      → verify credentials, issue access+refresh tokens (cookies + JSON body)
-  POST /auth/refresh     → rotate refresh token; revokes the session family on reuse
-  POST /auth/logout      → revoke session, clear cookies
-  GET  /auth/me          → current user + effective permissions
-  GET  /auth/bootstrap   → hand the launcher's already-obtained access token to a freshly
-                           opened browser tab as a cookie (loopback-only), so the operator
-                           doesn't have to log in twice — once in Tkinter, once in the browser
-"""
+"""Authentication endpoints (login/refresh/logout/me + loopback bootstrap).
+See .docs/authentication.md."""
 import datetime
 import logging
 import secrets

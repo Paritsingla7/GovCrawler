@@ -1,15 +1,4 @@
-"""
-Domain metadata and browsing endpoints.
-
-Registers routes:
-  GET   /api/categories      → [{code, title, count}]
-  GET   /api/states          → state list (filtered by category if provided)
-  GET   /api/org-types       → org type list (filtered by category+state)
-  GET   /api/domains         → paginated domain list
-  GET   /api/domains/ids     → all matching domain IDs (for select-all)
-  GET   /api/domains/stats   → total / crawlable / duplicate counts
-  PATCH /api/domains/{id}    → set/update a domain's crawlable URL
-"""
+"""Domain metadata and catalog-browsing endpoints. See .docs/api-reference.md."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel

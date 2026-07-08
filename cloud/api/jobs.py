@@ -1,17 +1,5 @@
-"""
-Crawl job read endpoints — cloud-tier concerns only (ownership-filtered DB
-reads, no crawl-execution coupling).
-
-Job *creation* and *cancellation* live in `agent/api.py` — those routes own
-the local `active_tasks` registry and construct a CrawlerEngine +
-CloudApiClient, which are agent-tier concerns per plan.md §15. This module
-never imports from `agent/`.
-
-Registers routes:
-  GET  /api/jobs                 → list recent jobs
-  GET  /api/jobs/{id}            → single job status
-  GET  /api/jobs/{id}/seeds      → resolve a job's seed domains / custom URLs
-"""
+"""Crawl-job read endpoints (ownership-filtered). Creation/cancellation are
+agent-tier and live in agent/api.py. See .docs/api-reference.md."""
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query

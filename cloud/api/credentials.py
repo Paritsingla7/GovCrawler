@@ -1,13 +1,5 @@
-"""
-SMTP Credential management endpoints.
-
-Registers routes:
-  GET    /api/credentials          → list all credentials (passwords masked)
-  POST   /api/credentials          → add new credential
-  PUT    /api/credentials/{id}     → update credential
-  DELETE /api/credentials/{id}     → delete credential
-  POST   /api/credentials/{id}/test→ test connection and login
-"""
+"""SMTP credential management endpoints (CRUD + live connection test). See
+.docs/outreach.md and .docs/api-reference.md."""
 
 import aiosmtplib
 from fastapi import APIRouter, Depends, HTTPException

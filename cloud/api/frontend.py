@@ -1,18 +1,5 @@
-"""
-Frontend HTML page routes plus small UI-support endpoints.
-
-Registers routes:
-  GET    /login             → login page (unauthenticated)
-  GET    /                  → domains browser page
-  GET    /leads             → leads page
-  GET    /settings          → settings page
-  GET    /test-campaign     → test campaign page
-  GET    /campaigns         → campaigns page
-  GET    /admin/dashboard   → admin real-time activity dashboard
-  GET    /user-guide        → user guide page
-  GET    /api/logs          → last 1000 lines of portal.log
-  DELETE /api/visited-urls  → clear the recrawl-protection cache
-"""
+"""Frontend HTML page routes plus small UI-support endpoints. See
+.docs/api-reference.md."""
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse

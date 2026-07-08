@@ -1,39 +1,10 @@
-"""
-CrawlerEngine — config-driven, httpx-first, Playwright fallback.
+"""CrawlerEngine — config-driven, httpx-first with Playwright fallback.
 
-Design goals (this revision):
-  - Nothing blocking runs on the event loop. The crawl shares the same loop as
-    the API/uvicorn server, so every CPU-bound parse and every synchronous DB
-    write is offloaded to a thread pool. The loop stays free for network I/O
-    and the web UI stays responsive.
-  - HTML is parsed exactly ONCE per page. A single BeautifulSoup tree feeds both
-    lead extraction and link discovery (see parser.parse_for_engine / parser.extract_leads).
-  - One shared httpx.AsyncClient across all workers → connection pooling and
-    keep-alive instead of a fresh TCP+TLS handshake per URL.
-  - Per-domain politeness spacing without double-sleeping the httpx→Playwright
-    fallback and without starving other domains.
-  - Re-runs advance the frontier: URLs visited in earlier jobs (within
-    recrawl_days) are skipped, so each run picks up the NEXT batch of links
-    while the seed page itself is always re-crawled.
+Public API: `CrawlerEngine(config, cloud, job_id, browser=None)` then
+`await engine.run(seeds, visited_bootstrap=None, frontier=None)`.
 
-Key properties:
-  - asyncio.PriorityQueue   → contact pages crawled before generic pages
-  - httpx-first             → skip browser for ~60-70% of plain HTML gov sites
-  - Per-worker browser ctx  → isolates sessions, eliminates TargetClosedError
-  - Dedicated DB writer pool (1 thread) → serialized, off-loop persistence
-  - Parse pool              → BeautifulSoup off the event loop
-  - recrawl_days            → global visited URL set prevents re-crawling fresh URLs
-  - Frontier checkpoint     → the pending/in-flight queue is snapshotted every 5s
-    (see _save_checkpoint/_rehydrate_frontier) so a crash resumes from where it
-    left off rather than restarting from seeds (plan.md §10.4).
-  - Outbox backpressure     → new link discovery pauses (not the whole crawl)
-    once the local write-ahead outbox backs up past its threshold.
-
-Public API:
-  - CrawlerEngine(config, cloud: CloudApiClient, job_id, browser=None)
-  - await engine.run(seeds, visited_bootstrap=None, frontier=None)
-    seeds: list[tuple[str, int | None]]; frontier: a prior checkpoint snapshot
-    to resume from instead of enqueueing seeds fresh.
+Design (priority queue, per-worker browser context, thread pools, frontier
+checkpoint/resume, outbox backpressure) is documented in .docs/crawler.md.
 """
 
 import asyncio

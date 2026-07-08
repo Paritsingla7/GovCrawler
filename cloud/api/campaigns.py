@@ -1,17 +1,6 @@
-"""
-Campaign generation, listing, and staging endpoints — covers both production
-and test campaigns, unified via Campaign.kind ("production"/"test").
-
-Registers routes:
-  POST   /api/campaigns                       → generate drafts from leads/dummy details + template
-  GET    /api/campaigns                       → paginated campaign list
-  GET    /api/campaigns/{id}                  → campaign detail + stats
-  PATCH  /api/campaigns/{id}                  → update campaign status (pause/cancel)
-  GET    /api/campaigns/{id}/emails           → paginated staged emails
-  PUT    /api/campaigns/{id}/emails/{eid}     → manual body override
-  GET    /api/campaigns/{id}/stats            → live stats for polling
-  POST   /api/campaigns/parse-csv             → parse a CSV into dummy_details (test campaigns)
-"""
+"""Campaign generation, listing, and staging endpoints — production and test
+campaigns unified via Campaign.kind. See .docs/outreach.md and
+.docs/api-reference.md."""
 
 import asyncio
 import logging

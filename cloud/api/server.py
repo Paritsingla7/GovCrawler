@@ -1,17 +1,7 @@
-"""
-FastAPI app factory for the GovCrawler Portal.
-
-Route definitions live in per-concern modules (frontend, domains, config,
-imports, jobs, leads, templates, blacklist, campaigns, credentials); this
-module only builds the FastAPI app, mounts static files, manages the
-Playwright browser lifespan, and wires shared state into cloud.api.deps.
-
-Also mounts `agent.api.router` — today both tiers still run in one process
-(see agent/api.py's docstring), so this is the one place a cloud-tier module
-imports from `agent/` at all.
-
-See each route module's docstring for its endpoint list.
-"""
+"""FastAPI app factory. Builds the app, mounts the per-concern routers (plus
+`agent.api.router` — the one cloud→agent import, since both tiers share a
+process today), manages the Playwright browser + reaper lifespan, and wires
+shared state into cloud.api.deps. See .docs/architecture.md."""
 
 import asyncio
 import logging

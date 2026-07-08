@@ -1,27 +1,9 @@
-"""
-Agent-tier routes — the ones that own a running crawl (this machine's
-`active_tasks`, the local Playwright browser, the CrawlerEngine, the local
-outbox). Everything here talks to the cloud API only over HTTP (via
-`cloud_client.py`), never by importing `db`/`security` directly for
-mutations — mirroring the real split plan.md §15 describes, where the agent
-process has no DB URI at all.
+"""Agent-tier BFF routes that own a running crawl (create / resume / cancel).
 
-One deliberate, flagged exception for this pass: minting the CloudApiClient's
-bearer token still reads `token_version` via one `db.get_user_by_id` call
-(see `_make_token_provider`) rather than forwarding the browser's own access
-token — a crawl can run far longer than that token's ~15 min TTL, and a full
-refresh-token flow for this internal loop is out of scope here (a real
-remote agent gets this for free from plan.md §8's keyring flow). Everything
-else (job creation, cancellation) goes through the coordination HTTP contract.
-This is also the reason `cloud.api.deps`/`cloud.db`/`cloud.security` are
-still imported directly below — a further, not-yet-done step (running the
-agent as its own process/port with zero Python-level cloud imports) is what
-would fully close this gap; today both tiers still share one process.
-
-Registers routes:
-  POST /api/jobs                 → create + start a crawl job
-  POST /api/jobs/{id}/cancel     → cancel a running job
-  POST /api/jobs/{id}/resume     → resume an interrupted job from its local frontier checkpoint
+These talk to the cloud over the coordination HTTP contract via cloud_client.py.
+Known, flagged exception: `_make_token_provider` and a few `cloud.*` imports
+still touch the cloud process directly because the agent isn't a separate
+process yet. See .docs/architecture.md ("Deployment reality vs. target").
 """
 
 import asyncio
