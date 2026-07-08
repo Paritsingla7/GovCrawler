@@ -93,15 +93,27 @@ This starts the cloud server on `http://127.0.0.1:8001` using a local SQLite dat
 needed) — good enough for testing the admin dashboard, permissions, or a config change. Create an admin
 with `python -m portal create-admin you@example.com` in a second terminal.
 
-**Option 2 — the same Docker stack, just pointed at `localhost`:** follow 1A's steps exactly, but set
-`DOMAIN=localhost` in `.env` and skip pointing DNS anywhere. Caddy will serve plain HTTP on `localhost`
-instead of provisioning a real TLS certificate. This is the closest thing to a production rehearsal — use it
-before rolling out a real upgrade.
+If you're also running an agent (`python run.py`) on this **same machine** to test the full flow, note the
+cloud and the agent's local BFF both default to port 8001 — they'll collide. Edit the cloud's
+`portal/config.yaml` (created on first run from `default_config.yaml`) and change `api.port` to something
+else, e.g. `8000`, before starting it.
 
-Either way, agents can point at this test server the same way they'd point at production (Part 4) — just
-use `http://127.0.0.1:8001` (Option 1) or `http://localhost` (Option 2) as the Cloud Server URL. Anyone
-testing this way must be on the same machine or network as the test server, since it isn't exposed to the
-internet.
+**Option 2 — the same Docker stack, just pointed at `localhost`:** follow 1A's steps exactly, but set
+`DOMAIN=localhost` in `.env` and skip pointing DNS anywhere. This is the closest thing to a production
+rehearsal (same containers, same Postgres) — use it before rolling out a real upgrade. One catch: Caddy
+can't get a real Let's Encrypt certificate for `localhost` (or a bare IP) — it isn't a public, resolvable
+name — so it automatically falls back to serving HTTPS with its own **internal, untrusted** CA instead of
+plain HTTP. Any client that validates certificates normally (an agent, a browser without that CA imported)
+will fail with `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate`. Don't try to work around
+this by trusting Caddy's internal CA — it's extra setup for no benefit locally. Instead, reach the `api`
+container directly over plain HTTP, bypassing Caddy entirely: `deploy/docker-compose.yml`'s `api` service
+already publishes `127.0.0.1:18001` (container port 8001, remapped — the agent's own local BFF binds 8001
+on this same machine, so the host side has to differ) for exactly this.
+
+Either way, agents can point at this test server the same way they'd point at production (Part 4) — use
+`http://127.0.0.1:8001` (or whatever port you chose above) as the Cloud Server URL for Option 1, and
+`http://127.0.0.1:18001` for Option 2. Anyone testing this way must be on the same machine as the test
+server, since the port is loopback-only and isn't exposed to the network or the internet.
 
 ---
 

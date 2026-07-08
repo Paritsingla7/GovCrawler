@@ -61,6 +61,15 @@ services:
       ADMIN_ORIGIN: https://${DOMAIN}
     expose:
       - "8001"
+    # Loopback-only, for local dev/test (server-manager-guide.md Part 1B Option 2) — lets an
+    # agent on the same machine reach the API directly over plain HTTP, bypassing Caddy. Caddy
+    # can't get a real cert for `localhost`/an IP (falls back to its own untrusted internal CA),
+    # so this is the practical way to rehearse the Docker stack without a real domain. Host port
+    # 18001, not 8001 — the agent's own local BFF (portal/default_agent_config.yaml) binds 8001
+    # on the same machine for this exact dev loop, so 8001 would collide. Remove this mapping for
+    # a real VPS deploy, where the proxy service is the only public entry point.
+    ports:
+      - "127.0.0.1:18001:8001"
     depends_on:
       migrate:
         condition: service_completed_successfully

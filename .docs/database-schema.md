@@ -188,7 +188,7 @@ plus the existing one-time `_backfill_snapshots()`.
 
 ## Migration chain
 
-`alembic/versions/`, head = **`0023_drop_visited_and_frontier`**. Linear except a branch at `0005` (`_add_lead_depth`
+`alembic/versions/`, head = **`0024_ddl_owned_ensure_columns`**. Linear except a branch at `0005` (`_add_lead_depth`
 and `_add_lead_grading` both descend from `0004` and merge at `0006`). `alembic/env.py` targets
 `cloud.db.Base` and honors the `DATABASE_URL` env var (so the Docker `migrate` service points at Postgres).
 
@@ -208,7 +208,14 @@ and `_add_lead_grading` both descend from `0004` and merge at `0006`). `alembic/
 | `0021_add_job_frontier` | `job_frontiers` (cross-machine resume) — later dropped by `0023` |
 | `0022_add_app_settings` | `app_settings` (DB-backed crawl policy, plan.md §19.1 Phase 8) |
 | `0023_drop_visited_and_frontier` | Drops `visited_urls` + `job_frontiers` — both went 100% agent-local (plan.md §19.1 Phase 9 Part 2) |
+| `0024_ddl_owned_ensure_columns` | `crawl_jobs.current_depth`/`active_workers`, `leads.snapshot_id` — moved from `_ensure_columns()` into Alembic so they're added by the DDL-owning `migrate` role, not the least-privilege runtime role |
 
-Some columns (`leads.snapshot_id`, `crawl_jobs.current_depth`/`active_workers`, `lead_score` *values*) are
-applied via `_ensure_columns()`/backfills rather than a migration — an intentional, documented split for
-this project's existing SQLite installs.
+Most other `_ensure_columns()` entries duplicate a column an earlier migration already adds — a defensive
+no-op there for old SQLite installs where an Alembic ALTER-added column could silently not take effect
+despite the migration being marked applied (see `0011`'s docstring). `lead_score` *values* (not the column,
+added by `0010`) are backfilled by `_recompute_lead_scores()`, triggered once when the column is newly added
+and again whenever `POST /api/config` changes a weight — desktop SQLite only, no DDL involved. The three
+columns in `0024` were the only ones with **no** Alembic migration at all until `0024` added one: fine on
+desktop SQLite (one connection, no role split), but fatal on Postgres once `0020`'s least-privilege
+`govcrawler_app` role removed `api`/`dispatcher`'s ALTER TABLE rights — `_ensure_columns()` would try to add
+them at app startup using that same restricted connection and fail with `InsufficientPrivilege`.

@@ -65,10 +65,25 @@ def upgrade():
         # domain_state today; copy it into manual_state before the column is
         # dropped. Crawled leads' domain_state is superseded by the snapshot
         # join and is discarded (see confirmed decision in plan.md).
-        bind.execute(sa.text(
-            "UPDATE leads SET manual_state = domain_state "
-            "WHERE snapshot_id IS NULL AND domain_state IS NOT NULL AND manual_state IS NULL"
-        ))
+        #
+        # `snapshot_id` itself is never Alembic-managed (see 0011's docstring
+        # — it's only ever added by Database._ensure_columns() at app
+        # startup), so it may not exist yet here: a standalone `alembic
+        # upgrade head` against a brand-new DB (e.g. deploy/docker-compose's
+        # `migrate` service, which never constructs a `Database()`) hits this
+        # migration before that column is ever created. Without it there's no
+        # snapshot linkage to filter on at all, so every domain_state carrier
+        # is copied unconditionally.
+        if 'snapshot_id' in lead_columns:
+            bind.execute(sa.text(
+                "UPDATE leads SET manual_state = domain_state "
+                "WHERE snapshot_id IS NULL AND domain_state IS NOT NULL AND manual_state IS NULL"
+            ))
+        else:
+            bind.execute(sa.text(
+                "UPDATE leads SET manual_state = domain_state "
+                "WHERE domain_state IS NOT NULL AND manual_state IS NULL"
+            ))
 
     # Backfill one lead_occurrences row per existing lead (no attribution data
     # exists pre-migration, so captured_by is left NULL).
