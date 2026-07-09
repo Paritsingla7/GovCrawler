@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Campaigns — GovCrawler Admin{% endblock %}
+
+{% block extra_head %}
+<link href="/assets/css/campaigns.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="layout">
+    <aside style="width: 320px;">
+        <div class="sidebar-section">
+            <div class="section-label"
+                 style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <span>Campaigns (read-only)</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 11px; font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--muted);">
+                        <input id="toggle-tests" onchange="toggleTestCampaigns()" style="margin:0;" type="checkbox">
+                        Show Tests
+                    </label>
+                    <button class="btn-icon" onclick="loadCampaigns()" style="font-size:16px; padding:0;"
+                            title="Refresh">↻
+                    </button>
+                </div>
+            </div>
+            <ul class="campaign-list" id="campaign-list">
+                <li class="empty-state">Loading campaigns...</li>
+            </ul>
+
+            <div class="pagination" style="margin-top: 16px;">
+                <button class="btn-secondary btn-sm" id="c-btn-prev" onclick="prevCampaignPage()">←</button>
+                <span id="c-page-info" style="font-size:12px;">—</span>
+                <button class="btn-secondary btn-sm" id="c-btn-next" onclick="nextCampaignPage()">→</button>
+            </div>
+        </div>
+    </aside>
+
+    <main id="campaign-main" style="display:none; flex-direction:column;">
+        <div class="campaign-header">
+            <div>
+                <h2 id="cd-title">Campaign Name</h2>
+                <div class="campaign-meta">
+                    Status: <span class="status-badge" id="cd-status">UNKNOWN</span>
+                    <span style="margin: 0 12px; color:var(--muted)">•</span>
+                    Created: <span id="cd-created">—</span>
+                </div>
+                <div class="campaign-meta" id="cd-credentials-row" style="margin-top:6px;">
+                    SMTP: <span id="cd-credentials-summary">—</span>
+                </div>
+                <div id="cd-pause-reason" style="display:none; margin-top:6px; font-size:12px; color:var(--red);">
+                    ⚠ <span id="cd-pause-reason-text"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="campaign-stats">
+            <div class="stat-box">
+                <div class="stat-val" id="stat-total">0</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-draft">0</div>
+                <div class="stat-label">Selected</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-skipped">0</div>
+                <div class="stat-label" style="color:var(--muted)">Skipped</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-queued">0</div>
+                <div class="stat-label" style="color:var(--yellow)">Queued</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-sent">0</div>
+                <div class="stat-label" style="color:var(--green)">Sent</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="stat-failed">0</div>
+                <div class="stat-label" style="color:var(--red)">Failed</div>
+            </div>
+        </div>
+
+        <!-- Live progress bar when running -->
+        <div class="progress-bar-wrap" id="dispatch-progress-wrap" style="display:none; margin: 16px 0;">
+            <div class="progress-bar-fill" id="dispatch-progress-fill" style="width:0%"></div>
+        </div>
+
+        <div class="table-wrap" style="flex: 1; overflow: auto;">
+            <table>
+                <thead>
+                <tr>
+                    <th>Recipient</th>
+                    <th>Subject</th>
+                    <th>Status</th>
+                    <th>Error / Note</th>
+                    <th style="width: 80px;">Actions</th>
+                </tr>
+                </thead>
+                <tbody id="emails-tbody">
+                <tr>
+                    <td class="empty-state" colspan="5">Loading emails...</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button class="btn-secondary btn-sm" id="e-btn-prev" onclick="prevEmailPage()">← Prev</button>
+            <span id="e-page-info">—</span>
+            <button class="btn-secondary btn-sm" id="e-btn-next" onclick="nextEmailPage()">Next →</button>
+        </div>
+    </main>
+
+    <main id="campaign-empty" style="display:flex; justify-content:center; align-items:center; color:var(--muted)">
+        Select a campaign from the sidebar to view details.
+    </main>
+</div>
+
+<!-- View Sent Email Modal (read-only) -->
+<div class="modal-overlay" id="modal-view-email" style="display:none;">
+    <div class="modal modal-lg">
+        <h3>Sent Email</h3>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+            Sent to <strong id="ve-recipient"></strong><span id="ve-sent-at"
+                                                             style="margin-left:8px; color:var(--small);"></span>
+        </p>
+        <div class="form-group">
+            <label>Subject</label>
+            <input id="ve-subject" readonly style="cursor:default; opacity:0.75;" type="text">
+        </div>
+        <div class="form-group">
+            <label>Body</label>
+            <textarea id="ve-body" readonly rows="14"
+                      style="font-family:monospace; resize:vertical; cursor:default; opacity:0.75;"></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeViewEmailModal()">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/campaigns.js"></script>
+{% endblock %}

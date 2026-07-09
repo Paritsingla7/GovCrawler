@@ -116,7 +116,10 @@ action-prefix/date-range).
 | domains.view / leads.view | ✔ | ✔ | ✔ |
 
 `is_admin` short-circuits every check; a per-user `deny` does not apply to an admin (a limited "admin" is a
-non-admin role with broad grants). Roles + the permission catalog are seeded idempotently by
+non-admin role with broad grants). The field name stays `is_admin` in code/DB/JWT — only the admin
+dashboard's UI labels it "Super Admin" (New User modal, Users table column) to disambiguate it from the
+built-in "Admin" *role*, which is just a permission bundle a `deny` override can still narrow. Roles + the
+permission catalog are seeded idempotently by
 `AuthMixin.seed_rbac()` on startup. Effective permissions = role bundle ± per-user `grant`/`deny` overrides,
 settable via `PUT /api/admin/users/{id}/permissions/{key}` (`{"effect": "grant"|"deny"|null}`, null clears
 the override) and visible on the admin dashboard's Users & Permissions panel. There is no custom-role

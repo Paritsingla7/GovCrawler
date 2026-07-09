@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Global Leads — GovCrawler{% endblock %}
+{% block title %}Leads — GovCrawler Admin{% endblock %}
 
 {% block extra_head %}
 <link href="/assets/css/leads.css" rel="stylesheet">
-
 {% endblock %}
 
-
 {% block header_actions %}
-<button class="btn-secondary" onclick="openImportModal()">⬆ Import CSV</button>
 <button class="btn-primary" onclick="openExportModal()">⬇ Export CSV</button>
 {% endblock %}
 
@@ -108,12 +105,6 @@
             <div style="margin-left:16px; display:flex; align-items:center; gap: 12px;">
                 <span id="sel-leads-count-label" style="font-size:12px; font-weight:bold; display:none;"><span
                         id="sel-leads-count">0</span> selected</span>
-                <button class="btn-primary btn-sm" id="btn-create-campaign" onclick="openCampaignModal()"
-                        style="display:none;">+ Create Campaign
-                </button>
-                <button class="btn-secondary btn-sm" id="btn-add-to-campaign" onclick="openAddToCampaignModal()"
-                        style="display:none;">+ Add to Campaign
-                </button>
             </div>
         </div>
 
@@ -187,91 +178,6 @@
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeExportModal()">Cancel</button>
             <button class="btn-primary" id="btn-export-confirm" onclick="confirmExport()">⬇ Export CSV</button>
-        </div>
-    </div>
-</div>
-
-
-<!-- Import Leads CSV Modal -->
-<div class="modal-overlay" id="modal-import" style="display:none;">
-    <div class="modal modal-lg">
-        <h3>Import Leads from CSV</h3>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
-            Columns: <code>email</code> (required), <code>name</code>, <code>designation</code>,
-            <code>department</code>, <code>phone</code>. Existing manual leads are updated by email;
-            crawled leads are left untouched. <a href="/api/leads/import-csv/template">Download template</a>.
-        </p>
-        <div class="form-group">
-            <input accept=".csv" id="import-csv-file" type="file">
-        </div>
-        <div id="import-result" style="display:none;font-size:13px;margin-top:12px;"></div>
-        <div class="modal-actions">
-            <button class="btn-secondary" onclick="closeImportModal()">Close</button>
-            <button class="btn-primary" id="btn-import-confirm" onclick="confirmImport()">⬆ Import</button>
-        </div>
-    </div>
-</div>
-
-<!-- Create Campaign Modal -->
-<div class="modal-overlay" id="modal-create-campaign" style="display:none;">
-    <div class="modal">
-        <h3>Create Outreach Campaign</h3>
-        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
-            Creating a campaign will generate email drafts for <strong id="camp-leads-count">0</strong> selected leads.
-        </p>
-
-        <div class="form-group">
-            <label>Campaign Name</label>
-            <input id="camp-name" placeholder="e.g. Follow-up Batch 1" type="text">
-        </div>
-
-        <div class="form-group">
-            <label>Select Template</label>
-            <select id="camp-template">
-                <option value="">Loading templates...</option>
-            </select>
-        </div>
-
-        <div class="form-group checkbox-group">
-            <input checked id="camp-round-robin" onchange="toggleCampaignCredentialSelect()" type="checkbox">
-            <label for="camp-round-robin" style="margin: 0;">Use all active credentials (round robin)</label>
-        </div>
-        <div class="form-group" id="camp-credential-select-group" style="display: none;">
-            <label>Select SMTP Credentials to Use</label>
-            <div class="credential-picker-wrap">
-                <table>
-                    <tbody id="camp-credentials-list">
-                    <tr>
-                        <td class="empty-state">Loading credentials...</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="modal-actions">
-            <button class="btn-secondary" onclick="closeCampaignModal()">Cancel</button>
-            <button class="btn-primary" id="btn-camp-submit" onclick="submitCampaign()">Generate Drafts</button>
-        </div>
-    </div>
-</div>
-<!-- Add to Existing Campaign Modal -->
-<div class="modal-overlay" id="modal-add-to-campaign" style="display:none;">
-    <div class="modal">
-        <h3>Add to Existing Campaign</h3>
-        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
-            Adding <strong id="atc-leads-count">0</strong> selected leads as new drafts.
-        </p>
-        <div class="form-group">
-            <label>Campaign</label>
-            <select id="atc-campaign-select">
-                <option value="">Loading campaigns…</option>
-            </select>
-        </div>
-        <div id="atc-warning" style="display:none; font-size:12px; color:var(--red); margin-top:6px;"></div>
-        <div class="modal-actions">
-            <button class="btn-secondary" onclick="closeAddToCampaignModal()">Cancel</button>
-            <button class="btn-primary" id="btn-atc-submit" onclick="submitAddToCampaign()">Add Leads</button>
         </div>
     </div>
 </div>

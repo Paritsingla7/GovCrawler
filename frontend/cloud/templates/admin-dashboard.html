@@ -71,7 +71,7 @@
                         <th>Name</th>
                         <th>Role</th>
                         <th style="text-align:center">Status</th>
-                        <th style="text-align:center">Admin</th>
+                        <th style="text-align:center">Super Admin</th>
                         <th></th>
                     </tr>
                     </thead>
@@ -175,7 +175,8 @@
                     <option value="Viewer">Viewer</option>
                 </select>
             </label>
-            <label><input id="nu-is-admin" type="checkbox"> Is admin (bypasses all permission checks)</label>
+            <label><input id="nu-is-admin" type="checkbox"> Super Admin (bypasses every permission check — distinct
+                from the "Admin" role above, which is just a permission bundle)</label>
         </div>
         <div class="modal-actions">
             <button class="btn-secondary" onclick="closeNewUserModal()">Cancel</button>

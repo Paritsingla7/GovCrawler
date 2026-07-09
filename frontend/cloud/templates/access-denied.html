@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Access Denied — GovCrawler Admin{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:center; min-height:calc(100vh - 52px - 36px); padding:24px;">
+    <div style="max-width:440px; text-align:center;">
+        <div style="font-size:40px; margin-bottom:12px;">🔒</div>
+        <h2 style="margin-bottom:12px;">Access Denied</h2>
+        <p style="color:var(--muted); line-height:1.6; margin-bottom:24px;">{{ message }}</p>
+        <button class="btn-secondary" onclick="logout()">⎋ Log out and switch accounts</button>
+    </div>
+</div>
+{% endblock %}

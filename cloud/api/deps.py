@@ -6,6 +6,7 @@ handlers pull it via Depends(...) instead of capturing it through closures —
 this lets each route module be imported and tested independently of app
 construction.
 """
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +53,7 @@ def get_config_path() -> Path:
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+
 class RedirectException(Exception):
     """Raised by page-auth dependencies to bounce an unauthenticated browser
     request to /login. Handled by an app-level exception handler
@@ -59,6 +61,18 @@ class RedirectException(Exception):
 
     def __init__(self, location: str = "/login"):
         self.location = location
+
+
+class ForbiddenPageException(Exception):
+    """Raised by require_page() when an authenticated browser request lacks
+    the needed permission. Rendered as a friendly HTML page (not a raw JSON
+    403 the browser can't do anything useful with) by the app-level handler
+    in cloud/api/server.py — a redirect to /login would be wrong here since
+    the visitor already IS logged in; bouncing them there would just be a
+    confusing loop back to the same page."""
+
+    def __init__(self, message: str = "You don't have permission to view this page."):
+        self.message = message
 
 
 @dataclass
@@ -78,7 +92,7 @@ class CurrentUser:
 def _extract_token(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        return auth_header[len("Bearer "):]
+        return auth_header[len("Bearer ") :]
     return request.cookies.get("access")
 
 
@@ -108,7 +122,7 @@ def current_user_or_redirect(request: Request) -> CurrentUser:
     try:
         return get_current_user(request)
     except HTTPException:
-        raise RedirectException("/login")
+        raise RedirectException("/login?notice=login_required")
 
 
 def require(*perms: str):
@@ -116,6 +130,28 @@ def require(*perms: str):
         if not user.has_all(perms):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
+
+    return dep
+
+
+def require_page(*perms: str):
+    """Page-route variant of require(): unauthenticated -> redirect to
+    /login (like current_user_or_redirect), authenticated-but-forbidden ->
+    ForbiddenPageException (a friendly HTML page), never a raw JSON
+    401/403 a full-page browser navigation can't do anything useful with."""
+
+    def dep(request: Request) -> CurrentUser:
+        try:
+            user = get_current_user(request)
+        except HTTPException:
+            raise RedirectException("/login?notice=login_required")
+        if not user.has_all(perms):
+            raise ForbiddenPageException(
+                "You're signed in, but your account doesn't have permission to view the admin portal. "
+                "Contact your administrator if you believe this is a mistake."
+            )
+        return user
+
     return dep
 
 

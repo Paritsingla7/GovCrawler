@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -36,7 +36,7 @@ from . import (
     system,
     templates,
 )
-from .deps import RedirectException, get_current_user, verify_csrf
+from .deps import ForbiddenPageException, RedirectException, get_current_user, verify_csrf
 from ..db import Database
 from portal.paths import APP_DIR, LIVE_CONFIG_PATH
 from shared.errors import format_validation_errors
@@ -131,6 +131,14 @@ def create_app(config_dict: dict, db: Database) -> FastAPI:
     @app.exception_handler(RedirectException)
     async def _redirect_handler(request: Request, exc: RedirectException):
         return RedirectResponse(url=exc.location, status_code=302)
+
+    # A logged-in visitor without the needed permission gets a page they can
+    # actually read, not a raw JSON 403 — see deps.require_page().
+    @app.exception_handler(ForbiddenPageException)
+    async def _forbidden_page_handler(request: Request, exc: ForbiddenPageException):
+        template = frontend._templates.get_template("access-denied.html")
+        html = template.render({"request": request, "active_page": "access-denied", "message": exc.message})
+        return HTMLResponse(html, status_code=403)
 
     # Every error response is guaranteed a plain-string `detail` — the
     # frontend's shared apiFetch()/friendlyMessage() (frontend/shared/

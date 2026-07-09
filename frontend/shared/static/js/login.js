@@ -1,3 +1,16 @@
+const NOTICE_MESSAGES = {
+    login_required: "Please sign in to continue — your previous session may have expired.",
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    const notice = new URLSearchParams(window.location.search).get("notice");
+    if (notice && NOTICE_MESSAGES[notice]) {
+        const noticeEl = document.getElementById("login-notice");
+        noticeEl.textContent = NOTICE_MESSAGES[notice];
+        noticeEl.style.display = "block";
+    }
+});
+
 document.getElementById("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = document.getElementById("login-email").value.trim();

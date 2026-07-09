@@ -23,6 +23,15 @@
     </div>
     <div class="header-right">
         {% block header_actions %}{% endblock %}
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'admin-dashboard' }}"
+                onclick="window.location.href='/admin/dashboard'">🛡️ Dashboard
+        </button>
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'leads' }}"
+                onclick="window.location.href='/leads'">📋 Leads
+        </button>
+        <button class="btn-secondary btn-sm{{ ' active' if active_page == 'campaigns' }}"
+                onclick="window.location.href='/campaigns'">📣 Campaigns
+        </button>
         <a class="btn-icon" href="/user-guide"
            style="font-size:15px; text-decoration:none; padding:5px 10px; color:var(--text);"
            title="Admin Guide">?</a>

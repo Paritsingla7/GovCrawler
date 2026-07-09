@@ -27,6 +27,11 @@
         Viewer), and toggle their active status from the table. <strong>Permissions</strong> opens a per-user
         grant/deny grid for fine-tuning beyond the role default — leave a permission on "Inherited from role"
         unless you specifically need an exception for that one user.</p>
+    <p><strong>"Admin" (the role) and "Super Admin" (the checkbox) are not the same thing.</strong> The Admin
+        role is just a permission bundle — it happens to include every permission, but a per-user deny
+        override can still take one away. Super Admin is a separate flag that bypasses every permission check
+        unconditionally, with no override possible — reserve it for the handful of people who should never be
+        locked out by a permissions mistake.</p>
 
     <h3>Roles</h3>
     <p>Roles are fixed (Admin/Operator/Viewer) and cannot be created or edited here — this tab is a read-only

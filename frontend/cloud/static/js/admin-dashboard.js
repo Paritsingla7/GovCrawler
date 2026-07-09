@@ -87,7 +87,7 @@ function userRowHtml(u) {
     const statusBadge = u.is_active
         ? '<span class="badge badge-green">Active</span>'
         : '<span class="badge badge-muted">Disabled</span>';
-    const adminBadge = u.is_admin ? '<span class="badge badge-green">Admin</span>' : '—';
+    const adminBadge = u.is_admin ? '<span class="badge badge-green">Super Admin</span>' : '—';
     return `<tr>
         <td>${esc(u.email)}</td>
         <td>${esc(u.full_name || '')}</td>
