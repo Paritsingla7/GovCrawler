@@ -2,9 +2,7 @@
 Data extraction and URL processing for GovCrawler.
 """
 
-import httpx
 import logging
-import re
 from urllib.parse import urlparse
 
 from .config import TARGET_SUFFIXES

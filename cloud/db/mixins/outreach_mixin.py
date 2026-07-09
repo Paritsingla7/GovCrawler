@@ -204,8 +204,8 @@ class OutreachMixin:
                 s.query(SMTPCredential)
                 .filter(
                     SMTPCredential.id.in_(credential_ids),
-                    SMTPCredential.is_active == True,
-                    or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now),
+                    SMTPCredential.is_active,
+                    or_(SMTPCredential.cooldown_until is None, SMTPCredential.cooldown_until < now),
                 )
                 .all()
             )
@@ -561,8 +561,8 @@ class OutreachMixin:
             rows = (
                 s.query(SMTPCredential)
                 .filter(
-                    SMTPCredential.is_active == True,
-                    or_(SMTPCredential.cooldown_until == None, SMTPCredential.cooldown_until < now),
+                    SMTPCredential.is_active,
+                    or_(SMTPCredential.cooldown_until is None, SMTPCredential.cooldown_until < now),
                 )
                 .all()
             )

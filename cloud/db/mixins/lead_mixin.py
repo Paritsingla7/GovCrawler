@@ -1,4 +1,3 @@
-import datetime
 import json
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.exc import IntegrityError
@@ -280,31 +279,31 @@ class LeadMixin:
             return (
                 [
                     {
-                        "id": l.id,
-                        "email": l.email,
-                        "person_name": l.person_name,
-                        "designation": l.designation,
-                        "department": l.department,
-                        "source_url": l.source_url,
-                        "source_title": l.source_title,
-                        "context_snippet": l.context_snippet,
+                        "id": lead.id,
+                        "email": lead.email,
+                        "person_name": lead.person_name,
+                        "designation": lead.designation,
+                        "department": lead.department,
+                        "source_url": lead.source_url,
+                        "source_title": lead.source_title,
+                        "context_snippet": lead.context_snippet,
                         "domain_title": dt,
                         "category_code": cc,
                         # display-only: crawled leads (snapshot present) always show
                         # the snapshot's frozen state; manual leads show manual_state.
-                        "domain_state": snap_state if l.snapshot_id else l.manual_state,
+                        "domain_state": snap_state if lead.snapshot_id else lead.manual_state,
                         "domain_org_type": ot,
-                        "manual_state": l.manual_state,
-                        "is_manual": l.snapshot_id is None,
-                        "confidence_band": l.confidence_band,
-                        "field_provenance": l.field_provenance,
-                        "channel_tag": l.channel_tag,
-                        "phone": l.phone,
-                        "lead_score": l.lead_score or 0,
-                        "depth": l.depth or 0,
-                        "captured_at": l.captured_at.isoformat() if l.captured_at else None,
+                        "manual_state": lead.manual_state,
+                        "is_manual": lead.snapshot_id is None,
+                        "confidence_band": lead.confidence_band,
+                        "field_provenance": lead.field_provenance,
+                        "channel_tag": lead.channel_tag,
+                        "phone": lead.phone,
+                        "lead_score": lead.lead_score or 0,
+                        "depth": lead.depth or 0,
+                        "captured_at": lead.captured_at.isoformat() if lead.captured_at else None,
                     }
-                    for l, dt, cc, snap_state, ot in rows
+                    for lead, dt, cc, snap_state, ot in rows
                 ],
                 total,
             )
@@ -389,25 +388,25 @@ class LeadMixin:
             rows = q.order_by(CrawlSnapshot.source_domain_id, Lead.captured_at).all()
             return [
                 {
-                    "email": l.email,
-                    "person_name": l.person_name or "",
-                    "designation": l.designation or "",
-                    "department": l.department or "",
+                    "email": lead.email,
+                    "person_name": lead.person_name or "",
+                    "designation": lead.designation or "",
+                    "department": lead.department or "",
                     "domain_title": dt or "",
-                    "domain_state": (snap_state if l.snapshot_id else l.manual_state) or "",
+                    "domain_state": (snap_state if lead.snapshot_id else lead.manual_state) or "",
                     "domain_org_type": ot or "",
                     "category_title": ct or cc or "",
-                    "source_url": l.source_url or "",
-                    "source_title": l.source_title or "",
-                    "context_snippet": l.context_snippet or "",
-                    "confidence_band": l.confidence_band or "",
-                    "field_provenance": l.field_provenance or "",
-                    "phone": l.phone or "",
-                    "lead_score": l.lead_score or 0,
-                    "depth": l.depth or 0,
-                    "captured_at": l.captured_at.isoformat() if l.captured_at else "",
+                    "source_url": lead.source_url or "",
+                    "source_title": lead.source_title or "",
+                    "context_snippet": lead.context_snippet or "",
+                    "confidence_band": lead.confidence_band or "",
+                    "field_provenance": lead.field_provenance or "",
+                    "phone": lead.phone or "",
+                    "lead_score": lead.lead_score or 0,
+                    "depth": lead.depth or 0,
+                    "captured_at": lead.captured_at.isoformat() if lead.captured_at else "",
                 }
-                for l, dt, cc, ct, snap_state, ot, _sdi in rows
+                for lead, dt, cc, ct, snap_state, ot, _sdi in rows
             ]
 
     def get_lead_categories(self, job_ids: list[int] | None = None) -> list[dict]:

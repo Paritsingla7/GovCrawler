@@ -2,6 +2,8 @@ import os
 import sys
 import tkinter as tk
 
+import certifi
+
 from portal.config import load_agent_config
 
 config = load_agent_config()
@@ -9,7 +11,6 @@ config = load_agent_config()
 # ==========================================
 # SSL Certificate FIX
 # ==========================================
-import certifi
 
 if getattr(sys, "frozen", False):
     # PyInstaller creates a temporary folder and stores path in _MEIPASS

@@ -36,12 +36,12 @@ def render_draft_emails(
 
     Returns (email_dicts, blacklisted_count, excluded_count).
     """
-    filtered = [l for l in leads if l["email"] not in blacklisted]
+    filtered = [lead for lead in leads if lead["email"] not in blacklisted]
     blacklisted_count = len(leads) - len(filtered)
 
-    excluded_count = sum(1 for l in filtered if l["email"] in exclude_emails)
+    excluded_count = sum(1 for lead in filtered if lead["email"] in exclude_emails)
     if exclude_emails:
-        filtered = [l for l in filtered if l["email"] not in exclude_emails]
+        filtered = [lead for lead in filtered if lead["email"] not in exclude_emails]
 
     email_dicts = []
     for lead in filtered:

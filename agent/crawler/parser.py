@@ -377,8 +377,7 @@ def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern, valid_s
 
 
 _BRACKETED_EMAIL_RE = re.compile(
-    r"[a-zA-Z0-9._%+\-]+\s*(?:\[at\]|\(at\))\s*"
-    r"(?:[a-zA-Z0-9.\-]+\s*(?:\[dot\]|\(dot\))\s*)+[a-zA-Z]{2,6}",
+    r"[a-zA-Z0-9._%+\-]+\s*(?:\[at\]|\(at\))\s*" r"(?:[a-zA-Z0-9.\-]+\s*(?:\[dot\]|\(dot\))\s*)+[a-zA-Z]{2,6}",
     re.IGNORECASE,
 )
 

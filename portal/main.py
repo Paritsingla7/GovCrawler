@@ -15,15 +15,15 @@ import asyncio
 import logging
 import sys
 
+import uvicorn
+
+from cloud.api.server import create_app
+from cloud.db import Database
+from .config import load_config
 from .paths import LOG_FILE_PATH, bootstrap
 
 # First-run setup must precede the late imports below (they read env it sets).
 bootstrap()
-
-import uvicorn
-from cloud.db import Database
-from cloud.api.server import create_app
-from .config import load_config
 
 log_handlers = [logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")]
 

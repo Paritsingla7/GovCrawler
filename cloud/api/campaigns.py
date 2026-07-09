@@ -165,7 +165,7 @@ async def create_campaign(
         raise HTTPException(status_code=404, detail="No matching leads found")
 
     blacklisted = db.get_blacklisted_emails_set()
-    if all(l["email"] in blacklisted for l in leads):
+    if all(lead["email"] in blacklisted for lead in leads):
         raise HTTPException(
             status_code=422,
             detail=f"All {len(leads)} leads are blacklisted. No emails to stage.",
