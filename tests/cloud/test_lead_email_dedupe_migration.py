@@ -12,9 +12,7 @@ from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, inspect as sa_inspect, text
 
-_MIGRATION_PATH = (
-    Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0028_dedupe_lead_email_global.py"
-)
+_MIGRATION_PATH = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0028_dedupe_lead_email_global.py"
 
 
 def _load_migration():
@@ -26,9 +24,7 @@ def _load_migration():
 
 def _pre_migration_schema(engine):
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                """
+        conn.execute(text("""
                 CREATE TABLE leads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     job_id INTEGER NOT NULL,
@@ -39,11 +35,11 @@ def _pre_migration_schema(engine):
                     lead_score INTEGER NOT NULL DEFAULT 0, depth INTEGER NOT NULL DEFAULT 0,
                     CONSTRAINT uq_lead_job_email UNIQUE (job_id, email)
                 )
-                """
-            )
-        )
+                """))
         conn.execute(
-            text("CREATE TABLE lead_occurrences (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, job_id INTEGER)")
+            text(
+                "CREATE TABLE lead_occurrences (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER, job_id INTEGER)"
+            )
         )
         conn.execute(
             text(

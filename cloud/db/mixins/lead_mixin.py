@@ -520,7 +520,10 @@ class LeadMixin:
                 require_designation,
                 require_phone,
             )
-            return [self._export_row_dict(lead, dt, cc, ct, snap_state, ot) for lead, dt, cc, ct, snap_state, ot, _sdi in q.all()]
+            return [
+                self._export_row_dict(lead, dt, cc, ct, snap_state, ot)
+                for lead, dt, cc, ct, snap_state, ot, _sdi in q.all()
+            ]
 
     def iter_leads_for_export(
         self,
