@@ -1,4 +1,5 @@
 import json
+import logging
 from sqlalchemy import and_, case, false, func, or_
 from sqlalchemy.exc import IntegrityError
 
@@ -6,6 +7,8 @@ from shared.scoring import compute_lead_score
 from ..domain_resolution import resolve_domain_for_url
 from ..tables.crawl import CrawlSnapshot
 from ..tables.leads import Lead, LeadOccurrence
+
+log = logging.getLogger(__name__)
 
 # Fields that a re-capture may fill in if the existing lead has them blank.
 # Never overwrites an already-populated value (enrich, not replace).
@@ -63,8 +66,21 @@ class LeadMixin:
     def bulk_save_leads(self, items: list[dict], captured_by: int | None = None) -> list[bool]:
         """Batch wrapper for the coordination `/leads` endpoint — one save_lead
         call per item, in submission order, so the caller can report per-item
-        accepted/duplicate flags back to the agent."""
-        return [self.save_lead(captured_by=captured_by, **item) for item in items]
+        accepted/duplicate flags back to the agent.
+
+        Each item is isolated in its own try/except: one malformed item (a
+        poison payload, e.g. a bad kwarg from a stale agent version) must not
+        raise out of the list comprehension and take the other 99 items in
+        the same outbox batch down with it — the caller reports per-item
+        results so only the actual poison row gets retried/dead-lettered."""
+        results = []
+        for item in items:
+            try:
+                results.append(self.save_lead(captured_by=captured_by, **item))
+            except Exception:
+                log.error(f"bulk_save_leads: rejecting malformed item: {item}", exc_info=True)
+                results.append(False)
+        return results
 
     def _record_occurrence(
         self, s, lead_id: int, job_id: int, source_url: str | None, captured_by: int | None = None

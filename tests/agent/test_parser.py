@@ -65,6 +65,23 @@ def test_mailto_enriched_from_its_own_container():
 # ── WI-8 Tier 2: collision — table's richer context recovered for the mailto winner ─
 
 
+def test_orphan_phone_attaches_to_only_one_entity_not_all():
+    """A tel: link whose container doesn't proximity-match any entity used to
+    fan out onto EVERY phone-less entity on the page — one stray phone number
+    ending up copied onto every unrelated person. It must attach to at most
+    one (a genuine best-effort single guess), never all of them."""
+    html = """
+    <div><p>Shri A Kumar, Director</p><a href="mailto:a@tn.gov.in">Email</a></div>
+    <div><p>Shri B Kumar, Director</p><a href="mailto:b@tn.gov.in">Email</a></div>
+    <div><a href="tel:+911234567890">Call</a></div>
+    """
+    leads = _leads(html)
+    a = _by_email(leads, "a@tn.gov.in")
+    b = _by_email(leads, "b@tn.gov.in")
+    phones = {a.phone, b.phone}
+    assert phones == {"+911234567890", None}
+
+
 def test_mailto_falls_back_to_table_context_on_collision():
     html = """
     <table>
