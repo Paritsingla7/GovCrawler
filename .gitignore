@@ -273,4 +273,5 @@ _bmad-output/
 .claude
 docs/
 CLAUDE.md
+CLAUDE.local.md
 deploy/wal_archive/*

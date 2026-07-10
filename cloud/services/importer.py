@@ -267,26 +267,22 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
         import_status["total_categories"] = len(data)
         log.info(f"JSON import: {len(data)} categories from {json_path}")
 
-        db.clear_domains()
-        seen_categories: set[str] = set()
-        seen_org_types: set[str] = set()
+        categories: dict[str, str] = {}
+        org_types: dict[str, str] = {}
+        entries_out: list[dict] = []
 
         for cat_title, states in data.items():
             cat_code = _CAT_CODE.get(cat_title, cat_title.lower().replace(" ", "_")[:20])
-            if cat_code not in seen_categories:
-                db.upsert_category(cat_code, cat_title)
-                seen_categories.add(cat_code)
+            categories[cat_code] = cat_title
             inserted_this_cat = 0
 
-            for state_name, org_types in states.items():
+            for state_name, org_type_map in states.items():
                 state = state_name if state_name != "National / Unknown" else "National"
 
-                for org_type_title, urls in org_types.items():
+                for org_type_title, urls in org_type_map.items():
                     # Use org_type_title as the code too (JSON has no separate code)
                     org_code = org_type_title.lower().replace(" ", "_").replace("/", "_")[:30]
-                    if org_code not in seen_org_types:
-                        db.upsert_org_type(org_code, org_type_title)
-                        seen_org_types.add(org_code)
+                    org_types[org_code] = org_type_title
 
                     import_status["total_entries"] += len(urls)
 
@@ -299,16 +295,18 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
                         if isinstance(entry, str) and not resolved["main_url"]:
                             continue
 
-                        db.upsert_domain(
-                            category_code=cat_code,
-                            category_title=cat_title,
-                            state=state,
-                            org_type=org_code,
-                            org_type_title=org_type_title,
-                            title=resolved["title"],
-                            main_url=resolved["main_url"],
-                            contact_url=resolved["contact_url"],
-                            external_id=resolved["external_id"],
+                        entries_out.append(
+                            {
+                                "category_code": cat_code,
+                                "category_title": cat_title,
+                                "state": state,
+                                "org_type": org_code,
+                                "org_type_title": org_type_title,
+                                "title": resolved["title"],
+                                "main_url": resolved["main_url"],
+                                "contact_url": resolved["contact_url"],
+                                "external_id": resolved["external_id"],
+                            }
                         )
                         import_status["inserted"] += 1
                         inserted_this_cat += 1
@@ -316,7 +314,8 @@ def import_from_json(db: Database, json_path: str | Path, config: dict):
             log.info(f"  [{cat_code}] {cat_title} — {inserted_this_cat} domains")
             import_status["done_categories"] += 1
 
-        log.info(f"JSON import complete: {import_status['inserted']} domains in DB")
+        inserted = db.replace_catalog(entries_out, categories, org_types)
+        log.info(f"JSON import complete: {inserted} domains in DB")
 
     except Exception as e:
         log.error(f"JSON import failed: {e}", exc_info=True)
@@ -358,9 +357,9 @@ def import_all(db: Database, config: dict):
             import_status["total_categories"] = len(categories)
             log.info(f"Found {len(categories)} categories")
 
-            db.clear_domains()
-            seen_categories: set[str] = set()
-            seen_org_types: set[str] = set()
+            categories_out: dict[str, str] = {}
+            org_types_out: dict[str, str] = {}
+            entries_out: list[dict] = []
 
             for cat in categories:
                 code = cat["category"]
@@ -370,9 +369,7 @@ def import_all(db: Database, config: dict):
                     import_status["done_categories"] += 1
                     continue
 
-                if code not in seen_categories:
-                    db.upsert_category(code, title)
-                    seen_categories.add(code)
+                categories_out[code] = title
 
                 # Build org_type code → title mapping for this category
                 try:
@@ -407,9 +404,7 @@ def import_all(db: Database, config: dict):
                     org_t_title = org_map.get(org_code, org_code)
                     external_id = entry.get("npi_sanitized_id") or None
 
-                    if org_code not in seen_org_types:
-                        db.upsert_org_type(org_code, org_t_title)
-                        seen_org_types.add(org_code)
+                    org_types_out[org_code] = org_t_title
 
                     # Entries with no crawlable URL (main or contact) are kept
                     # with main_url=None rather than dropped — the frontend
@@ -424,16 +419,18 @@ def import_all(db: Database, config: dict):
                         main_url = None
                         clean_contact = None
 
-                    db.upsert_domain(
-                        category_code=code,
-                        category_title=title,
-                        state=state,
-                        org_type=org_code,
-                        org_type_title=org_t_title,
-                        title=entry_title,
-                        main_url=main_url,
-                        contact_url=clean_contact,
-                        external_id=external_id,
+                    entries_out.append(
+                        {
+                            "category_code": code,
+                            "category_title": title,
+                            "state": state,
+                            "org_type": org_code,
+                            "org_type_title": org_t_title,
+                            "title": entry_title,
+                            "main_url": main_url,
+                            "contact_url": clean_contact,
+                            "external_id": external_id,
+                        }
                     )
                     import_status["inserted"] += 1
                     inserted_this_cat += 1
@@ -441,7 +438,8 @@ def import_all(db: Database, config: dict):
                 log.info(f"  [{code}] {title} — {inserted_this_cat} domains inserted")
                 import_status["done_categories"] += 1
 
-        log.info(f"API import complete: {import_status['inserted']} domains in DB")
+            inserted = db.replace_catalog(entries_out, categories_out, org_types_out)
+        log.info(f"API import complete: {inserted} domains in DB")
 
     except Exception as e:
         log.error(f"API import failed: {e}", exc_info=True)

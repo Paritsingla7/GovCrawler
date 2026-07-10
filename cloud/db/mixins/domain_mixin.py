@@ -157,6 +157,52 @@ class DomainMixin:
             s.commit()
         self._invalidate_netloc_domain_map()
 
+    def replace_catalog(self, entries: list[dict], categories: dict[str, str], org_types: dict[str, str]) -> int:
+        """Atomically replace the entire domains catalog + category/org_type
+        lookups in one transaction. Used by importer.py instead of
+        clear_domains() + a per-row upsert_domain() loop, which was neither
+        atomic (a mid-import failure left a half-repopulated catalog) nor
+        cascade-safe on Postgres (see 0027 migration's docstring).
+
+        `entries` dicts carry the same fields upsert_domain() used to take.
+        Dedup semantics preserved from the old per-row upsert: entries
+        sharing an external_id (or, absent that, a main_url) collapse to one
+        row — last one in `entries` wins.
+        """
+        by_key: dict[str, dict] = {}
+        order: list[str] = []
+        for i, e in enumerate(entries):
+            if e.get("external_id"):
+                key = f"ext:{e['external_id']}"
+            elif e.get("main_url"):
+                key = f"url:{e['main_url']}"
+            else:
+                key = f"row:{i}"
+            if key not in by_key:
+                order.append(key)
+            by_key[key] = e
+        deduped = [by_key[k] for k in order]
+
+        with self._Session() as s:
+            s.query(Domain).delete()
+            for code, title in categories.items():
+                existing = s.query(Category).filter_by(code=code).first()
+                if existing:
+                    existing.title = title
+                else:
+                    s.add(Category(code=code, title=title))
+            for code, title in org_types.items():
+                existing = s.query(OrgType).filter_by(code=code).first()
+                if existing:
+                    existing.title = title
+                else:
+                    s.add(OrgType(code=code, title=title))
+            if deduped:
+                s.bulk_insert_mappings(Domain, deduped)
+            s.commit()
+        self._invalidate_netloc_domain_map()
+        return len(deduped)
+
     def count_domains(self) -> int:
         with self._Session() as s:
             return s.query(Domain).count()

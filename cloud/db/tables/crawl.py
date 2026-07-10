@@ -84,7 +84,7 @@ class CrawlJobDomain(Base):
 
     __tablename__ = "crawl_job_domains"
     job_id = Column(Integer, ForeignKey("crawl_jobs.id", ondelete="CASCADE"), primary_key=True)
-    domain_id = Column(Integer, ForeignKey("domains.id"), primary_key=True)
+    domain_id = Column(Integer, ForeignKey("domains.id", ondelete="CASCADE"), primary_key=True)
 
 
 class JobCustomUrl(Base):
