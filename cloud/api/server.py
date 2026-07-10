@@ -35,6 +35,7 @@ from . import (
     imports,
     jobs,
     leads,
+    oauth,
     system,
     templates,
 )
@@ -170,6 +171,7 @@ def create_app(config_dict: dict, db: Database) -> FastAPI:
     # cookie-authenticated browser requests), so it's a no-op for the agent's
     # Bearer-token calls to coordination.
     app.include_router(auth.router)
+    app.include_router(oauth.router)
     # admin.router's routes were previously mounted without verify_csrf — a
     # real (defense-in-depth, not primary-vector — SameSite=Strict already
     # covers it) gap, closed incidentally while adding the permission-override

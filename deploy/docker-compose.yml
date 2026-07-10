@@ -59,6 +59,10 @@ services:
       CREDENTIAL_ENC_KEY_PREV: ${CREDENTIAL_ENC_KEY_PREV:-}
       DISPATCH_MODE: external
       ADMIN_ORIGIN: https://${DOMAIN}
+      OAUTH_REDIRECT_BASE_URL: https://${DOMAIN}
+      OAUTH_MS_CLIENT_ID: ${OAUTH_MS_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
     expose:
       - "8001"
     # Loopback-only, for local dev/test (server-manager-guide.md Part 1B Option 2) — lets an
@@ -90,6 +94,10 @@ services:
       DATABASE_URL_APP: ${DATABASE_URL_APP}
       CREDENTIAL_ENC_KEY: ${CREDENTIAL_ENC_KEY}
       CREDENTIAL_ENC_KEY_PREV: ${CREDENTIAL_ENC_KEY_PREV:-}
+      OAUTH_REDIRECT_BASE_URL: https://${DOMAIN}
+      OAUTH_MS_CLIENT_ID: ${OAUTH_MS_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -188,3 +188,13 @@ auth:
   lockout_minutes: 15
 dispatch:
   mode: embedded  # embedded (default, desktop/dev) | external (VPS: separate dispatcher process)
+oauth:
+  # Required before any Microsoft/Google SMTP credential can be connected — the
+  # public URL Microsoft/Google redirect back to after consent. See
+  # .docs/outreach.md and .docs/configuration.md for one-time app registration steps.
+  redirect_base_url: ''
+  microsoft:
+    client_id: ''
+  google:
+    client_id: ''
+    client_secret: ''

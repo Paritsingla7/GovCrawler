@@ -48,6 +48,7 @@ class Database(DomainMixin, JobMixin, CrawlSnapshotMixin, LeadMixin, OutreachMix
         Base.metadata.create_all(self.engine)
         self._Session = sessionmaker(bind=self.engine)
         self._cred_enc_key = ensure_credential_enc_key(config, config_path)
+        self._oauth_config = config.get("oauth", {})
         # Must precede _ensure_columns(): its lead_score backfill path reads
         # self._lead_score_weights, which is sourced from app_settings.
         self._seed_app_settings(config)

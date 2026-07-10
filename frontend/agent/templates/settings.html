@@ -44,6 +44,7 @@
                     <button class="btn-secondary btn-sm batch-action-cred" onclick="batchDeleteCredentials()"
                             style="display:none; color:var(--danger)">Delete Selected
                     </button>
+                    <button class="btn-secondary btn-sm" onclick="loadCredentials()">Refresh</button>
                     <button class="btn-primary btn-sm" onclick="openCredentialModal()">+ Add Credential</button>
                 </div>
             </div>
@@ -58,6 +59,7 @@
                         <th>Host</th>
                         <th>Port</th>
                         <th>Username</th>
+                        <th>Provider</th>
                         <th>Status</th>
                         <th>Cooldown</th>
                         <th>Daily Limit</th>
@@ -69,7 +71,7 @@
                     </thead>
                     <tbody id="credentials-tbody">
                     <tr>
-                        <td class="empty-state" colspan="11">Loading credentials...</td>
+                        <td class="empty-state" colspan="12">Loading credentials...</td>
                     </tr>
                     </tbody>
                 </table>
@@ -352,6 +354,14 @@
     <div class="modal">
         <h3 id="cred-modal-title">Add SMTP Credential</h3>
         <div class="form-group">
+            <label>Provider</label>
+            <select id="cred-provider" onchange="onCredentialProviderChange()">
+                <option value="basic">Basic (username + password)</option>
+                <option value="microsoft">Microsoft (Outlook / M365)</option>
+                <option value="google">Google (Gmail)</option>
+            </select>
+        </div>
+        <div class="form-group">
             <label>Host</label>
             <input id="cred-host" placeholder="smtp.gmail.com" type="text">
         </div>
@@ -363,9 +373,13 @@
             <label>Username</label>
             <input id="cred-user" placeholder="you@gmail.com" type="text">
         </div>
-        <div class="form-group">
+        <div class="form-group" id="cred-pass-group">
             <label>Password</label>
             <input id="cred-pass" placeholder="App Password" type="password">
+        </div>
+        <div class="form-group" id="cred-oauth-group" style="display:none;">
+            <p style="color: var(--muted); font-size: 13px;">Basic auth isn't supported by this provider —
+                save the credential, then use "Connect" from the table to sign in and grant access.</p>
         </div>
         <div class="form-group">
             <label>Daily Send Limit (optional)</label>

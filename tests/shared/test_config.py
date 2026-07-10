@@ -23,3 +23,15 @@ def test_dispatch_mode_env_override(monkeypatch):
     monkeypatch.setenv("DISPATCH_MODE", "external")
     config = main.load_config()
     assert config["dispatch"]["mode"] == "external"
+
+
+def test_oauth_env_overrides(monkeypatch):
+    monkeypatch.setenv("OAUTH_REDIRECT_BASE_URL", "https://cloud.example.com")
+    monkeypatch.setenv("OAUTH_MS_CLIENT_ID", "ms-client-id")
+    monkeypatch.setenv("OAUTH_GOOGLE_CLIENT_ID", "google-client-id")
+    monkeypatch.setenv("OAUTH_GOOGLE_CLIENT_SECRET", "google-client-secret")
+    config = main.load_config()
+    assert config["oauth"]["redirect_base_url"] == "https://cloud.example.com"
+    assert config["oauth"]["microsoft"]["client_id"] == "ms-client-id"
+    assert config["oauth"]["google"]["client_id"] == "google-client-id"
+    assert config["oauth"]["google"]["client_secret"] == "google-client-secret"

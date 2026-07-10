@@ -33,10 +33,32 @@ class SMTPCredential(Base):
     host = Column(String, nullable=False)
     port = Column(Integer, nullable=False)
     username = Column(String, nullable=False)
-    password_encrypted = Column(LargeBinary, nullable=False)  # Fernet-encrypted, see portal/security/crypto.py
+    # Fernet-encrypted, see cloud/security/crypto.py. Nullable: unused by provider != 'basic'.
+    password_encrypted = Column(LargeBinary, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     cooldown_until = Column(DateTime, nullable=True)
     daily_send_limit = Column(Integer, nullable=True)  # None = unlimited
+    provider = Column(String, nullable=False, default="basic", server_default="basic")
+    # OAuth2 (XOAUTH2) fields — Fernet-encrypted like password_encrypted, unused by provider == 'basic'.
+    refresh_token_encrypted = Column(LargeBinary, nullable=True)
+    access_token_encrypted = Column(LargeBinary, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+
+
+class OAuthPendingFlow(Base):
+    """Short-lived state for an in-flight SMTP credential OAuth connect — bridges
+    the authorize-redirect round trip to Microsoft/Google. Deleted the moment its
+    callback is consumed (single use); stale rows are swept opportunistically by
+    create_oauth_flow, since this table only ever holds a handful of rows from
+    in-progress "Connect" clicks."""
+
+    __tablename__ = "oauth_pending_flows"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    state = Column(String, nullable=False, unique=True, index=True)
+    credential_id = Column(Integer, ForeignKey("smtp_credentials.id"), nullable=False)
+    provider = Column(String, nullable=False)
+    code_verifier = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class CampaignCredential(Base):

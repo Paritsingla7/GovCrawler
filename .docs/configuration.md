@@ -53,6 +53,23 @@ Secrets follow an env-first-else-persist rule: if the env var is set it wins (an
 
 - `mode` — `embedded` or `external`. See [outreach.md](outreach.md#dispatch-modes).
 
+### `oauth`
+
+Required before a Microsoft/Google SMTP credential can be connected (`.gov.in` outreach mailboxes
+are almost always Outlook/M365, which dropped SMTP basic auth) — see
+[outreach.md](outreach.md#oauth2-smtp-credentials-microsoftgoogle) for the connect flow and the
+one-time Azure AD / Google Cloud app registration steps.
+
+- `redirect_base_url` — the cloud's own public base URL (e.g. `https://your-cloud-domain.com`);
+  Microsoft/Google redirect the browser here after consent (`GET /oauth/callback/{provider}`).
+  Env override: `OAUTH_REDIRECT_BASE_URL` (docker-compose derives it from `DOMAIN`).
+- `microsoft.client_id` — Env override: `OAUTH_MS_CLIENT_ID`. No client secret: registered as a
+  public client (Authorization Code + PKCE needs none).
+- `google.client_id` / `google.client_secret` — Env overrides: `OAUTH_GOOGLE_CLIENT_ID` /
+  `OAUTH_GOOGLE_CLIENT_SECRET`. Unlike the Microsoft/JWT/credential-encryption secrets, these are
+  plain static values from a one-time app registration — there's nothing to auto-generate, so (unlike
+  `credential_enc_key`) a blank value is never persisted back to `config.yaml`.
+
 ### `scraper`
 
 - `category_filter`, `org_type_filter` — restrict a live india.gov.in import.

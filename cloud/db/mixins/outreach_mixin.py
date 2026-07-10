@@ -9,6 +9,7 @@ from ..tables.outreach import (
     CampaignCredential,
     CampaignEmail,
     EmailTemplate,
+    OAuthPendingFlow,
     SMTPCredential,
 )
 from ...security.crypto import decrypt_password, encrypt_password
@@ -209,17 +210,7 @@ class OutreachMixin:
                 )
                 .all()
             )
-            return [
-                {
-                    "id": c.id,
-                    "host": c.host,
-                    "port": c.port,
-                    "username": c.username,
-                    "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
-                    "daily_send_limit": c.daily_send_limit,
-                }
-                for c in rows
-            ]
+            return [self._credential_send_dict(c) for c in rows]
 
     # ── CampaignEmail ─────────────────────────────────────────────────────────
 
@@ -486,15 +477,49 @@ class OutreachMixin:
 
     # ── SMTP Credential operations ────────────────────────────────────────────
 
+    def get_oauth_config(self) -> dict:
+        """The `oauth` config.yaml section (redirect_base_url + per-provider
+        client_id/secret) — set once in Database.__init__, read wherever a
+        non-'basic' credential needs a live access token."""
+        return self._oauth_config
+
+    def _credential_send_dict(self, c: SMTPCredential) -> dict:
+        """Fields the dispatcher/test-connect path needs to authenticate:
+        decrypted password (provider='basic') or decrypted refresh/access
+        tokens (provider!='basic')."""
+        return {
+            "id": c.id,
+            "host": c.host,
+            "port": c.port,
+            "username": c.username,
+            "provider": c.provider,
+            "password": decrypt_password(c.password_encrypted, self._cred_enc_key) if c.password_encrypted else None,
+            "refresh_token": (
+                decrypt_password(c.refresh_token_encrypted, self._cred_enc_key) if c.refresh_token_encrypted else None
+            ),
+            "access_token": (
+                decrypt_password(c.access_token_encrypted, self._cred_enc_key) if c.access_token_encrypted else None
+            ),
+            "token_expires_at": c.token_expires_at,
+            "daily_send_limit": c.daily_send_limit,
+        }
+
     def create_credential(
-        self, host: str, port: int, username: str, password: str, daily_send_limit: int | None = None
+        self,
+        host: str,
+        port: int,
+        username: str,
+        password: str | None = None,
+        provider: str = "basic",
+        daily_send_limit: int | None = None,
     ) -> int:
         with self._Session() as s:
             c = SMTPCredential(
                 host=host,
                 port=port,
                 username=username,
-                password_encrypted=encrypt_password(password, self._cred_enc_key),
+                password_encrypted=encrypt_password(password, self._cred_enc_key) if password else None,
+                provider=provider,
                 daily_send_limit=daily_send_limit,
             )
             s.add(c)
@@ -506,16 +531,14 @@ class OutreachMixin:
             c = s.query(SMTPCredential).filter_by(id=credential_id).first()
             if not c:
                 return None
-            return {
-                "id": c.id,
-                "host": c.host,
-                "port": c.port,
-                "username": c.username,
-                "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
-                "is_active": c.is_active,
-                "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
-                "daily_send_limit": c.daily_send_limit,
-            }
+            d = self._credential_send_dict(c)
+            d.update(
+                {
+                    "is_active": c.is_active,
+                    "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
+                }
+            )
+            return d
 
     def list_credentials(self) -> list[dict]:
         with self._Session() as s:
@@ -526,6 +549,8 @@ class OutreachMixin:
                     "host": c.host,
                     "port": c.port,
                     "username": c.username,
+                    "provider": c.provider,
+                    "oauth_connected": c.refresh_token_encrypted is not None,
                     "is_active": c.is_active,
                     "cooldown_until": c.cooldown_until.isoformat() if c.cooldown_until else None,
                     "daily_send_limit": c.daily_send_limit,
@@ -548,8 +573,32 @@ class OutreachMixin:
             s.commit()
             return updated > 0
 
+    def update_credential_tokens(
+        self,
+        credential_id: int,
+        access_token: str,
+        refresh_token: str,
+        expires_at: datetime.datetime | None,
+    ) -> None:
+        """Direct, unaudited update of the OAuth token columns only — called on
+        every send/refresh, not just user-initiated edits (see update_credential
+        for the audited CRUD path)."""
+        with self._Session() as s:
+            s.query(SMTPCredential).filter_by(id=credential_id).update(
+                {
+                    "access_token_encrypted": encrypt_password(access_token, self._cred_enc_key),
+                    "refresh_token_encrypted": encrypt_password(refresh_token, self._cred_enc_key),
+                    "token_expires_at": expires_at,
+                }
+            )
+            s.commit()
+
     def delete_credential(self, credential_id: int) -> bool:
         with self._Session() as s:
+            # Always safe to drop — a pending OAuth connect has no meaning once
+            # the credential it was for is gone. Without this, an unfinished
+            # "Connect" click leaves a row whose FK blocks the delete below.
+            s.query(OAuthPendingFlow).filter_by(credential_id=credential_id).delete()
             deleted = s.query(SMTPCredential).filter_by(id=credential_id).delete()
             s.commit()
             return deleted > 0
@@ -566,23 +615,46 @@ class OutreachMixin:
                 )
                 .all()
             )
-            return [
-                {
-                    "id": c.id,
-                    "host": c.host,
-                    "port": c.port,
-                    "username": c.username,
-                    "password": decrypt_password(c.password_encrypted, self._cred_enc_key),
-                    "daily_send_limit": c.daily_send_limit,
-                }
-                for c in rows
-            ]
+            return [self._credential_send_dict(c) for c in rows]
 
     def disable_credential(self, credential_id: int) -> None:
         """Permanently disable (auth failure)."""
         with self._Session() as s:
             s.query(SMTPCredential).filter_by(id=credential_id).update({"is_active": False})
             s.commit()
+
+    # ── OAuth pending flows ──────────────────────────────────────────────────
+
+    def create_oauth_flow(self, state: str, credential_id: int, provider: str, code_verifier: str) -> None:
+        """Persists PKCE state for an in-flight 'Connect via Microsoft/Google'
+        click. Opportunistically sweeps anything older than an hour first —
+        this table only ever holds a handful of in-progress rows, no separate
+        reaper needed."""
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+        with self._Session() as s:
+            s.query(OAuthPendingFlow).filter(OAuthPendingFlow.created_at < cutoff).delete()
+            s.add(
+                OAuthPendingFlow(
+                    state=state, credential_id=credential_id, provider=provider, code_verifier=code_verifier
+                )
+            )
+            s.commit()
+
+    def consume_oauth_flow(self, state: str) -> dict | None:
+        """Fetch-then-delete: a state is single-use, whether the callback
+        succeeds or fails."""
+        with self._Session() as s:
+            flow = s.query(OAuthPendingFlow).filter_by(state=state).first()
+            if not flow:
+                return None
+            result = {
+                "credential_id": flow.credential_id,
+                "provider": flow.provider,
+                "code_verifier": flow.code_verifier,
+            }
+            s.delete(flow)
+            s.commit()
+            return result
 
     def set_credential_cooldown(self, credential_id: int, until: datetime.datetime) -> None:
         """Temporarily pause (rate limited)."""

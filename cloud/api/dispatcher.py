@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
 from ..db import Database, CampaignStatus
+from ..security.oauth import OAuthTokenError, get_valid_access_token
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ async def _wait_for_credential_slot(cred_id: int) -> None:
         _credential_last_sent[cred_id] = time.monotonic()
 
 
-async def _send_one_email(credential: dict, recipient: str, subject: str, body: str) -> None:
+async def _send_one_email(credential: dict, recipient: str, subject: str, body: str, db: Database) -> None:
     """Send a single email using aiosmtplib.
     Constructs MIMEText, connects, authenticates, sends, disconnects."""
 
@@ -81,7 +82,11 @@ async def _send_one_email(credential: dict, recipient: str, subject: str, body: 
     )
 
     await smtp.connect()
-    await smtp.login(credential["username"], credential["password"])
+    if credential["provider"] == "basic":
+        await smtp.login(credential["username"], credential["password"])
+    else:
+        access_token = await get_valid_access_token(db, credential, db.get_oauth_config())
+        await smtp.auth_xoauth2(credential["username"], access_token)
     await smtp.send_message(msg)
     await smtp.quit()
 
@@ -159,11 +164,11 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
         try:
             await _wait_for_credential_slot(cred["id"])
             log.info(f"Sending email {email_id} to {recipient} via {cred['username']}")
-            await _send_one_email(cred, recipient, email["subject"], email["body"])
+            await _send_one_email(cred, recipient, email["subject"], email["body"], db)
             db.mark_email_sent(email_id, cred["id"])
             log.info(f"Email {email_id} sent successfully.")
 
-        except aiosmtplib.SMTPAuthenticationError as e:
+        except (aiosmtplib.SMTPAuthenticationError, OAuthTokenError) as e:
             db.disable_credential(cred["id"])
             log.error(f"Credential {cred['username']} auth failed: {e}. Credential disabled.")
             # Do NOT mark email failed, will retry in next loop

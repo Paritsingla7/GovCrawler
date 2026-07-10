@@ -172,3 +172,12 @@ auth:
   lockout_minutes: 15
 dispatch:
   mode: embedded  # overridden to 'external' via DISPATCH_MODE env for the api service
+oauth:
+  # Normally supplied via OAUTH_REDIRECT_BASE_URL / OAUTH_MS_CLIENT_ID /
+  # OAUTH_GOOGLE_CLIENT_ID / OAUTH_GOOGLE_CLIENT_SECRET env vars in docker-compose.yml.
+  redirect_base_url: ''
+  microsoft:
+    client_id: ''
+  google:
+    client_id: ''
+    client_secret: ''

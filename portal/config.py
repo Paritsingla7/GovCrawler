@@ -50,6 +50,16 @@ def load_config() -> dict:
         config.setdefault("dispatch", {})["mode"] = os.environ["DISPATCH_MODE"]
     if os.environ.get("ADMIN_ORIGIN"):
         config.setdefault("auth", {})["admin_origin"] = os.environ["ADMIN_ORIGIN"]
+    if os.environ.get("OAUTH_REDIRECT_BASE_URL"):
+        config.setdefault("oauth", {})["redirect_base_url"] = os.environ["OAUTH_REDIRECT_BASE_URL"]
+    if os.environ.get("OAUTH_MS_CLIENT_ID"):
+        config.setdefault("oauth", {}).setdefault("microsoft", {})["client_id"] = os.environ["OAUTH_MS_CLIENT_ID"]
+    if os.environ.get("OAUTH_GOOGLE_CLIENT_ID"):
+        config.setdefault("oauth", {}).setdefault("google", {})["client_id"] = os.environ["OAUTH_GOOGLE_CLIENT_ID"]
+    if os.environ.get("OAUTH_GOOGLE_CLIENT_SECRET"):
+        config.setdefault("oauth", {}).setdefault("google", {})["client_secret"] = os.environ[
+            "OAUTH_GOOGLE_CLIENT_SECRET"
+        ]
     return config
 
 

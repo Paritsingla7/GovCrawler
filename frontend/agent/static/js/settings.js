@@ -12,6 +12,11 @@ function switchTab(tabId) {
 
 // ── Credentials ──────────────────────────────────────────────────────────────
 
+const OAUTH_PROVIDER_DEFAULTS = {
+    microsoft: {host: 'smtp.office365.com', port: 587, label: 'Microsoft'},
+    google: {host: 'smtp.gmail.com', port: 587, label: 'Google'},
+};
+
 async function loadCredentials() {
     try {
         const res = await fetch('/api/credentials');
@@ -21,7 +26,7 @@ async function loadCredentials() {
         tbody.innerHTML = '';
 
         if (creds.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No credentials configured.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="empty-state">No credentials configured.</td></tr>`;
             return;
         }
 
@@ -35,12 +40,24 @@ async function loadCredentials() {
                 }
             }
 
+            const isOAuth = c.provider !== 'basic';
+            const providerLabel = isOAuth ? (OAUTH_PROVIDER_DEFAULTS[c.provider]?.label ?? c.provider) : 'Basic';
+            const oauthBadge = isOAuth
+                ? (c.oauth_connected
+                    ? '<span class="badge badge-green">Connected</span>'
+                    : '<span class="badge badge-muted">Not connected</span>')
+                : '';
+            const connectBtn = isOAuth
+                ? `<button class="btn-secondary btn-sm" onclick="connectCredentialOAuth(${c.id}, '${c.provider}')">Connect</button>`
+                : '';
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><input type="checkbox" class="cred-checkbox" value="${c.id}" onchange="updateBatchActionVisibility('cred-checkbox', 'batch-action-cred')"></td>
                 <td>${c.host}</td>
                 <td>${c.port}</td>
                 <td>${c.username}</td>
+                <td>${providerLabel} ${oauthBadge}</td>
                 <td>${status}</td>
                 <td>${cooldown}</td>
                 <td><input type="number" min="1" class="cred-limit-input" value="${c.daily_send_limit ?? ''}"
@@ -50,6 +67,7 @@ async function loadCredentials() {
                 <td>${c.sent_total}</td>
                 <td>${c.failed_total}</td>
                 <td>
+                    ${connectBtn}
                     <button class="btn-secondary btn-sm" onclick="testCredential(${c.id}, this)">Test</button>
                     <button class="btn-secondary btn-sm" onclick="deleteCredential(${c.id})" style="color:var(--danger)">Del</button>
                 </td>
@@ -61,12 +79,26 @@ async function loadCredentials() {
     }
 }
 
+function onCredentialProviderChange() {
+    const provider = document.getElementById('cred-provider').value;
+    const isOAuth = provider !== 'basic';
+    document.getElementById('cred-pass-group').style.display = isOAuth ? 'none' : '';
+    document.getElementById('cred-oauth-group').style.display = isOAuth ? '' : 'none';
+    if (isOAuth) {
+        const defaults = OAUTH_PROVIDER_DEFAULTS[provider];
+        document.getElementById('cred-host').value = defaults.host;
+        document.getElementById('cred-port').value = defaults.port;
+    }
+}
+
 function openCredentialModal() {
+    document.getElementById('cred-provider').value = 'basic';
     document.getElementById('cred-host').value = '';
     document.getElementById('cred-port').value = '';
     document.getElementById('cred-user').value = '';
     document.getElementById('cred-pass').value = '';
     document.getElementById('cred-daily-limit').value = '';
+    onCredentialProviderChange();
     document.getElementById('modal-credential').style.display = 'flex';
 }
 
@@ -89,12 +121,14 @@ async function updateCredentialLimit(id, value) {
 }
 
 async function saveCredential() {
+    const provider = document.getElementById('cred-provider').value;
     const dailyLimit = parseInt(document.getElementById('cred-daily-limit').value, 10);
     const payload = {
         host: document.getElementById('cred-host').value,
         port: parseInt(document.getElementById('cred-port').value) || 0,
         username: document.getElementById('cred-user').value,
-        password: document.getElementById('cred-pass').value,
+        provider: provider,
+        password: provider === 'basic' ? document.getElementById('cred-pass').value : null,
         daily_send_limit: Number.isNaN(dailyLimit) ? null : dailyLimit
     };
 
@@ -105,44 +139,71 @@ async function saveCredential() {
             body: JSON.stringify(payload)
         });
 
-        if (res.ok) {
-            const data = await res.json();
-            const newId = data.id;
-
-            // Auto-test logic
-            const saveBtn = document.querySelector('#modal-credential .btn-primary');
-            let origText = "Save";
-            if (saveBtn) {
-                origText = saveBtn.textContent;
-                saveBtn.textContent = "Testing...";
-                saveBtn.disabled = true;
-            }
-
-            try {
-                const testRes = await fetch(`/api/credentials/${newId}/test`, {method: 'POST'});
-                const testData = await testRes.json();
-
-                if (testData.success) {
-                    showToast('Credential saved and connection test successful.', {type: 'success'});
-                } else {
-                    showToast('Credential saved, but the connection test failed: ' + testData.error, {type: 'warning'});
-                }
-            } catch (e) {
-                showToast('Credential saved, but an error occurred while testing it.', {type: 'warning'});
-            } finally {
-                if (saveBtn) {
-                    saveBtn.textContent = origText;
-                    saveBtn.disabled = false;
-                }
-                closeCredentialModal();
-                loadCredentials();
-            }
-        } else {
+        if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             showToast('Failed to save credential: ' + (err.detail || 'unknown error'), {type: 'error'});
+            return;
+        }
+
+        const data = await res.json();
+        const newId = data.id;
+
+        if (provider !== 'basic') {
+            showToast('Credential saved — click "Connect" in the table to sign in.', {type: 'success'});
+            closeCredentialModal();
+            loadCredentials();
+            return;
+        }
+
+        // Basic auth: auto-test on save.
+        const saveBtn = document.querySelector('#modal-credential .btn-primary');
+        let origText = "Save";
+        if (saveBtn) {
+            origText = saveBtn.textContent;
+            saveBtn.textContent = "Testing...";
+            saveBtn.disabled = true;
+        }
+
+        try {
+            const testRes = await fetch(`/api/credentials/${newId}/test`, {method: 'POST'});
+            const testData = await testRes.json();
+
+            if (testData.success) {
+                showToast('Credential saved and connection test successful.', {type: 'success'});
+            } else {
+                showToast('Credential saved, but the connection test failed: ' + testData.error, {type: 'warning'});
+            }
+        } catch (e) {
+            showToast('Credential saved, but an error occurred while testing it.', {type: 'warning'});
+        } finally {
+            if (saveBtn) {
+                saveBtn.textContent = origText;
+                saveBtn.disabled = false;
+            }
+            closeCredentialModal();
+            loadCredentials();
         }
     } catch (e) {
         console.error(e);
+        showToast("Can't reach the server — check your connection.", {type: 'error'});
+    }
+}
+
+async function connectCredentialOAuth(id, provider) {
+    try {
+        const res = await fetch(`/api/credentials/${id}/oauth/start`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({provider})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.authorize_url) {
+            showToast('Failed to start sign-in: ' + (data.detail || 'unknown error'), {type: 'error'});
+            return;
+        }
+        window.open(data.authorize_url, '_blank');
+        showToast('Complete sign-in in the new tab, then click Refresh below.', {type: 'info'});
+    } catch (e) {
         showToast("Can't reach the server — check your connection.", {type: 'error'});
     }
 }
