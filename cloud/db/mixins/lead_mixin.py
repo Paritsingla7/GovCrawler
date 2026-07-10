@@ -77,6 +77,19 @@ class LeadMixin:
         except IntegrityError:
             s.rollback()  # already recorded for this (lead, job) pair
 
+    def _record_occurrence_nested(
+        self, s, lead_id: int, job_id: int, source_url: str | None, captured_by: int | None = None
+    ) -> None:
+        """Same as _record_occurrence, for a caller batching many rows into
+        one final commit (bulk_upsert_manual_leads) — uses a SAVEPOINT so one
+        row's (lead_id, job_id) collision only rolls back that row, not
+        every row already staged in the batch."""
+        try:
+            with s.begin_nested():
+                s.add(LeadOccurrence(lead_id=lead_id, job_id=job_id, source_url=source_url, captured_by=captured_by))
+        except IntegrityError:
+            pass  # already recorded for this (lead, job) pair
+
     def save_lead(
         self,
         job_id: int,
@@ -550,7 +563,11 @@ class LeadMixin:
     ) -> tuple[int, int, list[dict]]:
         """Insert/update CSV-uploaded leads. Updates a row only if the existing
         lead with that email is itself manual; a crawled lead is left untouched
-        but still gets a lead_occurrences row recording this capture."""
+        but still gets a lead_occurrences row recording this capture.
+
+        The whole batch commits once at the end instead of per-row (see
+        _record_occurrence_nested for how one row's occurrence collision is
+        kept from rolling back the rest of the batch)."""
         imported = 0
         updated = 0
         skipped: list[dict] = []
@@ -574,11 +591,10 @@ class LeadMixin:
                             channel_tag=existing.channel_tag,
                             weights=self._lead_score_weights,
                         )
-                        s.commit()
-                        self._record_occurrence(s, existing.id, job_id, "manual-csv-upload", captured_by)
+                        self._record_occurrence_nested(s, existing.id, job_id, "manual-csv-upload", captured_by)
                         updated += 1
                     else:
-                        self._record_occurrence(s, existing.id, job_id, "manual-csv-upload", captured_by)
+                        self._record_occurrence_nested(s, existing.id, job_id, "manual-csv-upload", captured_by)
                         skipped.append(
                             {
                                 "row": row.get("row"),
@@ -613,9 +629,10 @@ class LeadMixin:
                     depth=0,
                 )
                 s.add(lead)
-                s.commit()
-                self._record_occurrence(s, lead.id, job_id, "manual-csv-upload", captured_by)
+                s.flush()  # assign lead.id for the occurrence row below
+                self._record_occurrence_nested(s, lead.id, job_id, "manual-csv-upload", captured_by)
                 imported += 1
+            s.commit()
         return imported, updated, skipped
 
     _LEAD_EDITABLE = frozenset({"person_name", "designation", "department", "manual_state"})
