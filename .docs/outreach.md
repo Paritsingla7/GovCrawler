@@ -86,7 +86,10 @@ clean claim," not "send twice." See [resilience.md](resilience.md#dispatch-recov
 ## Blacklist & credential health
 
 Hard bounces auto-add the recipient (and its domain) to `blacklist`; new campaigns filter against it at
-render time. Credentials expose health (sent/failed totals, sent-today) and honor `daily_send_limit` — a
+render time. **⚠️ Known gap (issue #58):** only the **email** column is enforced — `get_blacklisted_emails_set()`
+returns emails only, so the stored **domain** suppression does nothing (domain-wide blocking is designed but
+unimplemented). The email check is also case-sensitive at the comparison site (`campaign_service.py`),
+mitigated only because `save_lead` lowercases emails on write. Fix pending. Credentials expose health (sent/failed totals, sent-today) and honor `daily_send_limit` — a
 credential at its limit is excluded from the pool. `POST /api/credentials/{id}/test` does a live connect +
 login and auto-activates on success / disables on failure.
 

@@ -35,6 +35,15 @@ _MAX_ROW_SCAN_CHARS = 5000
 _MAX_RECIPIENTS_PER_HREF = 5
 _EMAIL_STRIP_CHARS = " \t\r\n,;<>'\""
 
+# mailto_tel/microdata context read for name/designation matching (Tier 1,
+# WI-8) — bounded so a node sitting in a huge wrapper never turns into an
+# unbounded scan.
+_MAX_MAILTO_CONTEXT_CHARS = 600
+
+# Fallback-context keys carried from a rung-displaced candidate onto its
+# winner (Tier 2, WI-8) — see _carry_fallback_context.
+_FALLBACK_CONTEXT_KEYS = ("_col", "_cell_texts", "_row_text", "_text_start", "_text_end", "_full_text")
+
 # A keyword hit only tells us WHERE a designation starts, never how long it
 # is — stop at the first sign the raw text ran past the title into embedded
 # contact info (email, a phone label, a long digit run, or a line break).
@@ -89,7 +98,6 @@ def extract_leads(soup: BeautifulSoup, source_url: str, config: dict) -> list[Le
         )
         max_input_chars = config.get("max_input_chars", 0)  # 0 = no cap
         high_rungs = set(conf_cfg.get("high_rungs", ["mailto_tel", "microdata"]))
-        mid_rungs = set(conf_cfg.get("mid_rungs", ["table_block", "proximity_text"]))
 
         page_title = ""
         if soup.title and soup.title.string:
@@ -113,7 +121,7 @@ def extract_leads(soup: BeautifulSoup, source_url: str, config: dict) -> list[Le
         entities = _normalise_spans(entities, ecfg, role_local_parts)
 
         # Stage 5: score
-        entities = _score(entities, high_rungs, mid_rungs)
+        entities = _score(entities, high_rungs)
 
         # Stage 6: flatten_emit
         leads = _flatten_emit(entities, source_url, page_title)
@@ -255,13 +263,15 @@ def _extract_candidates(soup: BeautifulSoup, ecfg: dict, max_input_chars: int) -
     # 1c. Table/card block scan
     candidates.extend(_extract_table_candidates(soup, email_re, valid_suffixes))
 
-    # 1d. Proximity text scan (bounded by max_input_chars)
-    # Apply obfuscation first so "webmaster at nic dot in" becomes "webmaster@nic.in"
-    # before the email regex scans — same as the old parser did globally.
+    # 1d. Proximity text scan (bounded by max_input_chars). Text is left raw
+    # (not globally de-obfuscated): the main email_re below already matches
+    # well-formed addresses, and bracketed-obfuscated forms (web[at]nic[dot]in)
+    # are caught separately by the bracketed-email detector and resolved
+    # per-span in Stage 4 (_normalise_spans) — a global rewrite here would
+    # pre-resolve them and leave Stage 4 permanently dead.
     page_text = soup.get_text(separator=" ")
     raw_text = page_text[:max_input_chars] if max_input_chars else page_text
-    normalised_text = _apply_obfuscation(raw_text, ecfg)
-    candidates.extend(_extract_proximity_candidates(normalised_text, email_re, ecfg))
+    candidates.extend(_extract_proximity_candidates(raw_text, email_re, ecfg))
 
     return candidates
 
@@ -376,16 +386,39 @@ def _extract_table_candidates(soup: BeautifulSoup, email_re: re.Pattern, valid_s
     return results
 
 
-_BRACKETED_EMAIL_RE = re.compile(
-    r"[a-zA-Z0-9._%+\-]+\s*(?:\[at\]|\(at\))\s*" r"(?:[a-zA-Z0-9.\-]+\s*(?:\[dot\]|\(dot\))\s*)+[a-zA-Z]{2,6}",
-    re.IGNORECASE,
-)
+def _build_bracketed_email_re(obfuscation: list) -> re.Pattern:
+    """Builds the bracketed-obfuscated-email detector from whatever markers
+    are configured, rather than a hardcoded [at]/[dot]-only pattern —
+    `obfuscation` is admin-editable (cloud/api/config.py's email_obfuscation
+    field), so a fixed regex would silently stop detecting a marker (e.g.
+    [hyphen]) an admin added or renamed. A configured pair whose replacement
+    is "@" is an at-marker, "." a dot-marker; every other pair (e.g.
+    [hyphen] -> "-") is a literal-char substitute usable inside the local
+    part or a domain label."""
+    at_pats, dot_pats, other_pats = [], [], []
+    for pattern, replacement in obfuscation:
+        if replacement == "@":
+            at_pats.append(pattern)
+        elif replacement == ".":
+            dot_pats.append(pattern)
+        else:
+            other_pats.append(pattern)
+    if not at_pats or not dot_pats:
+        return re.compile(r"(?!)")  # no at/dot markers configured — nothing to detect
+    char_alt = "|".join([r"[a-zA-Z0-9._%+\-]", *other_pats])
+    at_alt = "|".join(at_pats)
+    dot_alt = "|".join(dot_pats)
+    return re.compile(
+        rf"(?:{char_alt})+(?:{at_alt})(?:(?:{char_alt})+(?:{dot_alt}))+[a-zA-Z]{{2,6}}",
+        re.IGNORECASE,
+    )
 
 
 def _extract_proximity_candidates(text: str, email_re: re.Pattern, ecfg: dict) -> list[dict]:
     results = []
     seen: set[str] = set()
     valid_suffixes = tuple(ecfg.get("valid_suffixes", [".gov.in", ".nic.in"]))
+    bracketed_re = _build_bracketed_email_re(ecfg.get("obfuscation", []))
 
     for m in email_re.finditer(text):
         addr = _truncate_at_known_suffix(m.group(0).lower().strip("."), valid_suffixes)
@@ -406,7 +439,7 @@ def _extract_proximity_candidates(text: str, email_re: re.Pattern, ecfg: dict) -
         )
 
     # Also capture bracketed obfuscated forms (resolved in stage 4)
-    for m in _BRACKETED_EMAIL_RE.finditer(text):
+    for m in bracketed_re.finditer(text):
         raw = m.group(0)
         # Tentative address key before resolution — use raw span as placeholder
         placeholder = raw.lower()
@@ -457,13 +490,24 @@ def _bind_channels(candidates: list[dict], role_local_parts: set[str], ecfg: dic
             if addr not in email_map:
                 email_map[addr] = c
             else:
-                existing_rank = _RUNG_RANK.get(email_map[addr]["rung"], -1)
+                existing = email_map[addr]
+                existing_rank = _RUNG_RANK.get(existing["rung"], -1)
                 new_rank = _RUNG_RANK.get(c["rung"], -1)
                 if new_rank > existing_rank:
-                    old_phone = email_map[addr].get("phone")
-                    email_map[addr] = c
-                    if not c.get("phone") and old_phone:
-                        email_map[addr] = dict(c, phone=old_phone)
+                    # c displaces existing — carry existing's richer context
+                    # onto the winner so Stage 3 can fall back to it if the
+                    # winner's own context is blank (e.g. a table row that
+                    # also has a mailto: link for the same address).
+                    old_phone = existing.get("phone")
+                    winner = dict(c, phone=c.get("phone") or old_phone)
+                    _carry_fallback_context(winner, existing)
+                    email_map[addr] = winner
+                elif not _has_fallback_context(existing):
+                    # existing remains the winner; stash the discarded
+                    # candidate's context in case existing's own is blank.
+                    winner = dict(existing)
+                    _carry_fallback_context(winner, c)
+                    email_map[addr] = winner
         elif c.get("phone"):
             phone_candidates.append(c)
 
@@ -515,6 +559,19 @@ def _bind_channels(candidates: list[dict], role_local_parts: set[str], ecfg: dic
     # Append bracketed pending candidates — resolved in stage 4
     entities.extend(bracketed_pending)
     return entities
+
+
+def _carry_fallback_context(winner: dict, loser: dict) -> None:
+    """Stashes a rung-displaced candidate's enrichment context onto the
+    winning candidate under `_fallback_*` keys, so Stage 3 can use it if the
+    winner's own context yields no name/designation."""
+    for key in _FALLBACK_CONTEXT_KEYS:
+        if key in loser:
+            winner[f"_fallback{key}"] = loser[key]
+
+
+def _has_fallback_context(entity: dict) -> bool:
+    return any(f"_fallback{key}" in entity for key in _FALLBACK_CONTEXT_KEYS)
 
 
 def _nodes_share_container(node_a, node_b) -> bool:
@@ -581,6 +638,22 @@ def _enrich_fields(
                 entity["person_name"] = _match_name(window, pcfg)
                 entity["designation"] = _match_designation(window, pcfg)
 
+        elif rung in ("mailto_tel", "microdata"):
+            # The candidate's context_node is the <a>/microdata element
+            # itself — read its immediate container for surrounding name/
+            # designation text (WI-8 Tier 1: this rung previously had no
+            # branch at all, so its fields were always blank).
+            container_text = _container_text(entity.get("context_node"))
+            entity["context_snippet"] = container_text[:300]
+            if person_enabled:
+                entity["person_name"] = _match_name(container_text, pcfg)
+                entity["designation"] = _match_designation(container_text, pcfg)
+
+        # Fall back to a rung-displaced candidate's richer context (WI-8
+        # Tier 2) when the winner's own context left name/designation blank.
+        if person_enabled and (not entity["person_name"] or not entity["designation"]):
+            _apply_fallback_context(entity, pcfg, prox_chars)
+
         # Department: prefer table column, fallback to URL-derived
         if not entity.get("department"):
             entity["department"] = url_dept
@@ -589,6 +662,52 @@ def _enrich_fields(
             entity["_dept_mismatch"] = True
 
     return entities
+
+
+def _container_text(node, max_chars: int = _MAX_MAILTO_CONTEXT_CHARS) -> str:
+    """Immediate-container text around a mailto:/microdata context node,
+    bounded so a node sitting in a large wrapper (e.g. the page body) never
+    turns into an unbounded scan."""
+    if node is None:
+        return ""
+    try:
+        parent = node.parent
+        if parent is None:
+            return ""
+        return parent.get_text(separator=" ", strip=True)[:max_chars]
+    except Exception:
+        return ""
+
+
+def _apply_fallback_context(entity: dict, pcfg: dict, prox_chars: int) -> None:
+    """Fills any still-blank person_name/designation from a lower-rung
+    candidate's context that Stage 2 displaced for the same email (see
+    _carry_fallback_context) — mirrors the table_block/proximity_text
+    extraction logic above, just applied to the fallback context instead of
+    the winner's own."""
+    if "_fallback_col" in entity:
+        col = entity.get("_fallback_col", {})
+        cell_texts = entity.get("_fallback_cell_texts", [])
+        if not entity["person_name"]:
+            entity["person_name"] = _cell_value(cell_texts, col.get("name"))
+        if not entity["designation"]:
+            entity["designation"] = _clip_designation(_cell_value(cell_texts, col.get("designation")))
+
+    if "_fallback_row_text" in entity:
+        row_text = entity["_fallback_row_text"]
+        if not entity["person_name"] and pcfg.get("title_prefixes"):
+            entity["person_name"] = _match_name(row_text, pcfg)
+        if not entity["designation"] and pcfg.get("designation_keywords"):
+            entity["designation"] = _match_designation(row_text, pcfg)
+
+    if "_fallback_full_text" in entity:
+        start = entity.get("_fallback_text_start", 0)
+        end = entity.get("_fallback_text_end", 0)
+        window = entity["_fallback_full_text"][max(0, start - prox_chars) : end + prox_chars]
+        if not entity["person_name"]:
+            entity["person_name"] = _match_name(window, pcfg)
+        if not entity["designation"]:
+            entity["designation"] = _match_designation(window, pcfg)
 
 
 def _dept_from_url(url: str) -> str | None:
@@ -665,6 +784,7 @@ def _normalise_spans(entities: list[dict], ecfg: dict, role_local_parts: set[str
         re.IGNORECASE,
     )
     gov_suffixes = tuple(ecfg.get("valid_suffixes", [".gov.in", ".nic.in"]))
+    bracketed_re = _build_bracketed_email_re(obfuscation)
 
     resolved_emails: set[str] = {e.get("email") for e in entities if e.get("email")}
     new_entities = []
@@ -674,7 +794,7 @@ def _normalise_spans(entities: list[dict], ecfg: dict, role_local_parts: set[str
             new_entities.append(entity)
             continue
         raw_span = entity.get("raw_span", "")
-        if not _BRACKETED_EMAIL_RE.search(raw_span):
+        if not bracketed_re.search(raw_span):
             new_entities.append(entity)
             continue
         # Apply bracketed obfuscation pairs to this span only
@@ -706,7 +826,7 @@ def _normalise_spans(entities: list[dict], ecfg: dict, role_local_parts: set[str
 # ── Stage 5: score ──────────────────────────────────────────────────────────
 
 
-def _score(entities: list[dict], high_rungs: set[str], mid_rungs: set[str]) -> list[dict]:
+def _score(entities: list[dict], high_rungs: set[str]) -> list[dict]:
     """Assigns confidence_band and builds field_provenance JSON."""
     for entity in entities:
         rung = entity.get("rung", "proximity_text")
@@ -775,12 +895,6 @@ def _flatten_emit(entities: list[dict], source_url: str, page_title: str) -> lis
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
-
-
-def _apply_obfuscation(text: str, ecfg: dict) -> str:
-    for pattern, replacement in ecfg.get("obfuscation", []):
-        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-    return text
 
 
 def _find_col(headers: list[str], keywords: list[str]) -> int | None:

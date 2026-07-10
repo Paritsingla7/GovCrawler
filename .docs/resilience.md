@@ -25,9 +25,12 @@ all anymore — nothing to buffer-for-upload.)
 ## Idempotent cloud writes
 
 The coordination endpoints are safe to retry: **leads** use a global `UNIQUE(email)` with
-**enrich-on-conflict** — a re-delivered or duplicate lead fills null fields and keeps the higher confidence
-band rather than discarding data, and records a `lead_occurrences` row for per-job attribution. So an
-at-least-once flush (the outbox may resend after a blip) can never create duplicates or lose data.
+**enrich-on-conflict** — a re-delivered or duplicate lead fills null fields rather than discarding data,
+and records a `lead_occurrences` row for per-job attribution. `confidence_band`/`field_provenance` are the
+one exception to null-fill: they upgrade-if-better instead (fixed, issue #58/WI-9) — a later capture with a
+higher-ranked band (`HIGH` > `LOW`) replaces the stored one and `lead_score` is recomputed; a worse band
+never downgrades it. So an at-least-once flush (the outbox may resend after a blip) can never create
+duplicates or lose data.
 
 ## Frontier checkpoint & resume
 

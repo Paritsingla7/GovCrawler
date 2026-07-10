@@ -96,8 +96,13 @@ else extraction-set) · `confidence_band` (`HIGH`/`LOW`) · `field_provenance` (
 · `depth` · `captured_at`; **`UNIQUE(job_id, email)`**.
 
 > `save_lead` uses global email dedup with **enrich-on-conflict**: an existing lead's null fields are
-> filled from a later finder and the higher confidence band is kept, rather than discarding the second
-> finder's data. See `cloud/db/mixins/lead_mixin.py`.
+> filled from a later finder, rather than discarding the second finder's data. See
+> `cloud/db/mixins/lead_mixin.py`.
+>
+> **Fixed (issue #58, WI-9 Bug B):** `confidence_band`/`field_provenance` are the one exception to
+> null-fill — they **upgrade-if-better** instead. A later capture whose band outranks the stored one
+> (`HIGH` > `LOW`) replaces it and `lead_score` is recomputed; a worse band never downgrades it. So a
+> mailto/microdata re-capture of an email first scraped from page text is correctly promoted to `HIGH`.
 
 **`lead_occurrences`** — every capture of a shared lead (many-to-many), so per-job attribution and truthful
 per-job `leads_found` survive dedup: `id` · `lead_id` (CASCADE) · `job_id` (CASCADE) · `captured_by` →

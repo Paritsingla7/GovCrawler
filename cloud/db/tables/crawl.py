@@ -40,6 +40,13 @@ class CrawlSnapshot(Base):
     title = Column(String)
     main_url = Column(String)
     contact_url = Column(String)
+    # True for a snapshot created from a job's user-selected seed domain;
+    # False for one minted later when a lead's source_url resolved to a
+    # different catalog domain the crawl merely discovered (see
+    # Database.save_lead's attribution path). GET /api/jobs/{id}/seeds
+    # (get_crawl_snapshots) filters on this so discovered domains don't leak
+    # into the "Job Seeds" UI.
+    is_seed = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     __table_args__ = (UniqueConstraint("job_id", "source_domain_id", name="uq_snapshot_job_domain"),)
 

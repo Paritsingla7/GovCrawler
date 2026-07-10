@@ -56,6 +56,13 @@ user.token_version`. **Bumping `token_version`** (on password change or explicit
 live access token for that user at once; worst-case exposure is one access-token TTL. Ordinary permission
 edits take effect at the next refresh.
 
+> **⚠️ Known gap (issue #58):** this one-TTL guarantee holds only for *access* tokens. `set_password()`
+> bumps `token_version` but does **not** call `revoke_session_family()`, and `POST /auth/refresh` validates
+> the refresh token by session-hash/expiry only — it never checks `token_version`. So a leaked/stolen
+> **refresh** token survives a password reset and can keep minting access tokens for up to
+> `refresh_ttl_days` (default 14). Fix pending: revoke the session family on password change (or check
+> `token_version` in the refresh route).
+
 ## Secret rotation
 
 `decode_token_with_rotation` tries `auth.jwt_secret` then `auth.jwt_secret_prev`, so `JWT_SECRET` can be

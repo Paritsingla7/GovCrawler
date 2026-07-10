@@ -92,15 +92,19 @@ GovCrawler/
 │   │   └── static/
 │   │       ├── css/             # agent.css (dock/sidebar/config-drawer chrome) + leads/campaigns/settings.css
 │   │       └── js/              # base.js, leads.js, campaigns.js, settings.js, test-campaign.js
-│   └── cloud/                    # The admin-only UI — rendered only by cloud/api/frontend.py
-│       ├── templates/
-│       │   ├── base.html         # layout + nav (Admin Dashboard / Admin Guide / Logout) — no crawler links
+│   └── cloud/                    # Rendered by cloud/api/frontend.py. ⚠️ NOT admin-only (issue #58):
+│       ├── templates/            #   also ships leads/campaigns pages that duplicate the agent tree
+│       │   ├── base.html         # layout + nav (Admin Dashboard / Admin Guide / Logout)
 │       │   ├── admin-dashboard.html  # /admin/dashboard + / (require jobs.view_all) — sidebar-tab page:
 │       │   │                    #   Overview / Users / Roles (read-only) / Audit Log / System (health card)
-│       │   └── admin-guide.html  # short admin-only workflow doc
+│       │   ├── admin-guide.html  # short admin-only workflow doc
+│       │   ├── leads.html        # ⚠️ #58: cloud twin of frontend/agent/templates/leads.html
+│       │   ├── campaigns.html    # ⚠️ #58: cloud twin of frontend/agent/templates/campaigns.html
+│       │   └── access-denied.html
 │       └── static/
 │           ├── css/cloud.css    # admin-card-grid, health-stat cards, role-grid, admin wordmark
-│           └── js/admin-dashboard.js
+│           └── js/             # admin-dashboard.js + leads.js/campaigns.js (⚠️ #58: ~600 lines duplicated
+│                               #   from frontend/agent/static/js; the XSS-escaping fix landed only here)
 │
 ├── agent/                     # THE LOCAL APP (per machine) — crawler + standalone BFF + launcher.
 │   │                          # Zero cloud.* imports (import-linter enforced, both directions)

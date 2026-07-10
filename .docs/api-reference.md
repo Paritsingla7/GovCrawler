@@ -16,7 +16,8 @@ cloud-only and not reachable from the agent at all.
   actual peer address) plus a local session (`require_local_session`: the browser's own `session` cookie,
   established by the launcher's login) plus local CSRF (`verify_local_csrf`: double-submit **and** a
   trusted-`Host` check against DNS-rebinding). The agent forwards the operator's real bearer token upstream
-  server-side — it never reaches the browser.
+  server-side — it never reaches the browser (⚠️ issue #58: the `/auth/login` relay currently returns the
+  tokens in its JSON response body regardless; pending fix).
 - **CSRF (cloud)** — double-submit: unsafe methods from a cookie session must send `X-CSRF-Token` matching
   the `csrf` cookie. Requests carrying a `Bearer` header are exempt (not CSRF-able) — this is also why the
   agent's proxied calls to the cloud need no CSRF handling of their own.

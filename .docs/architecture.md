@@ -37,6 +37,8 @@ Both are now the same thing — the module split *and* the process/deployment sp
   ~15 hand-written pass-throughs), and runs the crawl engine as an `asyncio.Task` in-process
   (`agent/api.py`'s job-lifecycle routes). The operator's browser only ever talks to this local origin —
   the real bearer token never reaches it, only a local `session`/`csrf` cookie pair
+  (**⚠️ #58: the `/auth/login` relay currently still returns the raw access+refresh tokens in its JSON
+  response body — the browser ignores them, but they should not be on the wire; pending fix**)
   (`agent/bff/security.py`). The Tkinter launcher itself is the sole authenticator: it logs in directly
   against the cloud (`agent/identity.py` — a self-refreshing token via `/auth/refresh` + the OS keyring)
   and hands the browser a ready-made session via `GET /local-bootstrap`, replacing the old same-process
@@ -160,10 +162,9 @@ browser UI.
 
 A FastAPI app built by `create_app(config, db)` in `cloud/api/server.py`. It mounts ~17 routers and a
 background **stale-job reaper** + stuck-`SENDING` recovery lifespan, configures CORS (only if
-`auth.admin_origin` is set) and double-submit CSRF, and serves the **admin-only** Jinja2 browser UI
-(`frontend/cloud/`, plus the shared `frontend/shared/` login page) via `cloud/api/frontend.py` — the
-crawler/outreach pages (dashboard, leads, campaigns, crawler settings, test-campaign) are not rendered here
-at all; they exist only on the agent. It never imports `agent.*` and never touches Playwright — the crawler
+`auth.admin_origin` is set) and double-submit CSRF, and serves a Jinja2 browser UI
+(`frontend/cloud/`, plus the shared `frontend/shared/` login page) via `cloud/api/frontend.py`. It never
+imports `agent.*` and never touches Playwright — the crawler
 is entirely the agent's concern. Every `/api/*` router carries `get_current_user` + `verify_csrf`; mutating
 routes add a `require(<permission>)` dependency and write an audit-log row. Two error handlers
 (`RequestValidationError`, catch-all `Exception`) normalize every error response to a plain-string `detail`
@@ -241,11 +242,16 @@ template or asset (see [directory-structure.md](directory-structure.md) for the 
   test-campaign, user guide), rendered only by `agent/bff/pages.py`. Its only admin-adjacent affordance is a
   permission-gated "Admin Portal ↗" nav button that opens the cloud's own login in a new tab — a link-out,
   never rendered admin UI.
-- **`frontend/cloud/`** — the admin-only UI, rendered only by `cloud/api/frontend.py`: a single
+- **`frontend/cloud/`** — rendered by `cloud/api/frontend.py`. The admin surface is a single
   sidebar-tabbed `admin-dashboard.html` (Overview / Users & Permissions / Roles — read-only, since the
   backend only supports the 3 built-in roles / Audit Log / System — DB health + dispatch mode +
-  `GET /api/admin/system-status`'s per-agent job-activity summary) plus a short `admin-guide.html`. No
-  crawl-start, leads, campaigns, or crawler-settings page exists on this tier.
+  `GET /api/admin/system-status`'s per-agent job-activity summary) plus a short `admin-guide.html`.
+  **⚠️ Correction (issue #58): the cloud tier is NOT admin-only.** `frontend/cloud/templates/` also ships
+  `leads.html`, `campaigns.html`, and `access-denied.html`, each wired to its own `leads.js`/`campaigns.js`
+  under `frontend/cloud/static/js/` — near-duplicates (~600 lines) of the agent tree's versions, maintained
+  by hand. The clean "crawler/outreach UI lives only on the agent" split described here is aspirational, not
+  the current reality; the duplication (and the fact that the XSS-escaping fix landed only in the cloud copy)
+  is tracked in #58.
 - Both tiers mount `/static` to their own tree and `/assets` to `frontend/shared/static` (distinct
   prefixes, not nested, so there's no `StaticFiles` mount-order ambiguity); `Jinja2Templates` is built from
   a two-entry search path (tier-specific dir first, then `frontend/shared/templates`).
@@ -332,6 +338,7 @@ Launcher → POST {cloud_api_base_url}/auth/login (directly against the cloud, n
   audit user.login
 Launcher → GET {agent_base_url}/local-bootstrap (loopback)
   hands the browser a local session + csrf cookie pair — the real bearer token never reaches it
+  (⚠️ except in the login relay's response body today — see the Trust model note above, issue #58)
 Browser (fallback, if it ever lands on /login directly) → POST {agent_base_url}/auth/login
   agent/bff/local_auth.py relays to the cloud's real /auth/login, same effect as above
 ```

@@ -1,7 +1,7 @@
 """Add OAuth2 (XOAUTH2) fields to smtp_credentials + oauth_pending_flows
 
-Revision ID: 0025_smtp_oauth
-Revises: 0024_ddl_owned_ensure_columns
+Revision ID: 0026_smtp_oauth
+Revises: 0025_add_snapshot_is_seed
 
 Microsoft/Exchange Online has dropped SMTP basic auth; sending through those
 mailboxes now requires OAuth2 (Authorization Code + PKCE, XOAUTH2 at the SMTP
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = '0025_smtp_oauth'
-down_revision = '0024_ddl_owned_ensure_columns'
+revision = '0026_smtp_oauth'
+down_revision = '0025_add_snapshot_is_seed'
 branch_labels = None
 depends_on = None
 

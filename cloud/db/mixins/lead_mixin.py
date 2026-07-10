@@ -1,13 +1,17 @@
 import json
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, false, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from shared.scoring import compute_lead_score
+from ..domain_resolution import resolve_domain_for_url
 from ..tables.crawl import CrawlSnapshot
 from ..tables.leads import Lead, LeadOccurrence
 
 # Fields that a re-capture may fill in if the existing lead has them blank.
 # Never overwrites an already-populated value (enrich, not replace).
+# confidence_band/field_provenance are handled separately (see _BAND_RANK
+# below) — a re-capture with objectively better evidence should UPGRADE the
+# stored band, not just fill it if null (WI-9 Bug B).
 _ENRICHABLE_FIELDS = (
     "person_name",
     "designation",
@@ -15,10 +19,28 @@ _ENRICHABLE_FIELDS = (
     "source_title",
     "context_snippet",
     "phone",
-    "confidence_band",
-    "field_provenance",
     "entity_kind",
 )
+
+# confidence_band ordering for the upgrade-if-better comparison below (the
+# parser emits only HIGH/LOW). Kept cloud-side rather than importing the
+# agent tier's rung ranking — the cloud tier must never import agent.* (see
+# pyproject.toml's import-linter contracts).
+_BAND_RANK = {"LOW": 0, "HIGH": 1}
+
+# WI-5 (PLAN_attribution_and_parser.md): a crawled lead whose source_url
+# resolved to no catalog domain (see save_lead's WI-4 attribution) must stay
+# findable rather than silently always/never showing up in filters — surfaced
+# as an explicit "Unknown" sentinel in the state/category/org-type facets.
+UNKNOWN = "Unknown"
+UNKNOWN_CODE = "__unknown__"
+
+
+def _unattributed_predicate():
+    """A crawled (non-manual) lead the system couldn't attribute to any
+    catalog domain — snapshot_id is NULL for a reason other than being a
+    manual/CSV-imported lead."""
+    return and_(Lead.snapshot_id.is_(None), or_(Lead.channel_tag.is_(None), Lead.channel_tag != "manual"))
 
 
 def _department_is_url_fallback(field_provenance: str | None) -> bool:
@@ -89,8 +111,6 @@ class LeadMixin:
                     "source_title": source_title,
                     "context_snippet": context_snippet,
                     "phone": phone,
-                    "confidence_band": confidence_band,
-                    "field_provenance": field_provenance,
                     "entity_kind": entity_kind,
                 }
                 changed = False
@@ -99,6 +119,21 @@ class LeadMixin:
                     if value and not getattr(existing, field):
                         setattr(existing, field, value)
                         changed = True
+
+                # Upgrade-if-better, not fill-if-null: a later capture with
+                # objectively stronger evidence (e.g. this crawl found a real
+                # mailto: link where an earlier pass only scraped page text)
+                # should replace the stored band — the first capture's band
+                # is otherwise kept forever even after better evidence shows
+                # up (issue #58). Never downgrades.
+                if confidence_band and _BAND_RANK.get(confidence_band, -1) > _BAND_RANK.get(
+                    existing.confidence_band, -1
+                ):
+                    existing.confidence_band = confidence_band
+                    if field_provenance:
+                        existing.field_provenance = field_provenance
+                    changed = True
+
                 if changed:
                     existing.lead_score = compute_lead_score(
                         {
@@ -114,6 +149,30 @@ class LeadMixin:
                     s.commit()
                 self._record_occurrence(s, existing.id, job_id, source_url, captured_by)
                 return True
+
+            # Domain attribution (WI-4): a crawl started at one seed can follow
+            # links into a different catalog domain and capture a lead there —
+            # resolve the ACTUAL domain from source_url rather than trusting
+            # the inherited seed snapshot_id.
+            resolved = resolve_domain_for_url(
+                source_url,
+                self._get_netloc_domain_map(),
+                self.get_crawl_policy().get("crawler", {}).get("target_suffixes", [".gov.in", ".nic.in"]),
+            )
+            if resolved is None:
+                # No catalog domain matches this URL at all — leave unattributed
+                # ("Unknown" in the UI, see WI-5) rather than keep a possibly-
+                # wrong inherited snapshot.
+                snapshot_id = None
+            else:
+                inherited_source_domain_id = None
+                if snapshot_id is not None:
+                    inherited = s.query(CrawlSnapshot.source_domain_id).filter_by(id=snapshot_id).first()
+                    inherited_source_domain_id = inherited.source_domain_id if inherited else None
+                if resolved["id"] != inherited_source_domain_id:
+                    snapshot_id = self.create_crawl_snapshot(job_id, resolved, is_seed=False)
+                # else: resolves to the domain the inherited snapshot already
+                # describes — keep snapshot_id as-is.
 
             # A department that came only from the URL's bare subdomain slug
             # is a worse label than the org's actual title — swap it in when
@@ -185,12 +244,18 @@ class LeadMixin:
             q = q.filter(or_(Lead.channel_tag.is_(None), Lead.channel_tag != "manual"))
         # Snapshot-derived filters: manual leads have no snapshot, so they bypass
         # these rather than being structurally excluded from every filtered view.
+        # Requesting the UNKNOWN/UNKNOWN_CODE sentinel additionally admits
+        # unattributed crawled leads (WI-5) — a null-snapshot lead that isn't
+        # manual either.
         if categories:
-            q = q.filter(or_(is_manual, CrawlSnapshot.category_code.in_(categories)))
+            unknown = _unattributed_predicate() if UNKNOWN_CODE in categories else false()
+            q = q.filter(or_(is_manual, CrawlSnapshot.category_code.in_(categories), unknown))
         if states:
-            q = q.filter(or_(is_manual, CrawlSnapshot.state.in_(states), Lead.manual_state.in_(states)))
+            unknown = _unattributed_predicate() if UNKNOWN in states else false()
+            q = q.filter(or_(is_manual, CrawlSnapshot.state.in_(states), Lead.manual_state.in_(states), unknown))
         if org_types:
-            q = q.filter(or_(is_manual, CrawlSnapshot.org_type.in_(org_types)))
+            unknown = _unattributed_predicate() if UNKNOWN_CODE in org_types else false()
+            q = q.filter(or_(is_manual, CrawlSnapshot.org_type.in_(org_types), unknown))
         if search:
             q = q.filter(
                 or_(
@@ -289,12 +354,14 @@ class LeadMixin:
                         "context_snippet": lead.context_snippet,
                         "domain_title": dt,
                         "category_code": cc,
-                        # display-only: crawled leads (snapshot present) always show
-                        # the snapshot's frozen state; manual leads show manual_state.
-                        "domain_state": snap_state if lead.snapshot_id else lead.manual_state,
+                        # display-only: manual leads show manual_state; a crawled
+                        # lead shows its snapshot's frozen state, or "Unknown" if
+                        # source_url couldn't be attributed to any catalog domain
+                        # (never falls through to manual_state — see WI-5).
+                        "domain_state": lead.manual_state if lead.channel_tag == "manual" else (snap_state or UNKNOWN),
                         "domain_org_type": ot,
                         "manual_state": lead.manual_state,
-                        "is_manual": lead.snapshot_id is None,
+                        "is_manual": lead.channel_tag == "manual",
                         "confidence_band": lead.confidence_band,
                         "field_provenance": lead.field_provenance,
                         "channel_tag": lead.channel_tag,
@@ -393,7 +460,8 @@ class LeadMixin:
                     "designation": lead.designation or "",
                     "department": lead.department or "",
                     "domain_title": dt or "",
-                    "domain_state": (snap_state if lead.snapshot_id else lead.manual_state) or "",
+                    "domain_state": (lead.manual_state if lead.channel_tag == "manual" else (snap_state or UNKNOWN))
+                    or "",
                     "domain_org_type": ot or "",
                     "category_title": ct or cc or "",
                     "source_url": lead.source_url or "",
@@ -409,6 +477,12 @@ class LeadMixin:
                 for lead, dt, cc, ct, snap_state, ot, _sdi in rows
             ]
 
+    def _unattributed_count(self, s, job_ids: list[int] | None = None) -> int:
+        q = s.query(func.count(Lead.id)).filter(_unattributed_predicate())
+        if job_ids:
+            q = q.filter(Lead.job_id.in_(job_ids))
+        return q.scalar() or 0
+
     def get_lead_categories(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
             q = s.query(
@@ -421,9 +495,13 @@ class LeadMixin:
                 .order_by(func.count(Lead.id).desc())
                 .all()
             )
-            return [
+            result = [
                 {"code": r.category_code, "title": r.category_title or r.category_code, "count": r.count} for r in rows
             ]
+            unknown_count = self._unattributed_count(s, job_ids)
+            if unknown_count:
+                result.append({"code": UNKNOWN_CODE, "title": UNKNOWN, "count": unknown_count})
+            return result
 
     def get_lead_org_types(self, job_ids: list[int] | None = None) -> list[dict]:
         with self._Session() as s:
@@ -439,7 +517,11 @@ class LeadMixin:
                 .order_by(func.count(Lead.id).desc())
                 .all()
             )
-            return [{"code": r.org_type, "title": r.org_type_title or r.org_type, "count": r.count} for r in rows]
+            result = [{"code": r.org_type, "title": r.org_type_title or r.org_type, "count": r.count} for r in rows]
+            unknown_count = self._unattributed_count(s, job_ids)
+            if unknown_count:
+                result.append({"code": UNKNOWN_CODE, "title": UNKNOWN, "count": unknown_count})
+            return result
 
     def get_lead_states(self, job_ids: list[int] | None = None, categories: list[str] = None) -> list[str]:
         with self._Session() as s:
@@ -459,6 +541,8 @@ class LeadMixin:
                 if job_ids:
                     manual_q = manual_q.filter(Lead.job_id.in_(job_ids))
                 states.update(r[0] for r in manual_q.distinct().all() if r[0])
+            if self._unattributed_count(s, job_ids):
+                states.add(UNKNOWN)
             return sorted(states)
 
     def bulk_upsert_manual_leads(
@@ -551,7 +635,7 @@ class LeadMixin:
             lead = s.query(Lead).filter_by(id=lead_id).first()
             if not lead:
                 return False
-            if "manual_state" in safe and lead.snapshot_id is not None:
+            if "manual_state" in safe and lead.channel_tag != "manual":
                 return "not_manual"
             for k, v in safe.items():
                 setattr(lead, k, v)

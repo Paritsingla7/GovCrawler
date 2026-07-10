@@ -6,4 +6,4 @@
 # file never carries any of that, unlike portal/default_config.yaml (cloud).
 api:
   host: 127.0.0.1
-  port: 8001
+  port: 8002

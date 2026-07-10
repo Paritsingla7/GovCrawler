@@ -1,3 +1,6 @@
+import threading
+from urllib.parse import urlparse
+
 from sqlalchemy import case, func, or_
 
 from ..tables.crawl import Domain
@@ -5,6 +8,57 @@ from ..tables.lookups import Category, OrgType
 
 
 class DomainMixin:
+    # Lazily built by _get_netloc_domain_map, invalidated by every method
+    # below that mutates `domains` — see WI-1 (PLAN_attribution_and_parser.md).
+    _netloc_map_cache: dict | None = None
+    _netloc_map_lock = threading.Lock()
+
+    def _get_netloc_domain_map(self) -> dict:
+        """{www-stripped lowercased netloc -> domain_dict} over every
+        crawlable `domains` row (main_url set) — a few thousand rows, cheap
+        to hold in memory, so this is built once and cached on the instance
+        rather than rebuilt per lead. Multiple catalog rows can share one
+        netloc (known duplicates — see get_domain_stats' `duplicate` count);
+        on collision the lowest id wins, deterministically."""
+        if self._netloc_map_cache is not None:
+            return self._netloc_map_cache
+        with self._netloc_map_lock:
+            if self._netloc_map_cache is not None:  # built while we waited for the lock
+                return self._netloc_map_cache
+            self._netloc_map_cache = self._build_netloc_domain_map()
+            return self._netloc_map_cache
+
+    def _build_netloc_domain_map(self) -> dict:
+        by_netloc: dict[str, dict] = {}
+        with self._Session() as s:
+            rows = s.query(Domain).filter(Domain.main_url.isnot(None)).all()
+        for d in rows:
+            try:
+                netloc = urlparse(d.main_url).netloc.lower().removeprefix("www.")
+            except Exception:
+                continue
+            if not netloc:
+                continue
+            existing = by_netloc.get(netloc)
+            if existing is not None and existing["id"] <= d.id:
+                continue
+            by_netloc[netloc] = {
+                "id": d.id,
+                "external_id": d.external_id,
+                "category_code": d.category_code,
+                "category_title": d.category_title,
+                "state": d.state,
+                "org_type": d.org_type,
+                "org_type_title": d.org_type_title,
+                "title": d.title,
+                "main_url": d.main_url,
+                "contact_url": d.contact_url,
+            }
+        return by_netloc
+
+    def _invalidate_netloc_domain_map(self) -> None:
+        self._netloc_map_cache = None
+
     def upsert_category(self, code: str, title: str) -> None:
         with self._Session() as s:
             existing = s.query(Category).filter_by(code=code).first()
@@ -58,6 +112,7 @@ class DomainMixin:
                 existing.contact_url = contact_url
                 existing.external_id = external_id
                 s.commit()
+                self._invalidate_netloc_domain_map()
                 return existing.id
             d = Domain(
                 category_code=category_code,
@@ -72,6 +127,7 @@ class DomainMixin:
             )
             s.add(d)
             s.commit()
+            self._invalidate_netloc_domain_map()
             return d.id
 
     def update_domain_url(self, domain_id: int, main_url: str, contact_url: str | None = None) -> dict | None:
@@ -84,6 +140,7 @@ class DomainMixin:
             if contact_url is not None:
                 d.contact_url = contact_url
             s.commit()
+            self._invalidate_netloc_domain_map()
             return {
                 "id": d.id,
                 "title": d.title,
@@ -98,6 +155,7 @@ class DomainMixin:
         with self._Session() as s:
             s.query(Domain).delete()
             s.commit()
+        self._invalidate_netloc_domain_map()
 
     def count_domains(self) -> int:
         with self._Session() as s:

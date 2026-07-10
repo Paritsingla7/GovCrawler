@@ -114,9 +114,6 @@ extraction:
     high_rungs:
       - mailto_tel
       - microdata
-    mid_rungs:
-      - table_block
-      - proximity_text
   person:
     enabled: true
     title_prefixes:
