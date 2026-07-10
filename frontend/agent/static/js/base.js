@@ -563,6 +563,27 @@ async function cancelJob() {
     }
 }
 
+async function resumeJob(jobId) {
+    const id = jobId ?? activeJobId;
+    if (!id) return;
+    if (!confirm(
+        `Resume Job #${id} from checkpoint?\n\n` +
+        `If no checkpoint is saved on this machine the crawl will restart ` +
+        `from the beginning.`
+    )) return;
+    try {
+        const resp = await apiFetch(`/api/jobs/${id}/resume`, {method: 'POST'});
+        activeJobId = id;
+        openJobPanel(id);
+        startJobPoll();
+        showToast(resp.message || 'Job resumed.', {type: 'success'});
+        const badge = document.getElementById('live-badge');
+        if (badge) badge.style.display = 'flex';
+    } catch (e) {
+        showApiError(e);
+    }
+}
+
 // ── Dock Logic ────────────────────────────────────────────────────────────────
 let isDraggingDock = false;
 document.getElementById('dock-resizer').addEventListener('mousedown', (e) => {
@@ -688,8 +709,13 @@ function updateJobPanel(job) {
 
     if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
         document.getElementById('btn-cancel-job').style.display = 'none';
+        document.getElementById('btn-resume-job').style.display = 'none';
+    } else if (job.status === 'interrupted') {
+        document.getElementById('btn-cancel-job').style.display = 'none';
+        document.getElementById('btn-resume-job').style.display = '';
     } else {
         document.getElementById('btn-cancel-job').style.display = '';
+        document.getElementById('btn-resume-job').style.display = 'none';
     }
 }
 
@@ -920,7 +946,9 @@ async function loadRecentJobs(limit = 6) {
         el.innerHTML = '';
         jobs.forEach(j => {
             const color = j.status === 'done' ? 'var(--green)'
-                : j.status === 'failed' ? 'var(--red)' : 'var(--yellow)';
+                : j.status === 'failed' ? 'var(--red)'
+                : j.status === 'interrupted' ? 'var(--orange)'
+                : 'var(--yellow)';
             const div = document.createElement('div');
             div.className = 'job-item';
             div.innerHTML = `
