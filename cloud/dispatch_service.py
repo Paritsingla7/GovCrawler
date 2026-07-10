@@ -12,8 +12,9 @@ Usage:
     python -m cloud.dispatch_service
 
 Polls for campaigns the API has flipped to RUNNING and have no locally
-tracked task, spawns `run_campaign_dispatch` for each. Recovers any email
-left stuck SENDING from a previous crash once at startup.
+tracked task, spawns `run_campaign_dispatch` for each. Also periodically
+recovers any email left stuck SENDING from a previous crash (checked
+immediately at startup, then every _RECOVER_INTERVAL_SECONDS).
 """
 
 import asyncio
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SECONDS = 5
 _STUCK_SENDING_THRESHOLD_SECONDS = 600  # same threshold as cloud/api/server.py's embedded path
+_RECOVER_INTERVAL_SECONDS = 60  # same cadence as cloud/api/server.py's periodic recovery sweep
 
 
 def _running_campaign_ids(db: Database) -> list[int]:
@@ -60,14 +62,28 @@ async def _poll_loop(db: Database, stopping: asyncio.Event) -> None:
         await asyncio.gather(*active.values(), return_exceptions=True)
 
 
+async def _recover_loop(db: Database, stopping: asyncio.Event) -> None:
+    """Periodic safety net alongside the dispatcher's own per-email requeue (issue #58):
+    recover_stuck_sending() previously ran only once at process startup, so an email left
+    SENDING by a mid-send crash sat stuck until this process was restarted."""
+    while not stopping.is_set():
+        try:
+            recovered = db.recover_stuck_sending(_STUCK_SENDING_THRESHOLD_SECONDS)
+            if recovered:
+                log.warning(f"Requeued {len(recovered)} email(s) stuck SENDING from a previous crash: {recovered}")
+        except Exception:
+            log.error("Stuck-SENDING recovery sweep failed", exc_info=True)
+
+        try:
+            await asyncio.wait_for(stopping.wait(), timeout=_RECOVER_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s — %(message)s")
     config = load_config()
     db = Database(config)
-
-    recovered = db.recover_stuck_sending(_STUCK_SENDING_THRESHOLD_SECONDS)
-    if recovered:
-        log.warning(f"Requeued {len(recovered)} email(s) stuck SENDING from a previous crash: {recovered}")
 
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -79,7 +95,7 @@ async def main() -> None:
 
     log.info("Dispatch service started, polling every %ds", _POLL_INTERVAL_SECONDS)
     try:
-        await _poll_loop(db, stopping)
+        await asyncio.gather(_poll_loop(db, stopping), _recover_loop(db, stopping))
     finally:
         db.close()
 

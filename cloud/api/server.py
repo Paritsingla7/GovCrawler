@@ -74,6 +74,7 @@ def _ensure_jwt_secret(config_dict: dict, config_path: Path) -> None:
 _REAP_INTERVAL_SECONDS = 60
 _REAP_THRESHOLD_SECONDS = 150  # lenient vs. per_url_timeout (~100s) + jitter, per plan.md §10.6
 _STUCK_SENDING_THRESHOLD_SECONDS = 600  # far above the ~30s SMTP timeout, per plan.md §19
+_STUCK_SENDING_POLL_INTERVAL_SECONDS = 60  # same cadence as the stale-job reaper
 
 
 async def _reap_loop():
@@ -89,6 +90,23 @@ async def _reap_loop():
             log.error("Stale-job reaper sweep failed", exc_info=True)
 
 
+async def _recover_stuck_sending_loop():
+    """Periodic safety net alongside the dispatcher's own per-email requeue (issue #58):
+    recover_stuck_sending() used to run only once at process startup, so an email left
+    SENDING by a mid-send crash sat stuck until the next restart instead of being retried."""
+    while True:
+        await asyncio.sleep(_STUCK_SENDING_POLL_INTERVAL_SECONDS)
+        try:
+            recovered = deps._db.recover_stuck_sending(_STUCK_SENDING_THRESHOLD_SECONDS)
+            if recovered:
+                log.warning(
+                    f"Requeued {len(recovered)} email(s) stuck SENDING (no completion for "
+                    f"{_STUCK_SENDING_THRESHOLD_SECONDS}s+): {recovered}"
+                )
+        except Exception:
+            log.error("Stuck-SENDING recovery sweep failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     recovered = deps._db.recover_stuck_sending(_STUCK_SENDING_THRESHOLD_SECONDS)
@@ -99,12 +117,15 @@ async def lifespan(app: FastAPI):
         )
 
     reap_task = asyncio.create_task(_reap_loop())
+    recover_task = asyncio.create_task(_recover_stuck_sending_loop())
     yield
     reap_task.cancel()
-    try:
-        await reap_task
-    except asyncio.CancelledError:
-        pass
+    recover_task.cancel()
+    for task in (reap_task, recover_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 def create_app(config_dict: dict, db: Database) -> FastAPI:

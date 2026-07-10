@@ -170,6 +170,7 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
 
         except (aiosmtplib.SMTPAuthenticationError, OAuthTokenError) as e:
             db.disable_credential(cred["id"])
+            db.requeue_email(email_id)
             log.error(f"Credential {cred['username']} auth failed: {e}. Credential disabled.")
             # Do NOT mark email failed, will retry in next loop
             continue
@@ -185,6 +186,7 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
             elif e.code in (421, 450, 451):
                 cooldown_until = datetime.utcnow() + timedelta(hours=1)
                 db.set_credential_cooldown(cred["id"], cooldown_until)
+                db.requeue_email(email_id)
                 log.warning(f"Credential {cred['username']} rate limited ({e.code}). Cooled down for 1 hour.")
                 continue  # Retry email
             else:
@@ -215,6 +217,7 @@ async def run_campaign_dispatch(campaign_id: int, db: Database) -> None:
             # Network issues
             cooldown_until = datetime.utcnow() + timedelta(minutes=15)
             db.set_credential_cooldown(cred["id"], cooldown_until)
+            db.requeue_email(email_id)
             log.warning(f"Credential {cred['username']} network error: {e}. Cooled down for 15 mins.")
             continue  # Retry email
 

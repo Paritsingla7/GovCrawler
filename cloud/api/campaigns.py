@@ -11,7 +11,7 @@ from . import deps
 from .deps import CurrentUser, client_ip, forbid_unless_owner, get_current_user, get_db, require
 from .dispatcher import resolve_credential_pool, run_campaign_dispatch
 from ..db import Database, CampaignKind, CampaignStatus, Lead
-from ..services.campaign_service import render_draft_emails, render_template_string
+from ..services.campaign_service import is_blacklisted, render_draft_emails, render_template_string
 from ..services.csv_import import parse_contacts_csv
 
 log = logging.getLogger(__name__)
@@ -164,8 +164,9 @@ async def create_campaign(
     if not leads:
         raise HTTPException(status_code=404, detail="No matching leads found")
 
-    blacklisted = db.get_blacklisted_emails_set()
-    if all(lead["email"] in blacklisted for lead in leads):
+    blacklisted_emails = db.get_blacklisted_emails_set()
+    blacklisted_domains = db.get_blacklisted_domains_set()
+    if all(is_blacklisted(lead["email"], blacklisted_emails, blacklisted_domains) for lead in leads):
         raise HTTPException(
             status_code=422,
             detail=f"All {len(leads)} leads are blacklisted. No emails to stage.",
@@ -183,7 +184,9 @@ async def create_campaign(
         rows = s.query(Lead.id, Lead.email).filter(Lead.id.in_(req.lead_ids)).all()
         lead_id_by_email = {r.email: r.id for r in rows}
 
-    email_dicts, blacklisted_count, _ = render_draft_emails(leads, template, blacklisted, lead_id_by_email)
+    email_dicts, blacklisted_count, _ = render_draft_emails(
+        leads, template, blacklisted_emails, lead_id_by_email, blacklisted_domains=blacklisted_domains
+    )
 
     staged_count = db.bulk_create_campaign_emails(campaign_id, email_dicts)
 
@@ -508,7 +511,8 @@ async def add_emails_to_campaign(
     if not leads:
         raise HTTPException(status_code=404, detail="No matching leads found")
 
-    blacklisted = db.get_blacklisted_emails_set()
+    blacklisted_emails = db.get_blacklisted_emails_set()
+    blacklisted_domains = db.get_blacklisted_domains_set()
     existing_in_campaign = db.get_campaign_recipient_emails(campaign_id)
 
     with db._Session() as s:
@@ -518,8 +522,9 @@ async def add_emails_to_campaign(
     email_dicts, blacklisted_count, already_count = render_draft_emails(
         leads,
         template,
-        blacklisted,
+        blacklisted_emails,
         lead_id_by_email,
+        blacklisted_domains=blacklisted_domains,
         exclude_emails=existing_in_campaign,
     )
 

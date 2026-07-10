@@ -21,22 +21,32 @@ def render_template_string(template_str: str, **kwargs) -> str:
         return template_str  # Fallback to raw string
 
 
+def is_blacklisted(email: str, blacklisted_emails: set[str], blacklisted_domains: set[str]) -> bool:
+    """Case-insensitive email match, plus domain-wide suppression (issue #58): the
+    `blacklist.domain` column was stored on every insert but never read anywhere, so
+    blocking an entire domain silently did nothing — only the exact email mattered."""
+    email = email.lower()
+    domain = email.split("@")[1] if "@" in email else ""
+    return email in blacklisted_emails or domain in blacklisted_domains
+
+
 def render_draft_emails(
     leads: list[dict],
     template: dict,
-    blacklisted: set[str],
+    blacklisted_emails: set[str],
     lead_id_by_email: dict[str, int],
+    blacklisted_domains: set[str] = frozenset(),
     exclude_emails: set[str] = frozenset(),
 ) -> tuple[list[dict], int, int]:
     """
-    Filters leads against the blacklist and an optional exclude set (e.g.
-    recipients already staged in the campaign), renders the template's
-    subject/body per lead, and builds email dicts ready for
-    db.bulk_create_campaign_emails().
+    Filters leads against the blacklist (by exact email, case-insensitively, and by
+    domain) and an optional exclude set (e.g. recipients already staged in the
+    campaign), renders the template's subject/body per lead, and builds email dicts
+    ready for db.bulk_create_campaign_emails().
 
     Returns (email_dicts, blacklisted_count, excluded_count).
     """
-    filtered = [lead for lead in leads if lead["email"] not in blacklisted]
+    filtered = [lead for lead in leads if not is_blacklisted(lead["email"], blacklisted_emails, blacklisted_domains)]
     blacklisted_count = len(leads) - len(filtered)
 
     excluded_count = sum(1 for lead in filtered if lead["email"] in exclude_emails)

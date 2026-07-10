@@ -61,9 +61,13 @@ the idempotent path.
 
 ## Dispatch recovery (at-most-once)
 
-The `SENDING` status is claimed atomically **before** the SMTP call. On startup (both API lifespan and the
-standalone dispatcher) `recover_stuck_sending(600)` requeues any email left `SENDING` past 600 s — retried
-from a clean claim, never blindly re-sent mid-flight. See [outreach.md](outreach.md#at-most-once-delivery).
+The `SENDING` status is claimed atomically **before** the SMTP call. A retryable send failure (SMTP auth,
+rate limit, network/connect error) explicitly requeues its own email back to `QUEUED` via `requeue_email`
+before the dispatch loop retries — it never relies on the row silently sitting in `SENDING`. As a backstop
+for failures that don't go through that path (e.g. the process crashes mid-send), `recover_stuck_sending(600)`
+requeues any email left `SENDING` past 600 s; it runs immediately at startup and then on a 60 s cadence for
+the life of the process (both the API lifespan and the standalone dispatcher) — never re-sent blind, always
+retried from a clean claim. See [outreach.md](outreach.md#at-most-once-delivery).
 
 ## Failure matrix
 

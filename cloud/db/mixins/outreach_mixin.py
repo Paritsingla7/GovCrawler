@@ -87,6 +87,13 @@ class OutreachMixin:
             rows = s.query(Blacklist.email).all()
             return {r[0] for r in rows}
 
+    def get_blacklisted_domains_set(self) -> set[str]:
+        """Load all blacklisted domains (issue #58: the domain column was stored on every
+        insert but never read anywhere, so domain-wide suppression silently did nothing)."""
+        with self._Session() as s:
+            rows = s.query(Blacklist.domain).all()
+            return {r[0] for r in rows}
+
     # ── Campaign ──────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -462,6 +469,15 @@ class OutreachMixin:
                     "credential_id": credential_id,
                 }
             )
+            s.commit()
+
+    def requeue_email(self, email_id: int) -> None:
+        """Flip a claimed SENDING email back to QUEUED for immediate retry (issue #58: a
+        retryable SMTP failure — auth, rate limit, network — used to just `continue` the
+        dispatch loop without touching the row, leaving it stuck SENDING until the next
+        recover_stuck_sending sweep, which previously only ran once at process startup)."""
+        with self._Session() as s:
+            s.query(CampaignEmail).filter_by(id=email_id).update({"status": EmailStatus.QUEUED, "sending_since": None})
             s.commit()
 
     def cancel_remaining_queued(self, campaign_id: int) -> int:

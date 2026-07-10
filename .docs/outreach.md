@@ -57,9 +57,9 @@ least one usable credential, flips the campaign to **RUNNING**, and queues selec
 4. `_send_one_email` via `aiosmtplib`. Outcomes:
     - **success** → `SENT`;
     - **hard bounce** (550/553, recipients refused) → add to `blacklist` + `FAILED`;
-    - **rate limit** (421/450/451) → 1 h cooldown on the credential, retry;
-    - **auth failure** → `disable_credential`, retry (email not marked failed);
-    - **connect/OS/timeout** → 15 min cooldown, retry;
+    - **rate limit** (421/450/451) → 1 h cooldown on the credential, `requeue_email` back to `QUEUED`, retry;
+    - **auth failure** → `disable_credential`, `requeue_email` back to `QUEUED`, retry (not marked failed);
+    - **connect/OS/timeout** → 15 min cooldown, `requeue_email` back to `QUEUED`, retry;
     - **no usable credential** → campaign auto-**PAUSED** with a `pause_reason`.
 
 Completion flips the campaign to **COMPLETED**, or back to **PAUSED** if deselected drafts remain.
@@ -78,18 +78,20 @@ Both modes share the same send loop and the same 600 s stuck-`SENDING` recovery 
 
 ## At-most-once delivery
 
-The `SENDING` claim is taken **before** the SMTP call. On restart, `recover_stuck_sending(600)` requeues any
-email left in `SENDING` past the threshold — it is retried, not silently dropped, but never blindly re-sent
-mid-flight. Double-mailing officials wrecks sender reputation, so ambiguity resolves toward "retry from a
-clean claim," not "send twice." See [resilience.md](resilience.md#dispatch-recovery).
+The `SENDING` claim is taken **before** the SMTP call. A retryable failure (auth, rate limit, network) calls
+`requeue_email` to flip that email straight back to `QUEUED` before the loop retries. As a safety net for the
+case that never reaches that handler — a process crash mid-send — `recover_stuck_sending(600)` requeues any
+email left in `SENDING` past the threshold; it runs at startup and then periodically (every 60 s) in both
+dispatch modes, not just once. Retried, never silently dropped, but never blindly re-sent mid-flight either.
+Double-mailing officials wrecks sender reputation, so ambiguity resolves toward "retry from a clean claim,"
+not "send twice." See [resilience.md](resilience.md#dispatch-recovery).
 
 ## Blacklist & credential health
 
 Hard bounces auto-add the recipient (and its domain) to `blacklist`; new campaigns filter against it at
-render time. **⚠️ Known gap (issue #58):** only the **email** column is enforced — `get_blacklisted_emails_set()`
-returns emails only, so the stored **domain** suppression does nothing (domain-wide blocking is designed but
-unimplemented). The email check is also case-sensitive at the comparison site (`campaign_service.py`),
-mitigated only because `save_lead` lowercases emails on write. Fix pending. Credentials expose health (sent/failed totals, sent-today) and honor `daily_send_limit` — a
+render time via `campaign_service.is_blacklisted()`, which checks both the **email** (case-insensitively)
+and the **domain** — blocking `example.gov.in` suppresses every address at that domain, not just the one
+that bounced. Credentials expose health (sent/failed totals, sent-today) and honor `daily_send_limit` — a
 credential at its limit is excluded from the pool. `POST /api/credentials/{id}/test` does a live connect +
 login and auto-activates on success / disables on failure.
 
