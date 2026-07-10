@@ -547,12 +547,16 @@ def _bind_channels(candidates: list[dict], role_local_parts: set[str], ecfg: dic
                     break
 
         if best_entity is None:
-            # Fallback: attach to all entities without a phone
+            # Fallback: no shared-container match — attach to the first
+            # phone-less entity only. Attaching to every entity on the page
+            # would copy one stray number onto everyone whenever proximity
+            # matching fails, rather than making a single best-effort guess.
             for entity in entities:
                 if not entity.get("phone"):
-                    entity["phone"] = phone_num
-                    entity["_phone_rung"] = phone_rung
-        else:
+                    best_entity = entity
+                    break
+
+        if best_entity is not None:
             best_entity["phone"] = phone_num
             best_entity["_phone_rung"] = phone_rung
 

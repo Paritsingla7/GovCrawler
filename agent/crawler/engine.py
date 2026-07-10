@@ -75,6 +75,7 @@ class CrawlerEngine:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._client: httpx.AsyncClient | None = None
         self._db_pool: ThreadPoolExecutor | None = None
+        self._checkpoint_pool: ThreadPoolExecutor | None = None
         self._parse_pool: ThreadPoolExecutor | None = None
         self._run_task: asyncio.Task | None = None
 
@@ -229,7 +230,12 @@ class CrawlerEngine:
 
         # Off-loop executors: DB writes serialized on a single thread; parsing
         # spread across cores (GIL-bound, but never blocks the event loop).
+        # Checkpoint gets its OWN single thread — it used to share _db_pool with
+        # mark_visited/save_leads, so every 5s frontier rewrite (potentially a
+        # large JSON blob) queued behind and stalled outbox writes on the same
+        # thread, and vice versa.
         self._db_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="db")
+        self._checkpoint_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="checkpoint")
         self._parse_pool = ThreadPoolExecutor(max_workers=parse_workers, thread_name_prefix="parse")
 
         if not frontier:
@@ -278,6 +284,8 @@ class CrawlerEngine:
             # Flush any in-flight DB writes before we report final metrics.
             if self._db_pool:
                 self._db_pool.shutdown(wait=True)
+            if self._checkpoint_pool:
+                self._checkpoint_pool.shutdown(wait=True)
             if self._parse_pool:
                 self._parse_pool.shutdown(wait=False)
 
@@ -302,9 +310,17 @@ class CrawlerEngine:
         try:
             while True:
                 await asyncio.sleep(2)
-                cancel_requested = await self._cloud.send_heartbeat(
-                    self._metrics_snapshot(active_workers=self._active_workers)
-                )
+                try:
+                    cancel_requested = await self._cloud.send_heartbeat(
+                        self._metrics_snapshot(active_workers=self._active_workers)
+                    )
+                except Exception:
+                    # A transient network blip must not kill this loop forever —
+                    # that would silently starve the cloud reaper of heartbeats
+                    # and it'd wrongly flip a still-healthy crawl to `interrupted`
+                    # ~150s later (plan.md §10.6). Skip this beat, try again next.
+                    log.warning(f"Job {self._job_id}: heartbeat send failed, will retry", exc_info=True)
+                    continue
                 if cancel_requested and self._run_task:
                     log.info(f"Job {self._job_id}: cancel_requested seen on heartbeat, stopping.")
                     self._run_task.cancel()
@@ -320,7 +336,10 @@ class CrawlerEngine:
         try:
             while True:
                 await asyncio.sleep(5)
-                await self._loop.run_in_executor(self._db_pool, self._save_checkpoint)
+                try:
+                    await self._loop.run_in_executor(self._checkpoint_pool, self._save_checkpoint)
+                except Exception:
+                    log.warning(f"Job {self._job_id}: checkpoint save failed, will retry", exc_info=True)
         except asyncio.CancelledError:
             pass
 
@@ -435,13 +454,16 @@ class CrawlerEngine:
 
         if depth > self._max_depth_seen:
             self._max_depth_seen = depth
-        self._session_visited_count += 1
 
         html = await self._fetch(url, browser_context)
         if not html:
             if item.is_seed:
                 self._crawled_domains += 1
             return
+
+        # Counted only on a successful fetch — counting every attempt (including
+        # fetch failures) inflated visited_urls above the actual pages crawled.
+        self._session_visited_count += 1
 
         # Persist to visited_urls only AFTER a successful fetch: a failed fetch
         # leaves the URL un-marked so it's retried next run instead of being
@@ -547,11 +569,20 @@ class CrawlerEngine:
         return html
 
     async def _fetch_httpx(self, url: str) -> str | None:
-        try:
-            r = await self._client.get(url)
-        except Exception as e:
-            log.warning(f"httpx failed {url}: {type(e).__name__}")
-            return None
+        r = None
+        for attempt in range(2):  # one retry on a transient network/timeout error
+            try:
+                r = await self._client.get(url)
+                break
+            except httpx.TransportError as e:
+                if attempt == 0:
+                    await asyncio.sleep(1)
+                    continue
+                log.warning(f"httpx failed {url}: {type(e).__name__} (after retry)")
+                return None
+            except Exception as e:
+                log.warning(f"httpx failed {url}: {type(e).__name__}")
+                return None
         if r.status_code == 200:
             final_netloc = urlparse(str(r.url)).netloc
             if self._is_gov_domain(str(r.url)) or not final_netloc:
@@ -613,7 +644,7 @@ class CrawlerEngine:
             return
 
         depth_limits = self._cfg.get("max_links_per_page", {})
-        max_links = depth_limits.get(str(depth), depth_limits.get(depth, depth_limits.get("default", 5)))
+        max_links = depth_limits.get(str(depth), depth_limits.get("default", 5))
 
         # Seed pages are always treated as priority — the user explicitly chose
         # them, so all their links (up to max_links) should be followed regardless

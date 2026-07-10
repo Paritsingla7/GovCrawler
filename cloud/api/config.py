@@ -55,10 +55,13 @@ async def get_config(c: dict = Depends(get_app_config), db: Database = Depends(g
         "valid_suffixes": "\n".join(extraction.get("email", {}).get("valid_suffixes", [])),
         "title_prefixes": "\n".join(extraction.get("person", {}).get("title_prefixes", [])),
         "designation_keywords": "\n".join(extraction.get("person", {}).get("designation_keywords", [])),
-        # Dictionary (policy)
-        "max_links_per_page_0": crawler.get("max_links_per_page", {}).get(0, 30),
-        "max_links_per_page_1": crawler.get("max_links_per_page", {}).get(1, 15),
-        "max_links_per_page_2": crawler.get("max_links_per_page", {}).get(2, 8),
+        # Dictionary (policy) — keys are always strings: this dict round-trips
+        # through the `app_settings` JSON column, which (like JSON itself) only
+        # has string keys, so a write with int keys reads back with string keys
+        # and int-keyed .get() calls would always silently miss to the default.
+        "max_links_per_page_0": crawler.get("max_links_per_page", {}).get("0", 30),
+        "max_links_per_page_1": crawler.get("max_links_per_page", {}).get("1", 15),
+        "max_links_per_page_2": crawler.get("max_links_per_page", {}).get("2", 8),
         "max_links_per_page_default": crawler.get("max_links_per_page", {}).get("default", 5),
         # Read-only (policy)
         "user_agent": crawler.get("user_agent", ""),
@@ -158,11 +161,11 @@ async def save_config(
 
     max_links = crawler.setdefault("max_links_per_page", {})
     if "max_links_per_page_0" in body:
-        max_links[0] = int(body["max_links_per_page_0"])
+        max_links["0"] = int(body["max_links_per_page_0"])
     if "max_links_per_page_1" in body:
-        max_links[1] = int(body["max_links_per_page_1"])
+        max_links["1"] = int(body["max_links_per_page_1"])
     if "max_links_per_page_2" in body:
-        max_links[2] = int(body["max_links_per_page_2"])
+        max_links["2"] = int(body["max_links_per_page_2"])
     if "max_links_per_page_default" in body:
         max_links["default"] = int(body["max_links_per_page_default"])
 
